@@ -588,11 +588,18 @@ body.nav-collapsed .explore-overlay { left: 0; }
 .conv-modal-divider::before { left: 0; }
 .conv-modal-divider::after { right: 0; }
 .conv-google-btn {
-  width: 100%; padding: 0.65rem; background: var(--bg);
+  width: 100%; padding: 0.72rem; background: #fff;
   border: 1px solid var(--border); cursor: pointer; border-radius: 50px;
-  font-size: 0.88rem; font-weight: 600; color: var(--text);
+  font-size: 0.88rem; font-weight: 600; color: #202124;
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
 }
-.conv-google-btn:hover { background: #242428; }
+.conv-google-btn:hover { background: #f7f7f7; }
+.conv-guest-btn {
+  width: 100%; padding: 0.4rem; margin-top: 0.4rem;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 0.78rem; font-weight: 500; color: var(--text-muted);
+}
+.conv-guest-btn:hover { color: var(--text); text-decoration: underline; }
 .conv-modal-err { font-size: 0.82rem; color: var(--accent); margin-bottom: 0.55rem; display: none; }
 .conv-modal-err.show { display: block; }
 
