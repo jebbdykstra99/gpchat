@@ -621,7 +621,7 @@
   });
   document.getElementById('cv-google-login').addEventListener('click', function () {
     var err = document.getElementById('cv-login-err');
-    err.textContent = 'Google sign-in waits on HTTPS and a SubX identity project. Not bakasan.art. Use guest for now.';
+    err.textContent = 'Email and password will be live after HTTPS. Google is off until that provider is enabled.';
     err.classList.add('show');
   });
   document.getElementById('cv-guest-login').addEventListener('click', function () { stubSignIn('Guest', 'guestgp'); });
