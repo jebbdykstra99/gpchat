@@ -19,7 +19,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="preload" href="site.json" as="fetch" crossorigin="anonymous">
 </head>
 <body>
 <div class="preview-banner" role="status">Preview only. Accounts are not open.</div>
@@ -66,7 +67,7 @@
         </a>
       </li>
       <li>
-        <a href="#following" class="nav-social-link" id="nav-following" data-social="following">
+        <a href="#following" class="nav-social-link" id="nav-following" data-social="following" data-soon>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           Following
         </a>
@@ -78,14 +79,14 @@
         </a>
       </li>
       <li>
-        <a href="#notifications" class="nav-social-link" id="nav-notifications" data-social="notifications">
+        <a href="#notifications" class="nav-social-link" id="nav-notifications" data-social="notifications" data-soon>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
           Notifications
-          <span class="nav-badge visible" id="notif-badge">3</span>
+          <span class="nav-badge" id="notif-badge" hidden></span>
         </a>
       </li>
       <li>
-        <a href="#chat" class="nav-social-link" id="nav-chat" data-social="chat">
+        <a href="#chat" class="nav-social-link" id="nav-chat" data-social="chat" data-soon>
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           Chat
         </a>
@@ -111,9 +112,9 @@
     <div class="sidebar-auth" id="sidebar-auth"></div>
 
     <div class="nav-legal">
-      <span>Dress rehearsal</span>
+      <a href="terms.html">Terms</a>
       <span>&middot;</span>
-      <span>Not X.com</span>
+      <a href="privacy.html">Privacy</a>
       <span>&middot;</span>
       <span>Not official F1</span>
     </div>
@@ -126,7 +127,7 @@
   <section class="page active" id="page-thoughts">
     <div class="thoughts-tabs" role="tablist">
       <button class="thoughts-tab active" data-thoughts-tab="foryou" role="tab">For You</button>
-      <button class="thoughts-tab" data-thoughts-tab="following" role="tab">Following</button>
+      <button class="thoughts-tab" data-thoughts-tab="following" role="tab">Following <span class="tab-soon">Soon</span></button>
       <button class="thoughts-tab" data-thoughts-tab="hot" role="tab">Hot</button>
       <button class="thoughts-tab" data-thoughts-tab="new" role="tab">New</button>
     </div>
@@ -138,17 +139,40 @@
           <textarea class="thoughts-compose-input" id="thoughts-compose-input" placeholder="What's happening on the grid?" rows="2" maxlength="280"></textarea>
         </div>
       </div>
+      <input type="file" id="compose-image-input" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.bmp" style="display:none">
+      <input type="file" id="compose-gif-input" accept="image/gif,.gif" style="display:none">
+      <div id="compose-image-preview" class="compose-image-preview" hidden>
+        <img id="compose-preview-img" alt="">
+        <button type="button" class="compose-image-remove" id="compose-image-remove" title="Remove">&times;</button>
+      </div>
+      <div class="compose-upload-bar" id="compose-upload-bar" hidden><div class="compose-upload-bar-fill" id="compose-upload-fill"></div></div>
+      <div class="compose-poll" id="compose-poll" hidden>
+        <div class="compose-poll-option">
+          <input class="compose-poll-input" placeholder="Choice 1" maxlength="60" data-poll-opt="0">
+        </div>
+        <div class="compose-poll-option">
+          <input class="compose-poll-input" placeholder="Choice 2" maxlength="60" data-poll-opt="1">
+        </div>
+        <div class="compose-poll-footer">
+          <button type="button" class="compose-poll-add" id="compose-poll-add">+ Add choice</button>
+          <select class="compose-poll-duration" id="compose-poll-duration">
+            <option value="1">1 day</option>
+            <option value="3" selected>3 days</option>
+            <option value="7">7 days</option>
+          </select>
+        </div>
+      </div>
       <div class="thoughts-compose-divider"></div>
       <div class="thoughts-compose-footer">
-        <div class="thoughts-toolbar" aria-hidden="true">
-          <button class="thoughts-toolbar-btn" type="button" title="Photo (dress rehearsal)">
+        <div class="thoughts-toolbar">
+          <button class="thoughts-toolbar-btn" type="button" id="compose-btn-image" title="Add photo">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
           </button>
-          <button class="thoughts-toolbar-btn" type="button" title="GIF (dress rehearsal)" style="font-size:0.7rem;font-weight:700;letter-spacing:0.04em;padding:0.4rem 0.45rem;border-radius:6px;">GIF</button>
-          <button class="thoughts-toolbar-btn" type="button" title="Poll (dress rehearsal)">
+          <button class="thoughts-toolbar-btn" type="button" id="compose-btn-gif" title="Add GIF" style="font-size:0.7rem;font-weight:700;letter-spacing:0.04em;padding:0.4rem 0.45rem;border-radius:6px;">GIF</button>
+          <button class="thoughts-toolbar-btn" type="button" id="compose-btn-poll" title="Add poll">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
           </button>
-          <button class="thoughts-toolbar-btn" type="button" title="Emoji (dress rehearsal)">
+          <button class="thoughts-toolbar-btn" type="button" id="compose-btn-emoji" title="Add emoji">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 13s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
           </button>
         </div>
@@ -181,7 +205,7 @@
   </div>
   <div class="profile-signin-prompt" id="profile-signin-prompt">
     <h2>See your paddock profile</h2>
-    <p>Sign in to set a handle and post about the Grand Prix. This dress rehearsal uses a local stub — no live accounts. Not official F1. Dummy feed only.</p>
+    <p>Sign in with email to set a handle and post about the Grand Prix. Guest is browse-only. Not official F1.</p>
     <button class="accent-btn" id="profile-signin-prompt-btn" type="button">Sign in</button>
   </div>
   <div class="profile-content" id="profile-content" hidden>
@@ -196,8 +220,8 @@
       <p class="profile-bio" id="profile-bio">Just watching. Nothing but Grand Prix.</p>
       <div class="profile-meta" id="profile-meta">Formula 1 fan chat — unofficial</div>
       <div class="profile-counts">
-        <button type="button" class="count-btn"><strong>12</strong> Following</button>
-        <button type="button" class="count-btn"><strong>4</strong> Followers</button>
+        <button type="button" class="count-btn" disabled><strong>—</strong> Following <span class="tab-soon">Soon</span></button>
+        <button type="button" class="count-btn" disabled><strong>—</strong> Followers <span class="tab-soon">Soon</span></button>
       </div>
     </div>
     <div class="profile-posts" id="profile-pane-posts">
@@ -212,7 +236,7 @@
     <div class="chat-threads-header">
       <div class="chat-threads-title-row">
         <div class="chat-threads-title">Chat</div>
-        <button class="chat-new-btn" id="chat-new-btn" type="button" title="New chat">New</button>
+        <button class="chat-new-btn" id="chat-new-btn" type="button" title="DMs coming soon" disabled>Soon</button>
       </div>
       <div class="chat-search-bar">
         <input type="text" class="chat-search-input" id="chat-search-input" placeholder="Search chats" autocomplete="off">
@@ -222,9 +246,9 @@
   </div>
   <div class="chat-active-pane" id="chat-active-pane">
     <div class="chat-placeholder" id="chat-placeholder">
-      <div class="chat-placeholder-title">Paddock DMs</div>
-      <div class="chat-placeholder-sub">Pick a thread, or start a new one. Messages stay on this device — dress rehearsal only, no live backend. Not official F1.</div>
-      <button class="accent-btn" id="chat-placeholder-new" type="button">New chat</button>
+      <div class="chat-placeholder-title">Chat — Soon</div>
+      <div class="chat-placeholder-sub">Direct messages are not live in this preview. No DMs graph. Sample thread copy in site.json is not a real inbox.</div>
+      <button class="accent-btn" id="chat-placeholder-new" type="button" disabled>Soon</button>
     </div>
     <div class="chat-thread-view" id="chat-thread-view" hidden>
       <div class="chat-thread-header">
@@ -233,7 +257,7 @@
       <div class="chat-messages" id="chat-messages"></div>
       <div class="chat-compose">
         <textarea class="chat-compose-input" id="chat-compose-input" placeholder="Message about the grid…" rows="1"></textarea>
-        <button class="chat-send-btn" id="chat-send-btn" type="button">Send</button>
+        <button class="chat-send-btn" id="chat-send-btn" type="button" disabled>Soon</button>
       </div>
     </div>
   </div>
@@ -245,7 +269,7 @@
   <div class="notif-header">
     <div class="notif-header-row">
       <div class="notif-title">Notifications</div>
-      <button class="ghost-btn" id="notif-mark-read" type="button">Mark all read</button>
+      <button class="ghost-btn" id="notif-mark-read" type="button" disabled>Soon</button>
     </div>
     <div class="thoughts-tabs notif-tabs">
       <button class="thoughts-tab active" data-notif-tab="all">All</button>
@@ -265,7 +289,7 @@
     </div>
   </div>
   <div class="explore-tabs thoughts-tabs">
-    <button class="thoughts-tab active" data-explore-tab="places">Circuits</button>
+    <button class="thoughts-tab active" data-explore-tab="places">Places</button>
     <button class="thoughts-tab" data-explore-tab="topics">Topics</button>
   </div>
   <div class="explore-pane active" id="explore-pane-places"></div>
@@ -280,7 +304,7 @@
   </div>
   <div class="right-panel-body" id="news-feed"></div>
   <div class="right-panel-footer">
-    <p>Dummy trends for dress rehearsal.<br>Not official F1. Not X.com. No live timing.</p>
+    <p>Curated outbound. Dummy headlines, official destinations.<br>Not a live news ingest.</p>
   </div>
 </aside>
 
@@ -295,7 +319,7 @@
   <div class="conv-modal">
     <button type="button" class="conv-modal-close" id="cv-modal-close" aria-label="Close sign in">&times;</button>
     <h2 id="auth-title">Join gpchat</h2>
-    <p class="conv-modal-note">Email and password will be live after HTTPS. Google is off until that provider is enabled. Feed is still dummy. Close anytime. Not official F1.</p>
+    <p class="conv-modal-note">Email/password and Google on subx-skins. Guest is browse-only. Preview lock stays until Jebb lifts it.</p>
     <div class="conv-modal-tabs">
       <button class="conv-modal-tab active" data-tab="login" type="button">Sign In</button>
       <button class="conv-modal-tab" data-tab="register" type="button">Register</button>
@@ -307,18 +331,32 @@
       <button class="conv-modal-submit" id="cv-login-btn" type="button">Sign In</button>
       <div class="conv-modal-divider">or</div>
       <button class="conv-google-btn" id="cv-google-login" type="button"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/></svg> Continue with Google</button>
-      <button class="conv-guest-btn" id="cv-guest-login" type="button">Continue as guest</button>
+      <label class="conv-modal-check" for="cv-google-age">
+        <input type="checkbox" id="cv-google-age">
+        <span>I am 13 or older and agree to the <a href="terms.html" target="_blank" rel="noopener">Terms</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> (preview stubs, not final counsel).</span>
+      </label>
+      <button class="conv-guest-btn" id="cv-guest-login" type="button">Continue as guest (browse only)</button>
     </div>
     <div id="cv-panel-register" style="display:none">
       <div class="conv-modal-err" id="cv-reg-err"></div>
       <div class="conv-modal-field"><label>Display Name</label><input type="text" id="cv-reg-name" autocomplete="nickname" placeholder="A paddock handle"></div>
       <div class="conv-modal-field"><label>Email</label><input type="email" id="cv-reg-email" autocomplete="email" placeholder="you@email.com"></div>
       <div class="conv-modal-field"><label>Password</label><input type="password" id="cv-reg-pw" autocomplete="new-password" placeholder="At least 6 characters"></div>
+      <label class="conv-modal-check" for="cv-reg-age">
+        <input type="checkbox" id="cv-reg-age">
+        <span>I am 13 or older and agree to the <a href="terms.html" target="_blank" rel="noopener">Terms</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> (preview stubs, not final counsel).</span>
+      </label>
       <button class="conv-modal-submit" id="cv-reg-btn" type="button">Create Account</button>
     </div>
   </div>
 </div>
 
-<script src="app.js?v=5"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-check-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+  <script src="factory.js?v=6" data-site="site.json"></script>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
 </body>
 </html>
