@@ -279,6 +279,7 @@
     const d = doc.data() || {};
     const uid = d.authorUid || null;
     const ms = d.createdAt && d.createdAt.toMillis ? d.createdAt.toMillis() : Date.now();
+    const likedBy = d.likes || {};
     return {
       id: doc.id,
       authorUid: uid,
@@ -287,7 +288,8 @@
       text: d.text || '',
       ms: ms,
       hours: Math.max(0, Math.round((Date.now() - ms) / 3600000)),
-      likes: d.likeCount || 0,
+      likedBy: likedBy,
+      likes: Object.keys(likedBy).length || d.likeCount || 0,
       replies: d.replyCount || 0,
       parentId: d.parentId || null,
       live: true,
@@ -458,11 +460,11 @@
   }
 
   function renderPost(post, isReply) {
-    const liked = !!likes[post.id];
-    const likeCount = post.likes + (liked ? 1 : 0);
+    const uid = liveUid();
+    const liked = !!(uid && post.likedBy && post.likedBy[uid]);
+    const likeCount = post.likes || 0;
     const av = initials(post.name);
     const bg = colorFor(post.handle);
-    const uid = liveUid();
     const canDelete = !!(uid && post.authorUid && post.authorUid === uid);
     const replyBtn = isReply
       ? ''
@@ -529,7 +531,7 @@
     }
 
     let posts = topLevelPosts().slice();
-    if (currentTab === 'hot') posts.sort(function (a, b) { return (b.likes + (likes[b.id] ? 1 : 0)) - (a.likes + (likes[a.id] ? 1 : 0)); });
+    if (currentTab === 'hot') posts.sort(function (a, b) { return (b.likes || 0) - (a.likes || 0); });
     if (currentTab === 'new') posts.sort(function (a, b) { return (b.ms || 0) - (a.ms || 0); });
 
     if (!posts.length) {
@@ -918,6 +920,7 @@
         authorName: disp,
         authorHandle: handle,
         text: text.slice(0, 280),
+        likes: {},
         likeCount: 0,
         replyCount: 0,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -992,6 +995,29 @@
     fbDb.collection('posts').doc(postId).update(patch).catch(function (err) {
       composeErr((err && err.message) ? ('Vote: ' + err.message) : 'Could not save vote.');
       console.warn('poll vote', err);
+    });
+  }
+
+  function toggleLike(postId) {
+    var uid = liveUid();
+    if (!requireVerified('like')) return;
+    if (!uid) {
+      composeErr('Sign in with email to like. Guest cannot like.');
+      openAuth('login');
+      return;
+    }
+    if (!fbDb || !postId) return;
+    var post = findPost(postId);
+    var likedBy = (post && post.likedBy) || {};
+    var patch = {};
+    if (likedBy[uid]) {
+      patch['likes.' + uid] = firebase.firestore.FieldValue.delete();
+    } else {
+      patch['likes.' + uid] = true;
+    }
+    fbDb.collection('posts').doc(postId).update(patch).catch(function (err) {
+      composeErr((err && err.message) ? ('Like: ' + err.message) : 'Could not save like.');
+      console.warn('like', err);
     });
   }
 
@@ -1124,12 +1150,7 @@
       if (likeBtn) {
         const post = likeBtn.closest('[data-post-id]');
         if (!post) return;
-        const id = post.dataset.postId;
-        likes[id] = !likes[id];
-        if (!likes[id]) delete likes[id];
-        saveJSON(LS_LIKES, likes);
-        renderFeed();
-        syncProfile();
+        toggleLike(post.dataset.postId);
         return;
       }
       if (e.target.closest('[data-act="delete"]')) {
