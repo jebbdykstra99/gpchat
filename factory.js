@@ -124,6 +124,11 @@
     var ov = document.getElementById('share-sheet');
     if (ov) ov.hidden = true;
     shareSheetPostId = null;
+    var preview = document.getElementById('share-sheet-preview');
+    if (preview) {
+      preview.removeAttribute('src');
+      preview.hidden = true;
+    }
   }
 
   function ensureShareSheet() {
@@ -140,6 +145,8 @@
         '.share-sheet button{display:block;width:100%;text-align:left;background:transparent;border:0;border-radius:10px;padding:11px 12px;font:inherit;font-size:14px;cursor:pointer;color:inherit;}' +
         '.share-sheet button:hover{background:rgba(0,0,0,.06);}' +
         '.share-sheet .share-cancel{color:var(--text-muted,#4a5f66);margin-top:4px;}' +
+        '.share-sheet-preview{display:block;width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin:0 0 8px;}' +
+        '.share-sheet-preview[hidden]{display:none!important;}' +
         '.post.is-deep-post{box-shadow:inset 0 0 0 2px var(--accent,#e07a3d);border-radius:10px;}';
       document.head.appendChild(st);
     }
@@ -148,6 +155,7 @@
     ov.hidden = true;
     ov.innerHTML =
       '<div class="share-sheet" role="dialog" aria-modal="true" aria-label="Share">' +
+        '<img class="share-sheet-preview" id="share-sheet-preview" alt="" hidden>' +
         '<h3>Share</h3>' +
         '<button type="button" data-share="copy">Copy link</button>' +
         '<button type="button" data-share="x">Post on X</button>' +
@@ -179,14 +187,21 @@
         return;
       }
       if (act === 'x') {
-        var xUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(slice) +
-          '&url=' + encodeURIComponent(permalink);
+        var xText = slice;
+        var xLink = permalink;
+        if (post && post.imageUrl) {
+          xText = slice + ' ' + permalink;
+          xLink = post.imageUrl;
+        }
+        var xUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(xText) +
+          '&url=' + encodeURIComponent(xLink);
         window.open(xUrl, '_blank', 'noopener,noreferrer');
         closeShareSheet();
         return;
       }
       if (act === 'reddit') {
-        var rUrl = 'https://www.reddit.com/submit?url=' + encodeURIComponent(permalink) +
+        var rLink = (post && post.imageUrl) ? post.imageUrl : permalink;
+        var rUrl = 'https://www.reddit.com/submit?url=' + encodeURIComponent(rLink) +
           '&title=' + encodeURIComponent(slice);
         var sr = site && site.redditSr;
         if (sr) rUrl += '&sr=' + encodeURIComponent(String(sr));
@@ -205,7 +220,18 @@
       return;
     }
     shareSheetPostId = postId;
-    ensureShareSheet().hidden = false;
+    var ov = ensureShareSheet();
+    var preview = document.getElementById('share-sheet-preview');
+    if (preview) {
+      if (post.imageUrl) {
+        preview.src = post.imageUrl;
+        preview.hidden = false;
+      } else {
+        preview.removeAttribute('src');
+        preview.hidden = true;
+      }
+    }
+    ov.hidden = false;
   }
 
   function highlightDeepPost() {
