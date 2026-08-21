@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+    function emailVerified() {
+      return signedIn() && request.auth.token.email_verified == true;
+    }
+    function isAdmin() {
+      return signedIn() && request.auth.uid == 'o774wL9hUVSi19EkDCgLqQomP8i2';
+    }
+    function factorySite(data) {
+      return data.siteId in ['samochat', 'bartchat', '415chat', 'gpchat', '27chat', '808chat', 'buffettchat', 'gaichat', 'popechat', 'recruitchat'];
+    }
+    function notKilled(sid) {
+      return !exists(/databases/$(database)/documents/sites/$(sid))
+        || get(/databases/$(database)/documents/sites/$(sid)).data.killed != true;
+    }
+    function hasPostBody(data) {
+      return (data.text is string && data.text.size() > 0)
+        || (data.keys().hasAll(['imageUrl']) && data.imageUrl is string && data.imageUrl.size() > 0)
+        || (data.keys().hasAll(['poll']) && data.poll is map);
+    }
+    function onlyReplyCountBump() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['replyCount'])
+        && request.resource.data.replyCount is int
+        && request.resource.data.replyCount == (resource.data.replyCount is int ? resource.data.replyCount : 0) + 1;
+    }
+    function onlyOwnPollVote() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['poll'])
+        && request.resource.data.poll.diff(resource.data.poll).affectedKeys().hasOnly(['votes'])
+        && request.resource.data.poll.votes.diff(resource.data.poll.votes).affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.poll.votes[request.auth.uid] is int;
+    }
+
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if emailVerified()
+        && notKilled(request.resource.data.siteId)
+        && request.auth.uid == request.resource.data.authorUid
+        && factorySite(request.resource.data)
+        && hasPostBody(request.resource.data);
+      allow delete: if signedIn()
+        && resource.data.authorUid == request.auth.uid;
+      allow update: if emailVerified() && notKilled(resource.data.siteId) && (
+        onlyReplyCountBump()
+        || onlyOwnPollVote()
+      );
+    }
+
+    match /users/{uid} {
+      allow read: if true;
+      allow create, update: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasAll(['siteId'])
+        && factorySite(request.resource.data);
+
+      match /blocks/{targetUid} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create, update: if emailVerified()
+          && request.auth.uid == uid
+          && request.resource.data.blockerUid == uid
+          && request.resource.data.targetUid == targetUid
+          && factorySite(request.resource.data);
+        allow delete: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.reporterUid == request.auth.uid);
+      allow create: if emailVerified()
+        && request.resource.data.reporterUid == request.auth.uid
+        && factorySite(request.resource.data)
+        && request.resource.data.postId is string
+        && request.resource.data.reason is string;
+      allow update, delete: if isAdmin();
+    }
+
+    match /sites/{siteId} {
+      allow read: if true;
+      allow create, update: if isAdmin()
+        && request.resource.data.siteId == siteId
+        && request.resource.data.killed is bool;
+      allow delete: if false;
+    }
+  }
+}
