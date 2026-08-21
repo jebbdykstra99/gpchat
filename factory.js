@@ -103,6 +103,123 @@
     return null;
   }
 
+  var deepPostId = '';
+  var deepPostDone = false;
+  var shareSheetPostId = null;
+
+  function postPermalink(postId) {
+    var id = String(postId || '');
+    var host = location.host || '';
+    return 'https://' + host + '/?p=' + encodeURIComponent(id);
+  }
+
+  function shareTextSlice(post) {
+    var t = String((post && (post.title || post.text)) || '').replace(/\s+/g, ' ').trim();
+    if (!t) t = ((site && site.name) || SITE_ID || '') + ' post';
+    if (t.length > 200) t = t.slice(0, 197) + '...';
+    return t;
+  }
+
+  function closeShareSheet() {
+    var ov = document.getElementById('share-sheet');
+    if (ov) ov.hidden = true;
+    shareSheetPostId = null;
+  }
+
+  function ensureShareSheet() {
+    var ov = document.getElementById('share-sheet');
+    if (ov) return ov;
+    if (!document.getElementById('share-sheet-css')) {
+      var st = document.createElement('style');
+      st.id = 'share-sheet-css';
+      st.textContent =
+        '#share-sheet{position:fixed;inset:0;z-index:80;background:rgba(18,24,28,.42);display:flex;align-items:flex-end;justify-content:center;padding:16px;}' +
+        '#share-sheet[hidden]{display:none!important;}' +
+        '.share-sheet{width:min(420px,100%);background:var(--surface,#fffaf3);color:var(--text,#1a2a30);border:1px solid var(--border,#e4d6c4);border-radius:14px;box-shadow:0 12px 40px rgba(0,0,0,.18);padding:10px;}' +
+        '.share-sheet h3{margin:6px 8px 10px;font-size:15px;font-weight:650;}' +
+        '.share-sheet button{display:block;width:100%;text-align:left;background:transparent;border:0;border-radius:10px;padding:11px 12px;font:inherit;font-size:14px;cursor:pointer;color:inherit;}' +
+        '.share-sheet button:hover{background:rgba(0,0,0,.06);}' +
+        '.share-sheet .share-cancel{color:var(--text-muted,#4a5f66);margin-top:4px;}' +
+        '.post.is-deep-post{box-shadow:inset 0 0 0 2px var(--accent,#e07a3d);border-radius:10px;}';
+      document.head.appendChild(st);
+    }
+    ov = document.createElement('div');
+    ov.id = 'share-sheet';
+    ov.hidden = true;
+    ov.innerHTML =
+      '<div class="share-sheet" role="dialog" aria-modal="true" aria-label="Share">' +
+        '<h3>Share</h3>' +
+        '<button type="button" data-share="copy">Copy link</button>' +
+        '<button type="button" data-share="x">Post on X</button>' +
+        '<button type="button" data-share="reddit">Post on Reddit</button>' +
+        '<button type="button" class="share-cancel" data-share="close">Cancel</button>' +
+      '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) {
+      if (e.target === ov) { closeShareSheet(); return; }
+      var btn = e.target.closest('[data-share]');
+      if (!btn) return;
+      var act = btn.getAttribute('data-share');
+      if (act === 'close') { closeShareSheet(); return; }
+      if (!shareSheetPostId) return;
+      var post = findPost(shareSheetPostId);
+      var permalink = postPermalink(shareSheetPostId);
+      var slice = shareTextSlice(post);
+      if (act === 'copy') {
+        var done = function () { composeErr('Link copied'); closeShareSheet(); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(permalink).then(done).catch(function () {
+            try { window.prompt('Copy link', permalink); } catch (e2) {}
+            done();
+          });
+        } else {
+          try { window.prompt('Copy link', permalink); } catch (e3) {}
+          done();
+        }
+        return;
+      }
+      if (act === 'x') {
+        var xUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(slice) +
+          '&url=' + encodeURIComponent(permalink);
+        window.open(xUrl, '_blank', 'noopener,noreferrer');
+        closeShareSheet();
+        return;
+      }
+      if (act === 'reddit') {
+        var rUrl = 'https://www.reddit.com/submit?url=' + encodeURIComponent(permalink) +
+          '&title=' + encodeURIComponent(slice);
+        var sr = site && site.redditSr;
+        if (sr) rUrl += '&sr=' + encodeURIComponent(String(sr));
+        window.open(rUrl, '_blank', 'noopener,noreferrer');
+        closeShareSheet();
+      }
+    });
+    return ov;
+  }
+
+  function sharePost(postId) {
+    if (!postId) return;
+    var post = findPost(postId);
+    if (!post) {
+      composeErr('Could not find that post.');
+      return;
+    }
+    shareSheetPostId = postId;
+    ensureShareSheet().hidden = false;
+  }
+
+  function highlightDeepPost() {
+    if (!deepPostId || deepPostDone || !liveReady) return;
+    var feed = document.getElementById('thoughts-feed');
+    if (!feed) return;
+    var safe = String(deepPostId).replace(/"/g, '');
+    var el = feed.querySelector('[data-post-id="' + safe + '"]');
+    if (!el) return;
+    deepPostDone = true;
+    el.classList.add('is-deep-post');
+    try { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { el.scrollIntoView(); }
+  }
+
   function isEmailVerified() {
     var u = fbAuth && fbAuth.currentUser;
     return !!(u && u.emailVerified);
@@ -544,6 +661,7 @@
       var kids = repliesFor(p.id);
       return renderPost(p, false) + kids.map(function (r) { return renderPost(r, true); }).join('');
     }).join('');
+    highlightDeepPost();
   }
 
   function renderTrends() {
@@ -1171,7 +1289,9 @@
         return;
       }
       if (e.target.closest('[data-act="share"]')) {
-        if (!isLiveUser()) openAuth('login');
+        const post = e.target.closest('[data-post-id]');
+        if (!post) return;
+        sharePost(post.dataset.postId);
         return;
       }
       if (e.target.closest('[data-act="report"]')) {
@@ -1206,6 +1326,8 @@
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
+      const shareOv = document.getElementById('share-sheet');
+      if (shareOv && !shareOv.hidden) { e.preventDefault(); closeShareSheet(); return; }
       const ov = document.getElementById('cv-auth-overlay');
       if (ov && ov.classList.contains('open')) { e.preventDefault(); closeAuth(); return; }
       if (isMobileNav() && document.body.classList.contains('nav-open')) closeMobileNav();
@@ -1411,8 +1533,17 @@
     renderFeed();
 
     window.addEventListener('hashchange', applyRoute);
-    if (!location.hash || location.hash === '#') history.replaceState(null, '', '#home');
+    try { deepPostId = new URLSearchParams(location.search).get('p') || ''; } catch (e) { deepPostId = ''; }
+    if (!location.hash || location.hash === '#') {
+      history.replaceState(null, '', location.pathname + location.search + '#home');
+    }
     applyRoute();
+    if (deepPostId) {
+      closeSocialOverlays();
+      showContentPage('thoughts');
+      highlightSocial('home');
+      selectThoughtsTab('foryou');
+    }
     syncHamburgerAria();
   }
 
