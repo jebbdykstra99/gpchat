@@ -1,0 +1,493 @@
+{
+  "siteId": "gpchat",
+  "name": "gpchat",
+  "tagline": "Nothing but Grand Prix.",
+  "composePlaceholder": "What's happening on the grid?",
+  "emptyState": "This room is empty. Sign in with email to post the first take about the Grand Prix. Guest can browse only.",
+  "theme": {
+    "bg": "#141416",
+    "surface": "#1c1c20",
+    "nav-bg": "#0a0a0c",
+    "nav-text": "#9a9aa3",
+    "nav-hover": "#f2f2f2",
+    "nav-active": "#f2f2f2",
+    "text": "#f2f2f2",
+    "text-muted": "#9a9aa3",
+    "text-light": "#9a9aa3",
+    "accent": "#e10600",
+    "accent-dark": "#b10500",
+    "teal": "#e10600",
+    "silver": "#9a9aa3",
+    "border": "#2c2c32",
+    "avatarColors": [
+      "#e10600",
+      "#b10500",
+      "#0a0a0c",
+      "#d4af37",
+      "#3a3a42",
+      "#6b1a16"
+    ],
+    "gold": "#d4af37",
+    "delay": "#e10600"
+  },
+  "trends": [
+    {
+      "tag": "Quali",
+      "headline": "Q3 is a yellow-flag lottery tonight",
+      "snippet": "Pole is whoever does not lift for the marshal. Dummy quali chatter — not a timing feed.",
+      "meta": "Race weekend"
+    },
+    {
+      "tag": "Safety car",
+      "headline": "SC boards out, field bunches",
+      "snippet": "VSC to full SC. Overcut people are grinning. Dummy race-control energy only.",
+      "meta": "SC / VSC"
+    },
+    {
+      "tag": "Team radio",
+      "headline": "BOX BOX vs stay out",
+      "snippet": "Plan B. Confirm plan B. What is plan B. Pit wall is a group chat with telemetry.",
+      "meta": "Radio energy"
+    },
+    {
+      "tag": "DNF",
+      "headline": "Power unit smoke, retirement talk",
+      "snippet": "Championship points leaking onto the grass. Dummy DNF log, no live results.",
+      "meta": "Retirement"
+    },
+    {
+      "tag": "Championship",
+      "headline": "Constructors is a street fight",
+      "snippet": "Gold trophy talk in the garage. Dummy points math. Not official F1.",
+      "meta": "Points fight",
+      "gold": true
+    },
+    {
+      "tag": "Pit lane",
+      "headline": "Double stack mixup at the box",
+      "snippet": "Second car waited like it was a drive-through. Same compound. Same mistake.",
+      "meta": "Pit-lane mixup"
+    },
+    {
+      "tag": "Undercut",
+      "headline": "Undercut window is three cars wide",
+      "snippet": "Nobody is taking it. Overcut paid last dummy stint. Tire offset math on the couch.",
+      "meta": "Strategy"
+    },
+    {
+      "tag": "2026",
+      "headline": "Dummy 2026 grid talk in the paddock",
+      "snippet": "New regs, new faces, no real entry list here. Phase 2 is an API. Tonight is vibes.",
+      "meta": "Regs chatter"
+    }
+  ],
+  "places": [
+    {
+      "tag": "Circuit",
+      "title": "Monaco",
+      "snippet": "Quali is the race. Barriers, yacht energy, and a formation lap that feels like a parade."
+    },
+    {
+      "tag": "Circuit",
+      "title": "Spa-Francorchamps",
+      "snippet": "Eau Rouge in the blood. Weather that changes twice a sector. Safety cars love it here."
+    },
+    {
+      "tag": "Circuit",
+      "title": "Silverstone",
+      "snippet": "Copse, Maggotts, Becketts. Crowd roar. Dummy British GP weekend chatter."
+    },
+    {
+      "tag": "Circuit",
+      "title": "Monza",
+      "snippet": "Temple of speed. DRS detect on the main straight. Slipstream is a religion."
+    },
+    {
+      "tag": "Circuit",
+      "title": "Suzuka",
+      "snippet": "Figure-eight. 130R. Quali laps that look illegal. Dummy Japanese GP energy."
+    },
+    {
+      "tag": "Circuit",
+      "title": "Interlagos",
+      "snippet": "Interlagos weather, championship points, and a last-lap DRS that bottles into the hairpin."
+    },
+    {
+      "tag": "Circuit",
+      "title": "Marina Bay",
+      "snippet": "Night race. Walls. Safety car magnet. Paddock/night-race canvas energy."
+    },
+    {
+      "tag": "Circuit",
+      "title": "Circuit of the Americas",
+      "snippet": "T1 climb, T12 overtake, dummy COTA weekend. Formation lap up the hill."
+    }
+  ],
+  "topics": [
+    {
+      "tag": "Quali",
+      "title": "Qualifying drama",
+      "snippet": "Q1 traffic, Q3 yellows, pole that the paint did not agree with."
+    },
+    {
+      "tag": "SC",
+      "title": "Safety car & VSC",
+      "snippet": "Boards out. Delta is a suggestion. Field bunches. Dummy race control."
+    },
+    {
+      "tag": "Box",
+      "title": "Pit-lane mixups",
+      "snippet": "Double stack, wrong compound, traffic light that lied."
+    },
+    {
+      "tag": "Radio",
+      "title": "Team radio",
+      "snippet": "Box this lap. Stay out. Plan B. We are checking."
+    },
+    {
+      "tag": "Points",
+      "title": "Championship fight",
+      "snippet": "Dummy points math. Gold trophy talk. Not live standings."
+    },
+    {
+      "tag": "2026",
+      "title": "2026 grid talk",
+      "snippet": "New regs chatter. No real entry list. Phase 2 is an API."
+    },
+    {
+      "tag": "DRS",
+      "title": "DRS & overtakes",
+      "snippet": "Zone is a rumor. Detect on, still stuck. ERS empty before the line."
+    },
+    {
+      "tag": "Formation",
+      "title": "Formation lap",
+      "snippet": "Tire temps, a stall on the grid, P1 lights that take forever."
+    }
+  ],
+  "seedNote": "sample — not mixed into the live feed",
+  "seed": [
+    {
+      "id": "p1",
+      "name": "Grid Watch",
+      "handle": "gridwatch",
+      "text": "Formation lap is a crawl and someone already locked up into T1 in my head. Dummy weekend. No live timing. Lights out when the paddock says so.",
+      "hours": 1,
+      "likes": 318,
+      "replies": 52,
+      "followed": true,
+      "snippet": {
+        "handle": "formationlap",
+        "text": "Tire blankets off too early. I called the stall from the couch."
+      }
+    },
+    {
+      "id": "p2",
+      "name": "DRS Detect",
+      "handle": "drsdetect",
+      "text": "DRS detect on the main straight and half the field still cannot pass. This zone is a rumor. Dummy overtakes only.",
+      "hours": 2,
+      "likes": 241,
+      "replies": 38,
+      "followed": true
+    },
+    {
+      "id": "p3",
+      "name": "Box Box Box",
+      "handle": "boxboxbox",
+      "text": "BOX BOX BOX and they sent him out on the same compound. Pit-lane mixup of the dummy year. The second car in the double stack waited like it was a drive-through.",
+      "hours": 3,
+      "likes": 412,
+      "replies": 67,
+      "followed": true,
+      "snippet": {
+        "handle": "pitwallradio",
+        "text": "Plan B was the same compound. We are checking."
+      }
+    },
+    {
+      "id": "p4",
+      "name": "VSC Watch",
+      "handle": "vscwatch",
+      "text": "VSC, then SC, then VSC again. Race control is playing scales. Dummy chatter, not a timing feed. The delta is a suggestion.",
+      "hours": 4,
+      "likes": 276,
+      "replies": 41,
+      "followed": false
+    },
+    {
+      "id": "p5",
+      "name": "Undercut Now",
+      "handle": "undercutnow",
+      "text": "Undercut window is open for three cars and nobody is taking it. I am screaming at the TV like I have a radio. Dummy strategy only.",
+      "hours": 5,
+      "likes": 189,
+      "replies": 27,
+      "followed": true
+    },
+    {
+      "id": "p6",
+      "name": "Formation Lap",
+      "handle": "formationlap",
+      "text": "Formation lap tire temps look nervous. If P1 lights go out and someone stalls, I called it from the couch. Dummy grid. No live lights.",
+      "hours": 6,
+      "likes": 154,
+      "replies": 22,
+      "followed": true,
+      "snippet": {
+        "handle": "gridwatch",
+        "text": "Saw the lockup in my soul before T1."
+      }
+    },
+    {
+      "id": "p7",
+      "name": "Pit Wall Radio",
+      "handle": "pitwallradio",
+      "text": "Team radio: \"Plan B.\" \"Confirm plan B.\" \"What is plan B.\" Classic. Dummy radio energy. Not official F1.",
+      "hours": 7,
+      "likes": 203,
+      "replies": 44,
+      "followed": true
+    },
+    {
+      "id": "p8",
+      "name": "SC Boards",
+      "handle": "scboards",
+      "text": "Safety car boards. Field bunches. Overcut people are grinning. Dummy weekend only — no live SC status here.",
+      "hours": 8,
+      "likes": 167,
+      "replies": 19,
+      "followed": false
+    },
+    {
+      "id": "p9",
+      "name": "Quali Drama",
+      "handle": "qualidrama",
+      "text": "Q3 is a yellow-flag lottery. Pole is whoever does not lift for the marshal. Track limits? The paint is a suggestion. Dummy quali. Not a result.",
+      "hours": 9,
+      "likes": 388,
+      "replies": 61,
+      "followed": true,
+      "snippet": {
+        "handle": "polewatch",
+        "text": "That lap looked illegal. I loved it."
+      }
+    },
+    {
+      "id": "p10",
+      "name": "DNF Log",
+      "handle": "dnflog",
+      "text": "DNF. Hydraulics. That is the championship fight leaking onto the grass. Dummy retirement — we do not have a live classification.",
+      "hours": 11,
+      "likes": 131,
+      "replies": 18,
+      "followed": true
+    },
+    {
+      "id": "p11",
+      "name": "Champ Points",
+      "handle": "champpoints",
+      "text": "Constructor points are a street fight. Gold trophy talk. Dummy 2026 grid chat starts in the next garage. Not standings. Not official F1.",
+      "hours": 13,
+      "likes": 298,
+      "replies": 49,
+      "followed": true
+    },
+    {
+      "id": "p12",
+      "name": "Overcut King",
+      "handle": "overcutking",
+      "text": "Overcut paid. They stayed out one more lap, the undercut car came out in traffic. Textbook, still dummy. Tire offset math on the couch.",
+      "hours": 15,
+      "likes": 220,
+      "replies": 34,
+      "followed": false,
+      "snippet": {
+        "handle": "undercutnow",
+        "text": "I told you the window was open. Nobody boxed."
+      }
+    },
+    {
+      "id": "p13",
+      "name": "Apex Hunter",
+      "handle": "apexhunter",
+      "text": "Spa energy even when we are not at Spa. Eau Rouge in my blood, kerbs in my timeline. Dummy circuit chatter. Night-race canvas.",
+      "hours": 16,
+      "likes": 97,
+      "replies": 11,
+      "followed": true
+    },
+    {
+      "id": "p14",
+      "name": "Kerb Skip",
+      "handle": "kerbskip",
+      "text": "They cut the chicane, kept the place, and the stewards are \"noting it.\" Noted. Dummy steward energy. Not a bulletin.",
+      "hours": 18,
+      "likes": 176,
+      "replies": 29,
+      "followed": false
+    },
+    {
+      "id": "p15",
+      "name": "Tire Whisper",
+      "handle": "tirewhisper",
+      "text": "Softs are gone after six laps. Mediums are a myth. Hards are a lifestyle. Dummy deg. No live tire data tonight.",
+      "hours": 20,
+      "likes": 109,
+      "replies": 21,
+      "followed": true
+    },
+    {
+      "id": "p16",
+      "name": "Grid Ghost",
+      "handle": "gridghost",
+      "text": "Dummy 2026 grid talk: new regs, new faces, nobody here has a real entry list. Phase 2 is an API. Tonight is vibes. Not official F1.",
+      "hours": 22,
+      "likes": 84,
+      "replies": 14,
+      "followed": false
+    },
+    {
+      "id": "p17",
+      "name": "Red Flag Wait",
+      "handle": "redflagwait",
+      "text": "Red flag. Everyone walking back to the garage like it is a fire drill. Quali restart in \"a few minutes\" which means never. Dummy session.",
+      "hours": 24,
+      "likes": 198,
+      "replies": 33,
+      "followed": true
+    },
+    {
+      "id": "p18",
+      "name": "Pole Watch",
+      "handle": "polewatch",
+      "text": "Pole lap looked illegal. Track limits? The paint is a suggestion. Dummy quali. We are not posting a grid.",
+      "hours": 26,
+      "likes": 147,
+      "replies": 24,
+      "followed": true,
+      "snippet": {
+        "handle": "qualidrama",
+        "text": "Yellow in sector 3. Pole is a lottery ticket."
+      }
+    },
+    {
+      "id": "p19",
+      "name": "Last Lap",
+      "handle": "lastlap",
+      "text": "Last lap, DRS open, they bottled it into the hairpin. Championship points left on the table. Dummy finish. No live results.",
+      "hours": 28,
+      "likes": 255,
+      "replies": 40,
+      "followed": false
+    },
+    {
+      "id": "p20",
+      "name": "Paddock Noise",
+      "handle": "paddocknoise",
+      "text": "Paddock rumor mill: engine freeze, 2026 chassis, a driver who \"might\" be on the dummy grid. Not news. Not official F1. Dress rehearsal.",
+      "hours": 30,
+      "likes": 73,
+      "replies": 9,
+      "followed": true
+    },
+    {
+      "id": "p21",
+      "name": "ERS Deploy",
+      "handle": "ersdeploy",
+      "text": "ERS empty before the DRS zone. That is not a strategy that is a prayer. Dummy hybrid chatter. No live energy numbers.",
+      "hours": 32,
+      "likes": 118,
+      "replies": 16,
+      "followed": true
+    },
+    {
+      "id": "p22",
+      "name": "Wet Line",
+      "handle": "wetline",
+      "text": "Intermediate call with three corners of wet. They boxed. Safety car would have been cheaper. Dummy weather. Dummy call.",
+      "hours": 36,
+      "likes": 162,
+      "replies": 23,
+      "followed": false,
+      "snippet": {
+        "handle": "scboards",
+        "text": "SC would have bunched them. Inters were a vibe."
+      }
+    },
+    {
+      "id": "p23",
+      "name": "Box Wait",
+      "handle": "boxboxwait",
+      "text": "Double stack in the pit lane, the second car waited like it was a drive-through. Mixup. Dummy pit-lane only — no live garage feed.",
+      "hours": 38,
+      "likes": 91,
+      "replies": 12,
+      "followed": true
+    },
+    {
+      "id": "p24",
+      "name": "SC Detect",
+      "handle": "scdetect",
+      "text": "Virtual safety car to full SC. The delta is a suggestion. I am not a timing app. Dummy race control. Nothing but Grand Prix.",
+      "hours": 40,
+      "likes": 140,
+      "replies": 20,
+      "followed": false
+    }
+  ],
+  "notifs": [
+    {
+      "id": "n1",
+      "text": "@boxboxbox liked your take on the double stack mixup.",
+      "time": "1h",
+      "unread": true
+    },
+    {
+      "id": "n2",
+      "text": "@drsdetect mentioned you in a DRS detect.",
+      "time": "3h",
+      "unread": true
+    },
+    {
+      "id": "n3",
+      "text": "@champpoints started following you. Dummy follow.",
+      "time": "Yesterday",
+      "unread": true
+    }
+  ],
+  "threads": [
+    {
+      "id": "t1",
+      "name": "Box Box Box",
+      "handle": "boxboxbox",
+      "preview": "Did they really send him out on the same compound?",
+      "messages": [
+        {
+          "me": false,
+          "text": "Did they really send him out on the same compound?"
+        },
+        {
+          "me": true,
+          "text": "Same compound. Double stack. Dummy pit-lane. See you at the next box."
+        }
+      ]
+    },
+    {
+      "id": "t2",
+      "name": "DRS Detect",
+      "handle": "drsdetect",
+      "preview": "Zone is a rumor tonight.",
+      "messages": [
+        {
+          "me": false,
+          "text": "Zone is a rumor tonight."
+        },
+        {
+          "me": true,
+          "text": "Detect on, still stuck. ERS empty before the line."
+        }
+      ]
+    }
+  ]
+}
