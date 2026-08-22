@@ -17,8 +17,8 @@
   --teal:          #e10600;
   --silver:          #9a9aa3;
   --border:          #2c2c32;
-  --nav-w:          240px;
-  --right-w:          280px;
+  --nav-w:          275px;
+  --right-w:          330px;
   --ui:          Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
   --display:          "Titillium Web", Oswald, Inter, sans-serif;
 }
