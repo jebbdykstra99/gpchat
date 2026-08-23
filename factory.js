@@ -108,8 +108,7 @@
   var shareSheetPostId = null;
 
   function postPermalink(postId) {
-    var host = (location.hostname || '').replace(/^www\./i, '') || 'samochat.com';
-    return 'https://p.' + host + '/status/' + encodeURIComponent(String(postId || ''));
+    return 'https://us-central1-subx-skins.cloudfunctions.net/og?site=' + encodeURIComponent(SITE_ID) + '&p=' + encodeURIComponent(String(postId || ''));
   }
 
   function shareTextSlice(post) {
