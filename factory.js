@@ -1193,6 +1193,39 @@
         }
       });
     }
+
+    function takeClipboardImage(e) {
+      var cd = e.clipboardData || (e.originalEvent && e.originalEvent.clipboardData);
+      if (!cd) return false;
+      var items = cd.items;
+      if (items && items.length) {
+        for (var i = 0; i < items.length; i++) {
+          var it = items[i];
+          if (it && it.kind === 'file' && it.type && it.type.indexOf('image/') === 0) {
+            var f = it.getAsFile();
+            if (f) { setImagePreview(f); return true; }
+          }
+        }
+      }
+      var files = cd.files;
+      if (files && files.length) {
+        for (var j = 0; j < files.length; j++) {
+          if (files[j] && files[j].type && files[j].type.indexOf('image/') === 0) {
+            setImagePreview(files[j]);
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+    function onComposePaste(e) {
+      if (takeClipboardImage(e)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }
+    if (wrap) wrap.addEventListener('paste', onComposePaste, true);
+
     var pollPanel = document.getElementById('compose-poll');
     var pollBtn = document.getElementById('compose-btn-poll');
     if (pollBtn && pollPanel) {
