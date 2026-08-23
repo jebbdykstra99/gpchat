@@ -38,6 +38,9 @@
     appId: "1:869847405863:web:26f902efb9a4ee0b7c0502"
     });
     fbAuth = firebase.auth();
+    try {
+      fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    } catch (ePersist) { console.warn('auth persistence', ePersist); }
     fbDb = firebase.firestore();
     fbStorage = firebase.storage();
     try {
