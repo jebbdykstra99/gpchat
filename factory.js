@@ -108,9 +108,7 @@
   var shareSheetPostId = null;
 
   function postPermalink(postId) {
-    var id = String(postId || '');
-    var host = location.host || '';
-    return 'https://' + host + '/?p=' + encodeURIComponent(id);
+    return 'https://us-central1-subx-skins.cloudfunctions.net/og?site=' + encodeURIComponent(SITE_ID) + '&p=' + encodeURIComponent(String(postId || ''));
   }
 
   function shareTextSlice(post) {
@@ -187,21 +185,14 @@
         return;
       }
       if (act === 'x') {
-        var xText = slice;
-        var xLink = permalink;
-        if (post && post.imageUrl) {
-          xText = slice + ' ' + permalink;
-          xLink = post.imageUrl;
-        }
-        var xUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(xText) +
-          '&url=' + encodeURIComponent(xLink);
+        var xUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(slice) +
+          '&url=' + encodeURIComponent(permalink);
         window.open(xUrl, '_blank', 'noopener,noreferrer');
         closeShareSheet();
         return;
       }
       if (act === 'reddit') {
-        var rLink = (post && post.imageUrl) ? post.imageUrl : permalink;
-        var rUrl = 'https://www.reddit.com/submit?url=' + encodeURIComponent(rLink) +
+        var rUrl = 'https://www.reddit.com/submit?url=' + encodeURIComponent(permalink) +
           '&title=' + encodeURIComponent(slice);
         var sr = site && site.redditSr;
         if (sr) rUrl += '&sr=' + encodeURIComponent(String(sr));
