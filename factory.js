@@ -1499,18 +1499,22 @@
       err.textContent = '';
       err.classList.remove('show');
       var provider = new firebase.auth.GoogleAuthProvider();
-      fbAuth.signInWithPopup(provider).then(function (cred) {
+      var ua = navigator.userAgent || '';
+      var isiOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      var isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS|Android/i.test(ua);
+      function finishGoogle(cred) {
         var u = cred && cred.user;
         if (fbDb && u) {
           var disp = u.displayName || (u.email || 'member').split('@')[0];
           return fbDb.collection('users').doc(u.uid).set({
             displayName: disp,
-                        siteId: SITE_ID,
+            siteId: SITE_ID,
             provider: 'google',
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
         }
-      }).catch(function (e) {
+      }
+      function failGoogle(e) {
         var msg;
         if (e && e.code === 'auth/operation-not-allowed') {
           msg = 'Google is not enabled on subx-skins yet.';
@@ -1521,7 +1525,17 @@
         }
         err.textContent = msg;
         err.classList.add('show');
-      });
+      }
+      if (isiOS || isSafari) {
+        fbAuth.signInWithRedirect(provider).catch(failGoogle);
+      } else {
+        fbAuth.signInWithPopup(provider).then(finishGoogle).catch(function (e) {
+          if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request')) {
+            return fbAuth.signInWithRedirect(provider);
+          }
+          failGoogle(e);
+        });
+      }
     });
     document.getElementById('cv-guest-login').addEventListener('click', function () { stubSignIn('Guest', 'guestgp'); });
 
@@ -1558,6 +1572,18 @@
     hideDummyChrome();
 
     if (fbAuth) {
+      fbAuth.getRedirectResult().then(function (cred) {
+        var u = cred && cred.user;
+        if (fbDb && u) {
+          var disp = u.displayName || (u.email || 'member').split('@')[0];
+          return fbDb.collection('users').doc(u.uid).set({
+            displayName: disp,
+            siteId: SITE_ID,
+            provider: 'google',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+        }
+      }).catch(function () {});
       fbAuth.onAuthStateChanged(function (user) {
         if (user) applyFbUser(user);
         else {
