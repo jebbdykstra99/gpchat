@@ -1475,8 +1475,7 @@
           if (fbDb) {
             return fbDb.collection('users').doc(cred.user.uid).set({
               displayName: disp,
-              email: email,
-              siteId: SITE_ID,
+                            siteId: SITE_ID,
               createdAt: firebase.firestore.FieldValue.serverTimestamp()
             }, { merge: true });
           }
@@ -1506,8 +1505,7 @@
           var disp = u.displayName || (u.email || 'member').split('@')[0];
           return fbDb.collection('users').doc(u.uid).set({
             displayName: disp,
-            email: u.email || '',
-            siteId: SITE_ID,
+                        siteId: SITE_ID,
             provider: 'google',
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
