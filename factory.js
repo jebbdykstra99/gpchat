@@ -1599,6 +1599,7 @@
       selectThoughtsTab('foryou');
     }
     syncHamburgerAria();
+    try { var k='subx.vid'; var v=localStorage.getItem(k); if (!v) { v=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem(k,v); } if (!sessionStorage.getItem('subx.hit.'+SITE_ID)) { sessionStorage.setItem('subx.hit.'+SITE_ID,'1'); navigator.sendBeacon('https://us-central1-subx-skins.cloudfunctions.net/pixel?s='+encodeURIComponent(SITE_ID)+'&v='+encodeURIComponent(v)); } } catch (e) {}
   }
 
   fetch(SITE_JSON_URL)
