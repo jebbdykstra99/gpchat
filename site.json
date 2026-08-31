@@ -490,5 +490,19 @@
         }
       ]
     }
-  ]
+  ],
+  "rail": {
+    "kind": "porch",
+    "title": "Room Brief",
+    "kicker": "On the grid",
+    "meta": "This room",
+    "footer": "Race-weekend porch. OpenF1 is later.",
+    "porch": {
+      "prompt": "Polesit or chaos?",
+      "options": [
+        "Polesit",
+        "Chaos"
+      ]
+    }
+  }
 }
