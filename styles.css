@@ -898,3 +898,22 @@ body.legal-page {
 .legal-doc p, .legal-doc li { color: var(--text-muted); margin-bottom: 0.7rem; }
 .legal-doc ul { padding-left: 1.2rem; margin-bottom: 1rem; }
 .legal-doc a { color: var(--teal); }
+
+.porch-btns { display: flex; gap: 0.45rem; margin: 0.45rem 0 0.2rem; flex-wrap: wrap; }
+.porch-btn {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.08);
+  color: #f0f4f7;
+  cursor: pointer;
+}
+.porch-btn:hover { background: rgba(255,255,255,0.16); }
+.news-page-list .porch-btn {
+  border-color: var(--border);
+  background: #fff;
+  color: var(--text);
+}
