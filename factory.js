@@ -2,13 +2,13 @@
   'use strict';
 
   const MOBILE_NAV_MQ = 900;
-  const LS_USER = 'gpchat.user';
-  const LS_LIKES = 'gpchat.likes';
+  const LS_USER = '415chat.user';
+  const LS_LIKES = '415chat.likes';
   const SITE_JSON_URL = (document.currentScript && document.currentScript.getAttribute('data-site')) || 'site.json';
 
-  let SITE_ID = 'gpchat';
+  let SITE_ID = '415chat';
   let site = null;
-  let COLORS = ['#e10600', '#b10500', '#0a0a0c', '#d4af37', '#3a3a42', '#6b1a16'];
+  let COLORS = ['#0b1c2c', '#1b6b73', '#c0362c', '#2a4a62', '#8a3b32', '#345c6e'];
   let TRENDS = [];
   let PLACES = [];
   let TOPICS = [];
@@ -356,7 +356,7 @@
 
   function applySiteChrome() {
     if (!site) return;
-    var title = site.name || "gpchat";
+    var title = site.name || "415chat";
     var tag = site.tagline || '';
     document.title = tag ? (title + ' — ' + tag) : title;
     var brandTitle = document.querySelector('.brand-title');
@@ -369,6 +369,53 @@
     if (input && site.composePlaceholder) {
       input.placeholder = site.composePlaceholder;
       input.setAttribute('data-ph', site.composePlaceholder);
+    }
+    applyRailChrome();
+  }
+
+  function railCfg() {
+    return (site && site.rail) || {};
+  }
+
+  function railKind() {
+    return String(railCfg().kind || '');
+  }
+
+  function railUsesCwf() {
+    return railKind() === 'nws-cwf';
+  }
+
+  function railUsesNws() {
+    var cfg = railCfg();
+    var kind = railKind();
+    if (kind === 'nws-cwf' || kind === 'nws-forecast') return true;
+    return !!(cfg.forecastUrl || (cfg.lat != null && cfg.lon != null));
+  }
+
+  function applyRailChrome() {
+    var cfg = railCfg();
+    var hasRail = !!(cfg.kind || cfg.porch || (cfg.outbound && cfg.outbound.length));
+    var kicker = cfg.kicker || (hasRail ? 'In the room' : '');
+    var title = cfg.title || (hasRail ? 'Room Brief' : '');
+    var footer = cfg.footer || (hasRail ? 'Room Brief. Not a news ingest.' : '');
+    var rk = document.querySelector('.right-panel-kicker');
+    var rt = document.querySelector('.right-panel-title');
+    var rf = document.querySelector('.right-panel-footer p');
+    var nk = document.querySelector('#page-news .page-kicker');
+    var nh = document.querySelector('#page-news h1');
+    var tab = document.getElementById('right-panel-tab');
+    if (kicker) {
+      if (rk) rk.textContent = kicker;
+      if (nk) nk.textContent = kicker;
+    }
+    if (title) {
+      if (rt) rt.textContent = title;
+      if (nh) nh.textContent = title;
+    }
+    if (footer && rf) rf.textContent = footer;
+    if (tab && title) {
+      tab.title = 'Toggle ' + title.toLowerCase();
+      tab.setAttribute('aria-label', 'Toggle ' + title.toLowerCase());
     }
   }
 
@@ -685,22 +732,424 @@
     highlightDeepPost();
   }
 
-  function renderTrends() {
-    const card = function (t) {
-      const href = t.url || '#explore';
-      const extra = t.url ? ' target="_blank" rel="noopener noreferrer"' : '';
-      return '<a class="news-item" href="' + href + '"' + extra + '>' +
-        '<div class="news-item-tag">' + escapeHtml(t.tag) + '</div>' +
-        '<div class="news-item-headline">' + escapeHtml(t.headline) + '</div>' +
-        '<div class="news-item-snippet">' + escapeHtml(t.snippet) + '</div>' +
-        '<div class="news-item-meta">' + escapeHtml(t.meta) + '</div>' +
-      '</a>';
+  var RAIL_MAX = 3;
+
+  function nwsHeaders(accept) {
+    var cfg = railCfg();
+    var ua = cfg.userAgent || ((site && site.name) || SITE_ID || 'subx') + '/rail (jebb@subx.it)';
+    return {
+      'Accept': accept || 'application/geo+json',
+      'User-Agent': ua
     };
-    const rail = document.getElementById('news-feed');
-    const page = document.getElementById('news-page-list');
-    const html = TRENDS.map(card).join('');
+  }
+
+  function nwsTagFor(shortForecast) {
+    var s = String(shortForecast || '').toLowerCase();
+    if (/\bfog\b/.test(s)) return 'Fog';
+    return 'NWS';
+  }
+
+  function renderTrendCard(t) {
+    const href = t.url || '#explore';
+    const extra = t.url ? ' target="_blank" rel="noopener noreferrer"' : '';
+    return '<a class="news-item" href="' + escapeHtml(href) + '"' + extra + '>' +
+      '<div class="news-item-tag">' + escapeHtml(t.tag) + '</div>' +
+      '<div class="news-item-headline">' + escapeHtml(t.headline) + '</div>' +
+      '<div class="news-item-snippet">' + escapeHtml(t.snippet) + '</div>' +
+      '<div class="news-item-meta">' + escapeHtml(t.meta) + '</div>' +
+    '</a>';
+  }
+
+  function porchCardHtml() {
+    var porch = railCfg().porch;
+    if (!porch || !porch.options || !porch.options.length) return '';
+    var prompt = porch.prompt || 'Your call?';
+    var btns = porch.options.map(function (opt) {
+      return '<button type="button" class="porch-btn" data-porch="' + escapeHtml(opt) + '">' + escapeHtml(opt) + '</button>';
+    }).join('');
+    return '<div class="news-item news-item-porch">' +
+      '<div class="news-item-tag">Porch</div>' +
+      '<div class="news-item-headline">' + escapeHtml(prompt) + '</div>' +
+      '<div class="news-item-snippet">Pick a side. Posts to this room.</div>' +
+      '<div class="porch-btns">' + btns + '</div>' +
+      '<div class="news-item-meta">This room</div>' +
+    '</div>';
+  }
+
+  function ensureRailCss() {
+    if (document.getElementById('rail-porch-css')) return;
+    var st = document.createElement('style');
+    st.id = 'rail-porch-css';
+    st.textContent =
+      '.news-item{display:block;padding:1rem 1.4rem;border-bottom:1px solid rgba(255,255,255,0.06);}' +
+      'a.news-item{text-decoration:none;cursor:pointer;}' +
+      '.porch-btns{display:flex;gap:0.45rem;margin:0.45rem 0 0.2rem;flex-wrap:wrap;}' +
+      '.porch-btn{font:inherit;font-size:0.78rem;font-weight:600;padding:0.35rem 0.8rem;border-radius:999px;' +
+        'border:1px solid rgba(255,255,255,0.22);background:rgba(255,255,255,0.08);color:#f0f4f7;cursor:pointer;}' +
+      '.porch-btn:hover{background:rgba(255,255,255,0.16);}' +
+      '.news-page-list .news-item{background:var(--surface,#f4f7fa);border:1px solid var(--border,#c9d5de);border-radius:10px;padding:1.05rem 1.15rem;}' +
+      '.news-page-list .porch-btn{border-color:var(--border,#c9d5de);background:#fff;color:var(--text,#12202c);}' +
+      '.news-page-list .porch-btn:hover{border-color:var(--accent,#c0362c);color:var(--accent,#c0362c);}';
+    document.head.appendChild(st);
+  }
+
+  function paintRail(items) {
+    ensureRailCss();
+    var html = (items || []).map(renderTrendCard).join('') + porchCardHtml();
+    var rail = document.getElementById('news-feed');
+    var page = document.getElementById('news-page-list');
     if (rail) rail.innerHTML = html;
     if (page) page.innerHTML = html;
+  }
+
+  function nwsCardFromPeriod(period, href, meta) {
+    var name = period.name || 'Forecast';
+    var short = period.shortForecast || '';
+    var temp = (period.temperature != null)
+      ? (period.temperature + '°' + (period.temperatureUnit || 'F'))
+      : '';
+    var snippet = short + (temp ? ' · ' + temp : '');
+    return {
+      tag: nwsTagFor(short),
+      headline: name,
+      snippet: snippet,
+      meta: meta,
+      url: href
+    };
+  }
+
+  function nwsCardFromAlert(feature, href, meta) {
+    var p = (feature && feature.properties) || {};
+    var headline = p.headline || p.event || '';
+    if (!headline) return null;
+    var desc = String(p.description || p.instruction || '').replace(/\s+/g, ' ').trim();
+    return {
+      tag: 'Alert',
+      headline: headline,
+      snippet: desc ? desc.slice(0, 160) : (p.event || 'Active NWS alert'),
+      meta: meta,
+      url: p.web || href
+    };
+  }
+
+  function resolveForecastUrl(cfg, headers) {
+    if (cfg.forecastUrl) return Promise.resolve(cfg.forecastUrl);
+    if (cfg.lat == null || cfg.lon == null) return Promise.reject(new Error('no nws point'));
+    var points = 'https://api.weather.gov/points/' + cfg.lat + ',' + cfg.lon;
+    return fetch(points, { headers: headers }).then(function (res) {
+      if (!res.ok) throw new Error('nws points ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      var url = data && data.properties && data.properties.forecast;
+      if (!url) throw new Error('nws points missing forecast');
+      return url;
+    });
+  }
+
+  function fetchNwsCards() {
+    var cfg = railCfg();
+    var headers = nwsHeaders();
+    var meta = cfg.meta || 'Live';
+    var pageHref = cfg.forecastPage || cfg.forecastUrl || 'https://www.weather.gov/';
+    return resolveForecastUrl(cfg, headers).then(function (forecastUrl) {
+      if (!cfg.forecastPage && forecastUrl) pageHref = forecastUrl;
+      var forecastJob = fetch(forecastUrl, { headers: headers }).then(function (res) {
+        if (!res.ok) throw new Error('nws forecast ' + res.status);
+        return res.json();
+      });
+      var alertsUrl = cfg.alertsUrl;
+      if (!alertsUrl && cfg.zone) {
+        alertsUrl = 'https://api.weather.gov/alerts/active?zone=' + encodeURIComponent(cfg.zone);
+      }
+      var alertsJob = alertsUrl
+        ? fetch(alertsUrl, { headers: headers }).then(function (res) {
+            return res.ok ? res.json() : { features: [] };
+          }).catch(function () { return { features: [] }; })
+        : Promise.resolve({ features: [] });
+      return Promise.all([forecastJob, alertsJob]);
+    }).then(function (pair) {
+      var forecast = pair[0] || {};
+      var alerts = pair[1] || {};
+      var cards = [];
+      var features = alerts.features || [];
+      for (var i = 0; i < features.length; i++) {
+        var alertCard = nwsCardFromAlert(features[i], pageHref, meta);
+        if (alertCard) cards.push(alertCard);
+      }
+      var periods = (forecast.properties && forecast.properties.periods) || [];
+      for (var p = 0; p < periods.length; p++) {
+        cards.push(nwsCardFromPeriod(periods[p], pageHref, meta));
+      }
+      if (!periods.length) throw new Error('nws forecast empty');
+      return cards;
+    });
+  }
+
+  function cwfHeadline(name) {
+    return String(name || 'Forecast')
+      .toLowerCase()
+      .replace(/\b[a-z]/g, function (ch) { return ch.toUpperCase(); })
+      .replace(/\bOf\b/g, 'of');
+  }
+
+  function cwfSnippet(body) {
+    var flat = String(body || '').replace(/\s+/g, ' ').trim();
+    if (!flat) return '';
+    var wind = /[^.]*(?:\bwind|\bwinds)[^.]*\.?/i.exec(flat);
+    var seas = /[^.]*(?:\bseas?\b|\bswell\b)[^.]*\.?/i.exec(flat);
+    var bits = [];
+    if (wind) bits.push(wind[0].trim().replace(/\.+$/, '') + '.');
+    if (seas && (!wind || seas.index !== wind.index)) bits.push(seas[0].trim().replace(/\.+$/, '') + '.');
+    if (bits.length) return bits.join(' ');
+    return flat.slice(0, 160);
+  }
+
+  function cwfTag(productText) {
+    return /small craft/i.test(String(productText || '')) ? 'Advisory' : 'Seas';
+  }
+
+  function parseCwfPeriods(productText) {
+    var text = String(productText || '');
+    var cut = text.search(/\n&&(?:\n|$)/);
+    if (cut < 0) cut = text.search(/\n\.VAAIGA\b/);
+    if (cut > 0) text = text.slice(0, cut);
+    var periodRe = /^\.([A-Z][A-Z \-]{1,40})\.{2,}(.*)$/;
+    var lines = text.split(/\n/);
+    var periods = [];
+    var cur = null;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var m = line.match(periodRe);
+      if (m) {
+        if (cur) periods.push(cur);
+        cur = { name: m[1].replace(/\s+/g, ' ').trim(), body: m[2] || '' };
+        continue;
+      }
+      if (cur) {
+        if (/^\$\$/.test(line) || /^&&/.test(line)) {
+          periods.push(cur);
+          cur = null;
+          break;
+        }
+        if (line.trim()) cur.body += ' ' + line;
+      }
+    }
+    if (cur) periods.push(cur);
+    return periods.filter(function (p) {
+      return p.name && !/^(SYNOPSIS|VAAIGA|PO|ASO)\b/.test(p.name);
+    });
+  }
+
+  function parseCwfCards(productText, href, meta) {
+    var periods = parseCwfPeriods(productText);
+    var tag = cwfTag(productText);
+    var cards = [];
+    var n = Math.min(2, periods.length);
+    for (var i = 0; i < n; i++) {
+      var snippet = cwfSnippet(periods[i].body);
+      if (!snippet) continue;
+      cards.push({
+        tag: tag,
+        headline: cwfHeadline(periods[i].name),
+        snippet: snippet,
+        meta: meta,
+        url: href
+      });
+    }
+    return cards;
+  }
+
+  function latestCwfProductId(data) {
+    var graph = (data && (data['@graph'] || data.graph)) || [];
+    if (!graph.length && data && (data.id || data['@id'])) graph = [data];
+    graph = graph.slice().sort(function (a, b) {
+      return String((b && b.issuanceTime) || '').localeCompare(String((a && a.issuanceTime) || ''));
+    });
+    var latest = graph[0];
+    if (!latest) return '';
+    if (latest.id) return String(latest.id);
+    if (latest['@id']) return String(latest['@id']).replace(/^.*\//, '');
+    return '';
+  }
+
+  function fetchCwfCards() {
+    var cfg = railCfg();
+    var headers = nwsHeaders('application/ld+json');
+    var loc = cfg.productLocation || 'PPG';
+    var type = cfg.productType || 'CWF';
+    var meta = cfg.meta || 'Live';
+    var pageHref = cfg.forecastPage || 'https://www.weather.gov/ppg/marine';
+    var listUrl = 'https://api.weather.gov/products/types/' + encodeURIComponent(type) +
+      '/locations/' + encodeURIComponent(loc);
+    return fetch(listUrl, { headers: headers }).then(function (res) {
+      if (!res.ok) throw new Error('nws cwf list ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      var id = latestCwfProductId(data);
+      if (!id) throw new Error('nws cwf missing id');
+      return fetch('https://api.weather.gov/products/' + encodeURIComponent(id), { headers: headers });
+    }).then(function (res) {
+      if (!res.ok) throw new Error('nws cwf product ' + res.status);
+      return res.json();
+    }).then(function (prod) {
+      var cards = parseCwfCards(prod && prod.productText, pageHref, meta);
+      if (!cards.length) throw new Error('nws cwf parse empty');
+      return cards;
+    });
+  }
+
+
+  function outboundCards() {
+    var list = railCfg().outbound || [];
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var t = list[i];
+      if (!t || !t.headline) continue;
+      out.push({
+        tag: t.tag || 'Link',
+        headline: t.headline,
+        snippet: t.snippet || '',
+        meta: t.meta || (railCfg().meta || 'This room'),
+        url: t.url || ''
+      });
+    }
+    return out;
+  }
+
+  function bartCdata(node) {
+    if (node == null) return '';
+    if (typeof node === 'string') return node;
+    if (typeof node === 'number') return String(node);
+    return node['#cdata-section'] || node['#text'] || node.description || '';
+  }
+
+  function fetchBartCards() {
+    var cfg = railCfg();
+    var key = cfg.bartKey || 'MW9S-E7SL-26DU-VV8V';
+    var url = cfg.bartUrl || ('https://api.bart.gov/api/bsa.aspx?cmd=bsa&json=y&key=' + encodeURIComponent(key));
+    var meta = cfg.meta || 'Live · BART';
+    var href = cfg.forecastPage || 'https://www.bart.gov/schedules/advisories';
+    return fetch(url).then(function (res) {
+      if (!res.ok) throw new Error('bart bsa ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      var root = (data && data.root) || {};
+      var raw = root.bsa;
+      var list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+      var cards = [];
+      for (var i = 0; i < list.length; i++) {
+        var item = list[i] || {};
+        var desc = String(bartCdata(item.description) || bartCdata(item.sms_text) || '').replace(/\s+/g, ' ').trim();
+        if (!desc) continue;
+        if (/^no delay/i.test(desc) && list.length > 1) continue;
+        var typ = String(item.type || 'Advisory').toLowerCase();
+        var tag = /delay/.test(typ) || /delay/.test(desc.toLowerCase()) ? 'Delay' : 'BART';
+        var station = item.station && item.station !== 'BART' ? String(item.station) : '';
+        cards.push({
+          tag: tag,
+          headline: station || (tag === 'Delay' ? 'Delay advisory' : 'BART advisory'),
+          snippet: desc.slice(0, 180),
+          meta: meta,
+          url: href
+        });
+      }
+      if (!cards.length) {
+        cards.push({
+          tag: 'BART',
+          headline: 'No delay advisory',
+          snippet: 'BART reports no current BSA. Porch still posts into this room.',
+          meta: meta,
+          url: href
+        });
+      }
+      return cards;
+    });
+  }
+
+  function fallbackTrendCards() {
+    var extra = outboundCards();
+    if (extra.length) return extra.slice(0, 1);
+    if (railKind() || railCfg().porch) return [];
+    return (TRENDS || []).slice(0, 1);
+  }
+
+  function railNwsSlots() {
+    var porch = railCfg().porch;
+    var porchOn = !!(porch && porch.options && porch.options.length);
+    var max = parseInt(railCfg().maxCards, 10) || RAIL_MAX;
+    if (max < 1) max = RAIL_MAX;
+    return porchOn ? Math.max(1, max - 1) : max;
+  }
+
+  function renderTrends() {
+    var liveFetch = null;
+    if (railUsesCwf()) liveFetch = fetchCwfCards;
+    else if (railKind() === 'bart-bsa') liveFetch = fetchBartCards;
+    else if (railUsesNws()) liveFetch = fetchNwsCards;
+    if (!liveFetch) {
+      paintRail(outboundCards().slice(0, railNwsSlots()));
+      return;
+    }
+    paintRail([]);
+    liveFetch().then(function (cards) {
+      var extra = outboundCards();
+      var merged = (cards || []).concat(extra);
+      if (merged.length) paintRail(merged.slice(0, railNwsSlots()));
+      else paintRail(fallbackTrendCards());
+    }).catch(function (err) {
+      console.warn(railKind() || 'rail', err);
+      paintRail(fallbackTrendCards());
+    });
+  }
+
+  function porchLine(option) {
+    return String(option || '').trim().replace(/\.+$/, '') + '.';
+  }
+
+  function fillCompose(text) {
+    var input = document.getElementById('thoughts-compose-input');
+    if (!input) return;
+    input.value = text;
+    input.dispatchEvent(new Event('input'));
+    try { input.focus(); } catch (e) {}
+  }
+
+  function addRoomTextPost(text) {
+    var live = fbAuth && fbAuth.currentUser;
+    var disp = (currentUser && currentUser.name) || live.displayName || (live.email || 'member').split('@')[0] || 'Member';
+    var handle = (currentUser && currentUser.handle) || String(disp).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'member';
+    return fbDb.collection('posts').add({
+      siteId: SITE_ID,
+      parentId: null,
+      authorUid: live.uid,
+      authorName: disp,
+      authorHandle: handle,
+      text: String(text || '').slice(0, 280),
+      likes: {},
+      likeCount: 0,
+      replyCount: 0,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
+  function porchPick(option) {
+    var line = porchLine(option);
+    if (!line || line === '.') return;
+    if (!isLiveUser()) {
+      go('home');
+      fillCompose(line);
+      composeErr('Sign in with email to post. Guest can only browse.');
+      openAuth('login');
+      return;
+    }
+    if (!requireVerified('post')) return;
+    if (!fbDb) { composeErr('Feed is not connected.'); return; }
+    composeErr('');
+    addRoomTextPost(line).then(function () {
+      composeErr('Posted.');
+    }).catch(function (e) {
+      composeErr((e && e.message) ? e.message : 'Could not post.');
+    });
   }
 
   function renderExplore() {
@@ -783,12 +1232,12 @@
     document.getElementById('profile-display-name').textContent = currentUser.name;
     document.getElementById('profile-handle').textContent = '@' + currentUser.handle;
     document.getElementById('profile-avatar').textContent = initials(currentUser.name);
-    document.getElementById('profile-bio').textContent = currentUser.bio || "Nothing but Grand Prix.";
+    document.getElementById('profile-bio').textContent = currentUser.bio || "Talking about the city.";
     const mine = livePosts.filter(function (p) { return p.authorUid && p.authorUid === currentUser.uid; });
     const pane = document.getElementById('profile-pane-posts');
     if (!pane) return;
     if (!mine.length) {
-      pane.innerHTML = '<div class="empty-note" id="profile-posts-empty">No posts yet. Hit Post when the safety car comes out.</div>';
+      pane.innerHTML = '<div class="empty-note" id="profile-posts-empty">No posts yet. Hit Post when something about the city is on your mind.</div>';
     } else {
       pane.innerHTML = mine.map(function (p) { return renderPost(p, !!p.parentId); }).join('');
     }
@@ -824,7 +1273,7 @@
     } else {
       el.innerHTML = '<button class="sidebar-auth-btn primary" id="auth-signin" type="button">Sign in</button>';
       if (av) {
-        av.textContent = "GP";
+        av.textContent = "415";
         av.style.background = '';
       }
     }
@@ -847,8 +1296,8 @@
   function stubSignIn(name, handle) {
     currentUser = {
       name: name || 'Guest',
-      handle: (handle || 'guestgp').replace(/^@/, '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'guestgp',
-      bio: "Nothing but Grand Prix.",
+      handle: (handle || 'guest415').replace(/^@/, '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'guest415',
+      bio: "San Francisco, talking.",
       live: false
     };
     saveJSON(LS_USER, currentUser);
@@ -1302,6 +1751,13 @@
       }
       if (e.target.closest('#auth-signout')) { signOut(); return; }
 
+      const porchBtn = e.target.closest('[data-porch]');
+      if (porchBtn) {
+        e.preventDefault();
+        porchPick(porchBtn.getAttribute('data-porch'));
+        return;
+      }
+
       const pollOpt = e.target.closest('[data-poll-idx]');
       if (pollOpt) {
         votePoll(pollOpt.dataset.postId, parseInt(pollOpt.dataset.pollIdx, 10));
@@ -1537,7 +1993,7 @@
         });
       }
     });
-    document.getElementById('cv-guest-login').addEventListener('click', function () { stubSignIn('Guest', 'guestgp'); });
+    document.getElementById('cv-guest-login').addEventListener('click', function () { stubSignIn('Guest', 'guest415'); });
 
     const search = document.getElementById('explore-search-input');
     search.addEventListener('input', function () {
@@ -1549,7 +2005,7 @@
         });
       }
       function cards(list) {
-        if (!list.length) return '<p class="empty-note">Nothing on the grid matched that.</p>';
+        if (!list.length) return '<p class="empty-note">Nothing in the 415 matched that.</p>';
         return list.map(function (c) {
           return '<article class="explore-card"><div class="explore-card-tag">' + escapeHtml(c.tag) +
             '</div><div class="explore-card-title">' + escapeHtml(c.title) +
@@ -1563,7 +2019,7 @@
 
   function boot(data) {
     site = data || {};
-    SITE_ID = 'gpchat';
+    SITE_ID = site.siteId || SITE_ID;
     TRENDS = site.trends || [];
     PLACES = site.places || [];
     TOPICS = site.topics || [];
@@ -1635,6 +2091,6 @@
     .catch(function (e) {
       console.warn('site.json', e);
       composeErr((e && e.message) ? e.message : 'Could not load site.json');
-      boot({ siteId: "gpchat", name: "gpchat", tagline: "Nothing but Grand Prix." });
+      boot({ siteId: "415chat", name: "415chat", tagline: "San Francisco, talking." });
     });
 })();
