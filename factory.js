@@ -1272,6 +1272,238 @@
     });
   }
 
+  function openf1Url(path) {
+    var base = String(railCfg().openf1 || 'https://api.openf1.org/v1').replace(/\/+$/, '');
+    return base + path;
+  }
+
+  function fetchOpenF1Json(path) {
+    function once(retried) {
+      return fetch(openf1Url(path)).then(function (res) {
+        if (res.status === 429 && !retried) {
+          return new Promise(function (resolve) {
+            setTimeout(function () { resolve(once(true)); }, 1000);
+          });
+        }
+        if (res.status === 401 || res.status === 403) return null;
+        if (!res.ok) return null;
+        return res.json();
+      }).then(function (data) {
+        return Array.isArray(data) && data.length ? data : null;
+      }).catch(function () {
+        return null;
+      });
+    }
+    return once(false);
+  }
+
+  function f1ParseIso(s) {
+    if (!s) return null;
+    var d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function f1OpenF1Tag(sess) {
+    var raw = String((sess && (sess.session_name || sess.session_type)) || '');
+    if (/practice\s*1/i.test(raw) || /^fp1$/i.test(raw)) return 'FP1';
+    if (/practice\s*2/i.test(raw) || /^fp2$/i.test(raw)) return 'FP2';
+    if (/practice\s*3/i.test(raw) || /^fp3$/i.test(raw)) return 'FP3';
+    if (/sprint\s*qual/i.test(raw) || /shootout/i.test(raw)) return 'Sprint Quali';
+    if (/sprint/i.test(raw)) return 'Sprint';
+    if (/qual/i.test(raw)) return 'Quali';
+    if (/race/i.test(raw)) return 'Race';
+    return raw || 'Session';
+  }
+
+  function f1FormatDuration(duration) {
+    if (duration == null || duration === '') return '';
+    if (Object.prototype.toString.call(duration) === '[object Array]') {
+      var last = null;
+      var i;
+      for (i = duration.length - 1; i >= 0; i--) {
+        if (duration[i] != null && duration[i] !== '') { last = duration[i]; break; }
+      }
+      return f1FormatDuration(last);
+    }
+    if (typeof duration === 'string') {
+      var trimmed = duration.replace(/^\s+|\s+$/g, '');
+      if (!trimmed) return '';
+      if (/lap/i.test(trimmed)) return trimmed;
+      if (trimmed.indexOf(':') !== -1) return trimmed;
+      var parsed = parseFloat(trimmed);
+      if (isNaN(parsed)) return trimmed;
+      duration = parsed;
+    }
+    if (typeof duration !== 'number' || !isFinite(duration)) return '';
+    var sign = duration < 0 ? '-' : '';
+    var abs = Math.abs(duration);
+    var mins = Math.floor(abs / 60);
+    var secs = abs - mins * 60;
+    var secStr = secs.toFixed(3);
+    if (secs < 10) secStr = '0' + secStr;
+    return sign + mins + ':' + secStr;
+  }
+
+  function f1FormatGap(gap) {
+    if (gap == null || gap === '') return '';
+    if (typeof gap === 'string') {
+      var g = gap.replace(/^\s+|\s+$/g, '');
+      if (!g || /^0+(\.0+)?$/.test(g)) return '';
+      if (/lap/i.test(g)) return g.charAt(0) === '+' ? g : ('+' + g);
+      if (g.charAt(0) === '+') return g;
+      var n = parseFloat(g);
+      if (isNaN(n)) return g;
+      gap = n;
+    }
+    if (typeof gap !== 'number' || !isFinite(gap) || gap === 0) return '';
+    return (gap < 0 ? '-' : '+') + Math.abs(gap).toFixed(3);
+  }
+
+  function f1DriverLabel(drv) {
+    if (!drv) return '';
+    var acr = String(drv.name_acronym || '').replace(/^\s+|\s+$/g, '');
+    if (acr) return acr;
+    var last = String(drv.last_name || '').replace(/^\s+|\s+$/g, '');
+    if (last) return last;
+    if (drv.driver_number != null) return String(drv.driver_number);
+    return '';
+  }
+
+  function f1Top3Line(results, drivers) {
+    var byNum = {};
+    var i;
+    if (drivers) {
+      for (i = 0; i < drivers.length; i++) {
+        var d = drivers[i];
+        if (d && d.driver_number != null) byNum[String(d.driver_number)] = d;
+      }
+    }
+    var rows = (results || []).slice();
+    rows.sort(function (a, b) {
+      return (Number(a && a.position) || 99) - (Number(b && b.position) || 99);
+    });
+    var parts = [];
+    for (i = 0; i < rows.length && parts.length < 3; i++) {
+      var row = rows[i];
+      if (!row) continue;
+      var label = f1DriverLabel(byNum[String(row.driver_number)]) || String(row.driver_number || '');
+      if (!label) continue;
+      if (parts.length === 0) {
+        var time = f1FormatDuration(row.duration);
+        if (!time) continue;
+        parts.push(label + ' ' + time);
+      } else {
+        var gap = f1FormatGap(row.gap_to_leader);
+        if (gap) parts.push(label + ' ' + gap);
+        else {
+          var fallback = f1FormatDuration(row.duration);
+          if (fallback) parts.push(label + ' ' + fallback);
+        }
+      }
+    }
+    return parts.join(' · ');
+  }
+
+  function overlayOpenF1Cards(cards, cfg) {
+    if (!cards || !cards.length) return Promise.resolve(cards);
+    return fetchOpenF1Json('/sessions?session_key=latest').then(function (latest) {
+      var meetingKey = latest && latest[0] && latest[0].meeting_key;
+      if (meetingKey == null) return cards;
+      return fetchOpenF1Json('/sessions?meeting_key=' + encodeURIComponent(meetingKey)).then(function (sessions) {
+        if (!sessions || !sessions.length) return cards;
+        var now = Date.now();
+        var list = [];
+        var i;
+        for (i = 0; i < sessions.length; i++) {
+          var s = sessions[i];
+          if (!s || s.is_cancelled) continue;
+          var start = f1ParseIso(s.date_start);
+          var end = f1ParseIso(s.date_end);
+          if (!start || !end) continue;
+          list.push({
+            raw: s,
+            tag: f1OpenF1Tag(s),
+            start: start,
+            startMs: start.getTime(),
+            endMs: end.getTime()
+          });
+        }
+        list.sort(function (a, b) { return a.startMs - b.startMs; });
+        var completed = null;
+        var live = null;
+        var upcoming = null;
+        for (i = 0; i < list.length; i++) {
+          var item = list[i];
+          if (item.endMs < now) completed = item;
+          else if (item.startMs <= now && item.endMs > now) live = item;
+          else if (item.startMs > now && !upcoming) upcoming = item;
+        }
+        var resultKey = completed && completed.raw.session_key;
+        var resultP = resultKey != null
+          ? fetchOpenF1Json('/session_result?session_key=' + encodeURIComponent(resultKey))
+          : Promise.resolve(null);
+        return resultP.then(function (results) {
+          var driversP = (resultKey != null && results)
+            ? fetchOpenF1Json('/drivers?session_key=' + encodeURIComponent(resultKey))
+            : Promise.resolve(null);
+          return driversP.then(function (drivers) {
+            var out = cards.slice();
+            var href = (cards[0] && cards[0].url) || '';
+            var meta = (cfg && cfg.meta) || 'Live · race weekend';
+            var cmo = (cfg && cfg.cmo) || {};
+            if (completed && results && results.length) {
+              var line = f1Top3Line(results, drivers);
+              if (line) {
+                out[1] = {
+                  tag: completed.tag,
+                  headline: line,
+                  snippet: completed.tag + ' result · OpenF1 historical',
+                  meta: meta,
+                  url: href
+                };
+              }
+            }
+            var stateCard;
+            if (live) {
+              stateCard = {
+                tag: 'Live',
+                headline: live.tag + ' is on',
+                snippet: live.tag + ' is on · ' + f1FormatLocal(live.start),
+                meta: meta,
+                url: href
+              };
+            } else if (upcoming) {
+              stateCard = {
+                tag: 'Next',
+                headline: cmo.state || 'Next up',
+                snippet: upcoming.tag + ' · ' + f1FormatLocal(upcoming.start),
+                meta: meta,
+                url: href
+              };
+            } else {
+              var finished = !!(completed && !live && !upcoming);
+              var snip = cmo.next
+                ? cmo.next
+                : (finished ? 'This race is in the books.' : ((out[2] && out[2].snippet) || 'Race weekend'));
+              stateCard = {
+                tag: finished ? 'Finished' : ((out[2] && out[2].tag) || 'Next'),
+                headline: finished ? 'Just finished' : (cmo.state || (out[2] && out[2].headline) || 'Next up'),
+                snippet: snip,
+                meta: meta,
+                url: href
+              };
+            }
+            if (out.length >= 3) out[2] = stateCard;
+            else out.push(stateCard);
+            return out;
+          });
+        });
+      });
+    }).catch(function () {
+      return cards;
+    });
+  }
+
   function fetchF1Cards() {
     var cfg = railCfg();
     var nextUrl = cfg.endpoint || 'https://api.jolpi.ca/ergast/f1/current/next.json';
@@ -1293,7 +1525,7 @@
       return fromLast().catch(function () { throw err; });
     }).then(function (cards) {
       if (!cards || !cards.length) throw new Error('jolpica empty');
-      return cards;
+      return overlayOpenF1Cards(cards, cfg);
     });
   }
 
@@ -1317,7 +1549,9 @@
     return porchOn ? Math.max(1, max - 1) : max;
   }
 
-  function renderTrends() {
+  var f1RefreshTimer = null;
+
+  function renderTrends(quiet) {
     var liveFetch = null;
     if (railUsesCwf()) liveFetch = fetchCwfCards;
     else if (railKind() === 'bart-bsa') liveFetch = fetchBartCards;
@@ -1327,7 +1561,7 @@
       paintRail(outboundCards().slice(0, railNwsSlots()));
       return;
     }
-    paintRail([]);
+    if (!quiet) paintRail([]);
     liveFetch().then(function (cards) {
       var extra = outboundCards();
       var merged = (cards || []).concat(extra);
@@ -1337,6 +1571,11 @@
       console.warn(railKind() || 'rail', err);
       paintRail(fallbackTrendCards());
     });
+    if (railKind() === 'f1-calendar' && !f1RefreshTimer) {
+      f1RefreshTimer = setInterval(function () {
+        renderTrends(true);
+      }, 5 * 60 * 1000);
+    }
   }
 
   function porchLine(option) {

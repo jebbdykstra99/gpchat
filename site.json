@@ -497,21 +497,15 @@
     "title": "Room Brief",
     "kicker": "On the grid",
     "meta": "Live \u00b7 race weekend",
-    "footer": "Race calendar via Jolpica F1 API (Ergast). Not a news ingest. Not official FIA.",
+    "footer": "Race calendar via Jolpica F1 API (Ergast). Classification via OpenF1 historical (after a session ends). Not a news ingest. Not official FIA. Not live timing.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
+    "openf1": "https://api.openf1.org/v1",
     "cmo": {
       "title": "Italian GP \u00b7 Monza \u00b7 R13",
       "state": "Race weekend LIVE",
       "next": "Quali Sat 8:00am MT (FP3 4:30am MT)"
     },
     "outbound": [
-      {
-        "tag": "FP2",
-        "headline": "Russell 1:22.559 \u00b7 Lec +0.120 \u00b7 Ant +0.141",
-        "snippet": "FP2 order. Official/race state, not a news ingest.",
-        "meta": "Event-day",
-        "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
-      },
       {
         "tag": "Pin",
         "headline": "Antonelli back-of-grid Sunday",
