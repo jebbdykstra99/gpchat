@@ -499,6 +499,34 @@
     "meta": "Live · race weekend",
     "footer": "Race calendar via Jolpica F1 API (Ergast). Not a news ingest. Not official FIA.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
+    "cmo": {
+      "title": "Italian GP · Monza · R13",
+      "state": "Race weekend LIVE",
+      "next": "Quali Sat 8:00am MT (after FP3 4:30am MT)"
+    },
+    "outbound": [
+      {
+        "tag": "Pin",
+        "headline": "Antonelli back-of-grid",
+        "snippet": "Weekend pin. Not a news ingest.",
+        "meta": "This weekend",
+        "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
+      },
+      {
+        "tag": "Pin",
+        "headline": "Ferrari home + Schumi 30yr tribute",
+        "snippet": "Weekend pin. Not a news ingest.",
+        "meta": "This weekend",
+        "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
+      },
+      {
+        "tag": "Pin",
+        "headline": "FP1 Ferraris 1–2",
+        "snippet": "Weekend pin. Not a news ingest.",
+        "meta": "This weekend",
+        "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
+      }
+    ],
     "porch": {
       "prompt": "Box or stay out?",
       "options": [

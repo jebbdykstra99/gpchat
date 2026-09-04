@@ -1200,6 +1200,7 @@
     var loc = circuit.Location || {};
     var href = race.url || circuit.url || '';
     var meta = (cfg && cfg.meta) || 'Live · race weekend';
+    var cmo = (cfg && cfg.cmo) || {};
     var sessions = f1Sessions(race);
     var now = Date.now();
     var first = sessions[0];
@@ -1212,8 +1213,8 @@
     var raceWhen = f1ParseWhen({ date: race.date, time: race.time });
     var cards = [];
     cards.push({
-      tag: race.round ? ('Round ' + race.round) : 'GP',
-      headline: race.raceName || 'Grand Prix',
+      tag: race.round ? ('R' + race.round) : 'GP',
+      headline: cmo.title || race.raceName || 'Grand Prix',
       snippet: circuitLine || 'Race weekend',
       meta: raceWhen ? ('Race · ' + f1FormatLocal(raceWhen)) : meta,
       url: href
@@ -1233,16 +1234,21 @@
       if (now < end) { nextSess = sessions[s]; break; }
     }
     var stateSnip;
-    if (justFinished) {
+    if (cmo.next && !justFinished) {
+      stateSnip = cmo.next;
+    } else if (justFinished) {
       stateSnip = (race.raceName || 'This race') + ' is in the books.';
     } else if (nextSess) {
       stateSnip = (now >= nextSess.ms ? nextSess.label + ' is on · ' : nextSess.label + ' · ') + f1FormatLocal(nextSess.when);
     } else {
       stateSnip = raceWhen ? ('Race · ' + f1FormatLocal(raceWhen)) : 'Race weekend';
     }
+    var stateHead = justFinished
+      ? 'Just finished'
+      : (cmo.state || (live ? 'Weekend is live' : 'Next up'));
     cards.push({
       tag: justFinished ? 'Finished' : (live ? 'Live' : 'Next'),
-      headline: justFinished ? 'Just finished' : (live ? 'Weekend is live' : 'Next up'),
+      headline: stateHead,
       snippet: stateSnip,
       meta: meta,
       url: href
@@ -1295,7 +1301,10 @@
     var porchOn = !!(porch && porch.options && porch.options.length);
     var max = parseInt(railCfg().maxCards, 10) || RAIL_MAX;
     if (max < 1) max = RAIL_MAX;
-    if (railKind() === 'f1-calendar') return 3;
+    if (railKind() === 'f1-calendar') {
+      var pins = outboundCards().length;
+      return 3 + pins;
+    }
     return porchOn ? Math.max(1, max - 1) : max;
   }
 
