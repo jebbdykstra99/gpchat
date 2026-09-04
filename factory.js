@@ -1797,6 +1797,28 @@
     el.textContent = msg || '';
   }
 
+  function threadPeerName(opts) {
+    opts = opts || {};
+    var fromOpts = String((opts && opts.name) || '').trim();
+    if (fromOpts) return fromOpts;
+    if (pendingPeer && pendingPeer.name) {
+      var fromPeer = String(pendingPeer.name).trim();
+      if (fromPeer) return fromPeer;
+    }
+    var conv = findConv(activeConvId);
+    if (conv) {
+      var fromConv = String(convPeerName(conv) || '').trim();
+      if (fromConv) return fromConv;
+    }
+    return '';
+  }
+
+  function paintActiveChatName(name) {
+    var nameEl = document.getElementById('chat-active-name');
+    if (!nameEl) return;
+    nameEl.textContent = String(name || '').trim() || 'Chat';
+  }
+
   function paintChatPlaceholder() {
     var title = document.querySelector('#chat-placeholder .chat-placeholder-title');
     var sub = document.querySelector('#chat-placeholder .chat-placeholder-sub');
@@ -1884,7 +1906,7 @@
       input.disabled = !dmsOn() || !isLiveUser() || !threadOpen || blocked;
     }
     if (blocked && threadOpen) chatErr('You blocked this user.');
-    else if (!blocked) chatErr('');
+    if (threadOpen) paintActiveChatName(threadPeerName());
     paintChatPlaceholder();
   }
 
@@ -1972,11 +1994,9 @@
     activeConvId = cid;
     var conv = findConv(cid);
     var peerUid = (pendingPeer && pendingPeer.uid) || (conv && convPeerUid(conv)) || '';
-    if (peerUid && (!pendingPeer || pendingPeer.uid !== peerUid)) {
-      pendingPeer = { uid: peerUid, name: opts.name || (conv && convPeerName(conv)) || 'Member' };
-    }
-    var nameEl = document.getElementById('chat-active-name');
-    if (nameEl) nameEl.textContent = opts.name || (conv ? convPeerName(conv) : (pendingPeer && pendingPeer.name) || 'Chat');
+    var displayName = threadPeerName(opts) || 'Chat';
+    if (peerUid) pendingPeer = { uid: peerUid, name: displayName };
+    paintActiveChatName(displayName);
     var overlay = document.getElementById('chat-overlay');
     if (overlay) overlay.classList.add('thread-open');
     syncChatChrome();
@@ -1995,10 +2015,16 @@
       chatErr('You blocked this user.');
       return;
     }
-    pendingPeer = { uid: otherUid, name: dmDisplayName(otherName) };
+    var peerName = dmDisplayName(otherName);
+    if (peerName === 'Member') {
+      var raw = String(otherName || '').trim();
+      if (raw && !looksLikeUid(raw) && raw.indexOf('@') === -1) peerName = raw;
+    }
+    pendingPeer = { uid: otherUid, name: peerName };
+    paintActiveChatName(peerName);
     if (routeFromHash() !== 'chat') go('chat');
     else openChat();
-    openThread(convIdFor(liveUid(), otherUid), { name: pendingPeer.name });
+    openThread(convIdFor(liveUid(), otherUid), { name: peerName });
   }
 
   function sendDm() {
@@ -2011,7 +2037,10 @@
     var me = liveUid();
     var conv = findConv(activeConvId);
     var other = (pendingPeer && pendingPeer.uid) || (conv && convPeerUid(conv)) || '';
-    if (!me || !other || other === me) return;
+    if (!me || !other || other === me) {
+      chatErr(!me ? 'Sign in to send a message.' : 'Pick who to message first.');
+      return;
+    }
     if (blockedUids[other]) {
       chatErr('You blocked this user.');
       return;
@@ -2073,9 +2102,10 @@
       }
       activeConvId = cid;
       listenMessages(cid);
-      syncChatChrome();
+      chatErr('');
     }).catch(function (e) {
       chatErr((e && e.message) ? e.message : 'Could not send.');
+    }).finally(function () {
       syncChatChrome();
     });
   }
@@ -2144,7 +2174,11 @@
   function openChat() {
     closeSocialOverlays();
     hideDmPicker();
-    document.getElementById('chat-overlay').classList.add('active');
+    var overlay = document.getElementById('chat-overlay');
+    if (overlay) {
+      overlay.classList.add('active');
+      if (activeConvId) overlay.classList.add('thread-open');
+    }
     highlightSocial('chat');
     syncChatChrome();
     renderThreads();
