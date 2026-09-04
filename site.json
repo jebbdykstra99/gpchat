@@ -36,7 +36,7 @@
     {
       "tag": "Quali",
       "headline": "Q3 is a yellow-flag lottery tonight",
-      "snippet": "Pole is whoever does not lift for the marshal. Dummy quali chatter — not a timing feed.",
+      "snippet": "Pole is whoever does not lift for the marshal. Dummy quali chatter \u2014 not a timing feed.",
       "meta": "Race weekend"
     },
     {
@@ -167,7 +167,7 @@
       "snippet": "Tire temps, a stall on the grid, P1 lights that take forever."
     }
   ],
-  "seedNote": "sample — not mixed into the live feed",
+  "seedNote": "sample \u2014 not mixed into the live feed",
   "seed": [
     {
       "id": "p1",
@@ -255,7 +255,7 @@
       "id": "p8",
       "name": "SC Boards",
       "handle": "scboards",
-      "text": "Safety car boards. Field bunches. Overcut people are grinning. Dummy weekend only — no live SC status here.",
+      "text": "Safety car boards. Field bunches. Overcut people are grinning. Dummy weekend only \u2014 no live SC status here.",
       "hours": 8,
       "likes": 167,
       "replies": 19,
@@ -279,7 +279,7 @@
       "id": "p10",
       "name": "DNF Log",
       "handle": "dnflog",
-      "text": "DNF. Hydraulics. That is the championship fight leaking onto the grass. Dummy retirement — we do not have a live classification.",
+      "text": "DNF. Hydraulics. That is the championship fight leaking onto the grass. Dummy retirement \u2014 we do not have a live classification.",
       "hours": 11,
       "likes": 131,
       "replies": 18,
@@ -421,7 +421,7 @@
       "id": "p23",
       "name": "Box Wait",
       "handle": "boxboxwait",
-      "text": "Double stack in the pit lane, the second car waited like it was a drive-through. Mixup. Dummy pit-lane only — no live garage feed.",
+      "text": "Double stack in the pit lane, the second car waited like it was a drive-through. Mixup. Dummy pit-lane only \u2014 no live garage feed.",
       "hours": 38,
       "likes": 91,
       "replies": 12,
@@ -496,32 +496,32 @@
     "kind": "f1-calendar",
     "title": "Room Brief",
     "kicker": "On the grid",
-    "meta": "Live · race weekend",
+    "meta": "Live \u00b7 race weekend",
     "footer": "Race calendar via Jolpica F1 API (Ergast). Not a news ingest. Not official FIA.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "cmo": {
-      "title": "Italian GP · Monza · R13",
+      "title": "Italian GP \u00b7 Monza \u00b7 R13",
       "state": "Race weekend LIVE",
-      "next": "Quali Sat 8:00am MT (after FP3 4:30am MT)"
+      "next": "Quali Sat 8:00am MT (FP3 4:30am MT)"
     },
     "outbound": [
       {
+        "tag": "FP2",
+        "headline": "Russell 1:22.559 \u00b7 Lec +0.120 \u00b7 Ant +0.141",
+        "snippet": "FP2 order. Official/race state, not a news ingest.",
+        "meta": "Event-day",
+        "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
+      },
+      {
         "tag": "Pin",
-        "headline": "Antonelli back-of-grid",
+        "headline": "Antonelli back-of-grid Sunday",
         "snippet": "Weekend pin. Not a news ingest.",
-        "meta": "This weekend",
+        "meta": "Race day",
         "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
       },
       {
         "tag": "Pin",
         "headline": "Ferrari home + Schumi 30yr tribute",
-        "snippet": "Weekend pin. Not a news ingest.",
-        "meta": "This weekend",
-        "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
-      },
-      {
-        "tag": "Pin",
-        "headline": "FP1 Ferraris 1–2",
         "snippet": "Weekend pin. Not a news ingest.",
         "meta": "This weekend",
         "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
