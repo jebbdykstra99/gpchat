@@ -31,6 +31,7 @@
   let dmConversations = [];
   let activeConvId = null;
   let pendingPeer = null;
+  let dmSendInFlight = false;
   let viewingProfile = null;
   const ADMIN_UID = 'o774wL9hUVSi19EkDCgLqQomP8i2';
   const DM_TEXT_MAX = 1000;
@@ -1898,7 +1899,7 @@
         sendBtn.textContent = 'Soon';
       } else {
         sendBtn.textContent = 'Send';
-        sendBtn.disabled = !(dmsOn() && isLiveUser() && threadOpen) || blocked;
+        sendBtn.disabled = dmSendInFlight || !(dmsOn() && isLiveUser() && threadOpen) || blocked;
       }
     }
     if (input) {
@@ -2028,6 +2029,7 @@
   }
 
   function sendDm() {
+    if (dmSendInFlight) return;
     if (!dmsOn()) return;
     if (!requireVerified('chat')) return;
     var input = document.getElementById('chat-compose-input');
@@ -2052,6 +2054,7 @@
     var convRef = fbDb.collection('conversations').doc(cid);
     var msgRef = convRef.collection('messages').doc();
     var sendBtn = document.getElementById('chat-send-btn');
+    dmSendInFlight = true;
     if (sendBtn) sendBtn.disabled = true;
     chatErr('');
     fbDb.runTransaction(function (transaction) {
@@ -2106,6 +2109,8 @@
     }).catch(function (e) {
       chatErr((e && e.message) ? e.message : 'Could not send.');
     }).finally(function () {
+      dmSendInFlight = false;
+      if (sendBtn) sendBtn.disabled = false;
       syncChatChrome();
     });
   }
@@ -3117,12 +3122,16 @@
     var chatPlaceholderNew = document.getElementById('chat-placeholder-new');
     if (chatPlaceholderNew) chatPlaceholderNew.addEventListener('click', onChatNew);
     var chatSend = document.getElementById('chat-send-btn');
-    if (chatSend) chatSend.addEventListener('click', sendDm);
+    if (chatSend) chatSend.addEventListener('click', function () {
+      if (dmSendInFlight) return;
+      sendDm();
+    });
     var chatInput = document.getElementById('chat-compose-input');
     if (chatInput) {
       chatInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
+          if (dmSendInFlight) return;
           sendDm();
         }
       });
