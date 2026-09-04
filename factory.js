@@ -437,6 +437,78 @@
     }
     document.body.classList.toggle('is-live', isLiveUser());
     document.body.classList.toggle('is-guest', !isLiveUser());
+    syncEarlyWelcome();
+  }
+
+  function earlyWelcomeOn() {
+    return !!(site && site.earlyWelcome === true);
+  }
+
+  function earlyWelcomeKey(uid) {
+    return 'subx.earlyWelcome.' + (SITE_ID || '') + '.' + String(uid || '');
+  }
+
+  function earlyWelcomeDismissed(uid) {
+    if (!uid) return true;
+    try { return localStorage.getItem(earlyWelcomeKey(uid)) === '1'; } catch (e) { return false; }
+  }
+
+  function dismissEarlyWelcome() {
+    var uid = liveUid();
+    if (uid) {
+      try { localStorage.setItem(earlyWelcomeKey(uid), '1'); } catch (e) { /* private mode */ }
+    }
+    var el = document.getElementById('early-welcome');
+    if (el) el.hidden = true;
+  }
+
+  function ensureEarlyWelcomeCss() {
+    if (document.getElementById('early-welcome-css')) return;
+    var st = document.createElement('style');
+    st.id = 'early-welcome-css';
+    st.textContent =
+      '.early-welcome[hidden]{display:none!important;}' +
+      '.early-welcome{margin:0.7rem 1rem 0.15rem;padding:0.85rem 0.95rem 0.85rem 1.05rem;' +
+        'background:var(--surface,#111);color:var(--text,#f4f4f4);' +
+        'border:1px solid var(--border,rgba(255,255,255,0.12));border-radius:10px;' +
+        'font-size:0.86rem;line-height:1.45;display:flex;gap:0.75rem;align-items:flex-start;}' +
+      '.early-welcome-copy{flex:1;}' +
+      '.early-welcome-dismiss{flex:0 0 auto;width:1.7rem;height:1.7rem;padding:0;' +
+        'border:1px solid var(--border,rgba(255,255,255,0.18));background:transparent;' +
+        'color:var(--text-muted,#9a9aa3);border-radius:8px;cursor:pointer;font-size:1.1rem;line-height:1;}' +
+      '.early-welcome-dismiss:hover{color:var(--text,#f4f4f4);background:rgba(255,255,255,0.06);}';
+    document.head.appendChild(st);
+  }
+
+  function syncEarlyWelcome() {
+    var uid = liveUid();
+    var user = fbAuth && fbAuth.currentUser;
+    var show = earlyWelcomeOn() && !!uid && !!(user && !user.isAnonymous) && !earlyWelcomeDismissed(uid);
+    var el = document.getElementById('early-welcome');
+    if (!show) {
+      if (el) el.hidden = true;
+      return;
+    }
+    ensureEarlyWelcomeCss();
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'early-welcome';
+      el.className = 'early-welcome';
+      el.setAttribute('role', 'status');
+      el.innerHTML =
+        '<div class="early-welcome-copy">You\'re early. This room is live but unfinished. Post if you want. We\'re learning what you need.</div>' +
+        '<button type="button" class="early-welcome-dismiss" id="early-welcome-dismiss" aria-label="Dismiss">&times;</button>';
+      var compose = document.getElementById('thoughts-compose-wrap');
+      if (compose && compose.parentNode) compose.parentNode.insertBefore(el, compose.nextSibling);
+      else {
+        var feed = document.getElementById('thoughts-feed');
+        if (feed && feed.parentNode) feed.parentNode.insertBefore(el, feed);
+        else return;
+      }
+      var btn = document.getElementById('early-welcome-dismiss');
+      if (btn) btn.addEventListener('click', dismissEarlyWelcome);
+    }
+    el.hidden = false;
   }
 
   function applyFbUser(user) {
@@ -1066,9 +1138,154 @@
     });
   }
 
+  var F1_SESSION_KEYS = [
+    ['FirstPractice', 'FP1'],
+    ['SecondPractice', 'FP2'],
+    ['ThirdPractice', 'FP3'],
+    ['SprintQualifying', 'Sprint Quali'],
+    ['Sprint', 'Sprint'],
+    ['Qualifying', 'Quali']
+  ];
+  var F1_SESSION_MS = {
+    FP1: 60 * 60 * 1000,
+    FP2: 60 * 60 * 1000,
+    FP3: 60 * 60 * 1000,
+    'Sprint Quali': 60 * 60 * 1000,
+    Sprint: 45 * 60 * 1000,
+    Quali: 60 * 60 * 1000,
+    Race: 2 * 60 * 60 * 1000
+  };
+
+  function f1ParseWhen(sess) {
+    if (!sess || !sess.date) return null;
+    var time = sess.time || '00:00:00Z';
+    if (!/Z$/i.test(time)) time += 'Z';
+    var d = new Date(sess.date + 'T' + time);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function f1FormatLocal(d) {
+    if (!d) return '';
+    return d.toLocaleString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  }
+
+  function f1Sessions(race) {
+    var out = [];
+    if (!race) return out;
+    for (var i = 0; i < F1_SESSION_KEYS.length; i++) {
+      var key = F1_SESSION_KEYS[i][0];
+      var label = F1_SESSION_KEYS[i][1];
+      var when = f1ParseWhen(race[key]);
+      if (when) out.push({ label: label, when: when, ms: when.getTime() });
+    }
+    var raceWhen = f1ParseWhen({ date: race.date, time: race.time });
+    if (raceWhen) out.push({ label: 'Race', when: raceWhen, ms: raceWhen.getTime() });
+    out.sort(function (a, b) { return a.ms - b.ms; });
+    return out;
+  }
+
+  function f1RaceFromPayload(data) {
+    var races = data && data.MRData && data.MRData.RaceTable && data.MRData.RaceTable.Races;
+    return (races && races[0]) || null;
+  }
+
+  function f1CardsFromRace(race, cfg, finished) {
+    var circuit = (race && race.Circuit) || {};
+    var loc = circuit.Location || {};
+    var href = race.url || circuit.url || '';
+    var meta = (cfg && cfg.meta) || 'Live · race weekend';
+    var sessions = f1Sessions(race);
+    var now = Date.now();
+    var first = sessions[0];
+    var last = sessions[sessions.length - 1];
+    var lastEnd = last ? last.ms + (F1_SESSION_MS[last.label] || 0) : 0;
+    var live = !!(first && last && now >= first.ms && now <= lastEnd);
+    var justFinished = !!finished || !!(last && now > lastEnd);
+    var place = [loc.locality, loc.country].filter(Boolean).join(', ');
+    var circuitLine = [circuit.circuitName, place].filter(Boolean).join(' · ');
+    var raceWhen = f1ParseWhen({ date: race.date, time: race.time });
+    var cards = [];
+    cards.push({
+      tag: race.round ? ('Round ' + race.round) : 'GP',
+      headline: race.raceName || 'Grand Prix',
+      snippet: circuitLine || 'Race weekend',
+      meta: raceWhen ? ('Race · ' + f1FormatLocal(raceWhen)) : meta,
+      url: href
+    });
+    if (sessions.length) {
+      cards.push({
+        tag: 'Sessions',
+        headline: 'Weekend timetable',
+        snippet: sessions.map(function (s) { return s.label + ' ' + f1FormatLocal(s.when); }).join(' · '),
+        meta: meta,
+        url: href
+      });
+    }
+    var nextSess = null;
+    for (var s = 0; s < sessions.length; s++) {
+      var end = sessions[s].ms + (F1_SESSION_MS[sessions[s].label] || 0);
+      if (now < end) { nextSess = sessions[s]; break; }
+    }
+    var stateSnip;
+    if (justFinished) {
+      stateSnip = (race.raceName || 'This race') + ' is in the books.';
+    } else if (nextSess) {
+      stateSnip = (now >= nextSess.ms ? nextSess.label + ' is on · ' : nextSess.label + ' · ') + f1FormatLocal(nextSess.when);
+    } else {
+      stateSnip = raceWhen ? ('Race · ' + f1FormatLocal(raceWhen)) : 'Race weekend';
+    }
+    cards.push({
+      tag: justFinished ? 'Finished' : (live ? 'Live' : 'Next'),
+      headline: justFinished ? 'Just finished' : (live ? 'Weekend is live' : 'Next up'),
+      snippet: stateSnip,
+      meta: meta,
+      url: href
+    });
+    return cards;
+  }
+
+  function fetchF1Json(url) {
+    return fetch(url).then(function (res) {
+      if (!res.ok) throw new Error('jolpica ' + res.status);
+      return res.json();
+    });
+  }
+
+  function fetchF1Cards() {
+    var cfg = railCfg();
+    var nextUrl = cfg.endpoint || 'https://api.jolpi.ca/ergast/f1/current/next.json';
+    var lastUrl = /\/next\.json/i.test(nextUrl)
+      ? nextUrl.replace(/\/next\.json/i, '/last.json')
+      : 'https://api.jolpi.ca/ergast/f1/current/last.json';
+    function fromLast() {
+      return fetchF1Json(lastUrl).then(function (data) {
+        var race = f1RaceFromPayload(data);
+        if (!race) throw new Error('jolpica last empty');
+        return f1CardsFromRace(race, cfg, true);
+      });
+    }
+    return fetchF1Json(nextUrl).then(function (data) {
+      var race = f1RaceFromPayload(data);
+      if (!race) return fromLast();
+      return f1CardsFromRace(race, cfg, false);
+    }).catch(function (err) {
+      return fromLast().catch(function () { throw err; });
+    }).then(function (cards) {
+      if (!cards || !cards.length) throw new Error('jolpica empty');
+      return cards;
+    });
+  }
+
   function fallbackTrendCards() {
     var extra = outboundCards();
     if (extra.length) return extra.slice(0, 1);
+    if (railKind() === 'f1-calendar') return (TRENDS || []).slice(0, railNwsSlots());
     if (railKind() || railCfg().porch) return [];
     return (TRENDS || []).slice(0, 1);
   }
@@ -1078,6 +1295,7 @@
     var porchOn = !!(porch && porch.options && porch.options.length);
     var max = parseInt(railCfg().maxCards, 10) || RAIL_MAX;
     if (max < 1) max = RAIL_MAX;
+    if (railKind() === 'f1-calendar') return 3;
     return porchOn ? Math.max(1, max - 1) : max;
   }
 
@@ -1085,6 +1303,7 @@
     var liveFetch = null;
     if (railUsesCwf()) liveFetch = fetchCwfCards;
     else if (railKind() === 'bart-bsa') liveFetch = fetchBartCards;
+    else if (railKind() === 'f1-calendar') liveFetch = fetchF1Cards;
     else if (railUsesNws()) liveFetch = fetchNwsCards;
     if (!liveFetch) {
       paintRail(outboundCards().slice(0, railNwsSlots()));
