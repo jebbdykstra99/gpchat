@@ -253,17 +253,21 @@
     return !!(u && u.emailVerified);
   }
   function requireVerified(action) {
+    function gateErr(msg) {
+      if (action === 'chat') chatErr(msg);
+      else composeErr(msg);
+    }
     if (!isLiveUser()) {
-      composeErr('Sign in to ' + (action || 'post') + '. Guest can only browse.');
+      gateErr('Sign in to ' + (action || 'post') + '. Guest can only browse.');
       openAuth('join');
       return false;
     }
     if (siteKilled) {
-      composeErr('This room is paused.');
+      gateErr('This room is paused.');
       return false;
     }
     if (!isEmailVerified()) {
-      composeErr('Verify your email before you ' + (action || 'post') + '. Check your inbox, then refresh.');
+      gateErr('Verify your email before you ' + (action || 'post') + '. Check your inbox, then refresh.');
       var u = fbAuth.currentUser;
       if (u && u.sendEmailVerification) u.sendEmailVerification().catch(function () {});
       return false;
@@ -550,6 +554,7 @@
     closeAuth();
     renderSidebarAuth();
     hideDummyChrome();
+    syncChatChrome();
     syncProfile();
     listenBlocks(user.uid);
     listenConversations();
@@ -2081,7 +2086,14 @@
   }
 
   function openAdminPicker() {
-    if (!dmsOn() || liveUid() !== ADMIN_UID) return;
+    if (!dmsOn()) {
+      chatErr('Chat is not enabled on this room.');
+      return;
+    }
+    if (liveUid() !== ADMIN_UID) {
+      chatErr('Welcome sends need the factory admin Google (jebb.dykstra@gmail.com). This signed-in account is not that admin.');
+      return;
+    }
     if (!requireVerified('chat')) return;
     if (!fbDb) { chatErr('Chat is not connected.'); return; }
     ensureDmCss();
@@ -2454,6 +2466,7 @@
     closeAuth();
     renderSidebarAuth();
     hideDummyChrome();
+    syncChatChrome();
     syncProfile();
     restoreCompose(draft);
   }
@@ -3239,6 +3252,7 @@
     ensureJoinAuthLayout();
     ensureDmCss();
     hideDummyChrome();
+    syncChatChrome();
 
     if (fbAuth) {
       fbAuth.getRedirectResult().then(function (cred) {
