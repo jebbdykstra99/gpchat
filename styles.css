@@ -728,6 +728,7 @@ body.nav-collapsed .explore-overlay { left: 0; }
 }
 .conv-modal-close:hover { color: var(--text); background: rgba(0,0,0,0.06); }
 .conv-modal-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 1.2rem; }
+.conv-modal-tabs.is-join-hidden { display: none; }
 .conv-modal-tab {
   background: none; border: none; cursor: pointer;
   font-size: 0.8rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
@@ -770,6 +771,13 @@ body.nav-collapsed .explore-overlay { left: 0; }
   display: flex; align-items: center; justify-content: center; gap: 0.5rem;
 }
 .conv-google-btn:hover { background: #f7f7f7; }
+.conv-email-toggle {
+  width: 100%; padding: 0.55rem; margin: 0.15rem 0 0.35rem;
+  background: transparent; border: 1px solid var(--border); border-radius: 50px;
+  cursor: pointer; font-size: 0.82rem; font-weight: 600; color: var(--text-muted);
+}
+.conv-email-toggle:hover { color: var(--text); }
+.cv-email-signin { margin-top: 0.2rem; }
 .conv-google-off {
   text-align: center;
   font-size: 0.75rem;

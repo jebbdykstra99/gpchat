@@ -207,8 +207,8 @@
   </div>
   <div class="profile-signin-prompt" id="profile-signin-prompt">
     <h2>See your paddock profile</h2>
-    <p>Sign in with email to set a handle and post about the Grand Prix. Guest is browse-only. Not official F1.</p>
-    <button class="accent-btn" id="profile-signin-prompt-btn" type="button">Sign in</button>
+    <p>Continue with Google to post about the Grand Prix. Guest is browse-only. Not official F1.</p>
+    <button class="accent-btn" id="profile-signin-prompt-btn" type="button">Join</button>
   </div>
   <div class="profile-content" id="profile-content" hidden>
     <div class="profile-banner" id="profile-banner"></div>
@@ -316,31 +316,36 @@
   </svg>
 </button>
 
-<!-- ── Sign-in modal (Firebase Auth Google + local guest) ─ -->
+<!-- ── Sign-in modal (Firebase Auth Google-first + local guest) ─ -->
 <div class="conv-modal-overlay" id="cv-auth-overlay" role="dialog" aria-modal="true" aria-labelledby="auth-title">
   <div class="conv-modal">
     <button type="button" class="conv-modal-close" id="cv-modal-close" aria-label="Close sign in">&times;</button>
     <h2 id="auth-title">Join gpchat</h2>
-    <p class="conv-modal-note">Email/password and Google on subx-skins. Guest is browse-only. Preview lock stays until Jebb lifts it.</p>
-    <div class="conv-modal-tabs">
+    <p class="conv-modal-note">Continue with Google to join gpchat. Email is optional. Guest is browse-only.</p>
+    <div class="conv-modal-tabs is-join-hidden">
       <button class="conv-modal-tab active" data-tab="login" type="button">Sign In</button>
       <button class="conv-modal-tab" data-tab="register" type="button">Register</button>
     </div>
     <div id="cv-panel-login">
       <div class="conv-modal-err" id="cv-login-err"></div>
-      <div class="conv-modal-field"><label>Email</label><input type="email" id="cv-login-email" autocomplete="email" placeholder="you@email.com"></div>
-      <div class="conv-modal-field"><label>Password</label><input type="password" id="cv-login-pw" autocomplete="current-password" placeholder="••••••••"></div>
-      <button class="conv-modal-submit" id="cv-login-btn" type="button">Sign In</button>
-      <div class="conv-modal-divider">or</div>
-      <button class="conv-google-btn" id="cv-google-login" type="button"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/></svg> Continue with Google</button>
       <label class="conv-modal-check" for="cv-google-age">
         <input type="checkbox" id="cv-google-age">
         <span>I am 13 or older and agree to the <a href="terms.html" target="_blank" rel="noopener">Terms</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> (preview stubs, not final counsel).</span>
       </label>
+      <button class="conv-google-btn" id="cv-google-login" type="button"><svg width="17" height="17" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/></svg> Continue with Google</button>
+      <div class="conv-modal-divider">or use email</div>
+      <button type="button" class="conv-email-toggle" id="cv-use-email-btn">Use email</button>
+      <div id="cv-email-signin" class="cv-email-signin" hidden>
+        <div class="conv-modal-field"><label>Email</label><input type="email" id="cv-login-email" autocomplete="email" placeholder="you@email.com"></div>
+        <div class="conv-modal-field"><label>Password</label><input type="password" id="cv-login-pw" autocomplete="current-password" placeholder="••••••••"></div>
+        <button class="conv-modal-submit" id="cv-login-btn" type="button">Sign In</button>
+        <button type="button" class="conv-guest-btn" id="cv-goto-register">Create an account</button>
+      </div>
       <button class="conv-guest-btn" id="cv-guest-login" type="button">Continue as guest (browse only)</button>
     </div>
     <div id="cv-panel-register" style="display:none">
       <div class="conv-modal-err" id="cv-reg-err"></div>
+      <button type="button" class="conv-guest-btn" id="cv-goto-join">Continue with Google instead</button>
       <div class="conv-modal-field"><label>Display Name</label><input type="text" id="cv-reg-name" autocomplete="nickname" placeholder="A paddock handle"></div>
       <div class="conv-modal-field"><label>Email</label><input type="email" id="cv-reg-email" autocomplete="email" placeholder="you@email.com"></div>
       <div class="conv-modal-field"><label>Password</label><input type="password" id="cv-reg-pw" autocomplete="new-password" placeholder="At least 6 characters"></div>
@@ -358,7 +363,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-  <script src="factory.js?v=17" data-site="site.json"></script>
+  <script src="factory.js?v=18" data-site="site.json"></script>
   <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
 </body>
 </html>
