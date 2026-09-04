@@ -1278,15 +1278,23 @@
   }
 
   function fetchOpenF1Json(path) {
-    return fetch(openf1Url(path)).then(function (res) {
-      if (res.status === 401 || res.status === 403) return null;
-      if (!res.ok) return null;
-      return res.json();
-    }).then(function (data) {
-      return Array.isArray(data) && data.length ? data : null;
-    }).catch(function () {
-      return null;
-    });
+    function once(retried) {
+      return fetch(openf1Url(path)).then(function (res) {
+        if (res.status === 429 && !retried) {
+          return new Promise(function (resolve) {
+            setTimeout(function () { resolve(once(true)); }, 1000);
+          });
+        }
+        if (res.status === 401 || res.status === 403) return null;
+        if (!res.ok) return null;
+        return res.json();
+      }).then(function (data) {
+        return Array.isArray(data) && data.length ? data : null;
+      }).catch(function () {
+        return null;
+      });
+    }
+    return once(false);
   }
 
   function f1ParseIso(s) {
@@ -1367,7 +1375,7 @@
     if (drivers) {
       for (i = 0; i < drivers.length; i++) {
         var d = drivers[i];
-        if (d && d.driver_number != null) byNum[d.driver_number] = d;
+        if (d && d.driver_number != null) byNum[String(d.driver_number)] = d;
       }
     }
     var rows = (results || []).slice();
@@ -1378,7 +1386,7 @@
     for (i = 0; i < rows.length && parts.length < 3; i++) {
       var row = rows[i];
       if (!row) continue;
-      var label = f1DriverLabel(byNum[row.driver_number]) || String(row.driver_number || '');
+      var label = f1DriverLabel(byNum[String(row.driver_number)]) || String(row.driver_number || '');
       if (!label) continue;
       if (parts.length === 0) {
         var time = f1FormatDuration(row.duration);
@@ -1434,61 +1442,61 @@
         var resultP = resultKey != null
           ? fetchOpenF1Json('/session_result?session_key=' + encodeURIComponent(resultKey))
           : Promise.resolve(null);
-        var driversP = resultKey != null
-          ? fetchOpenF1Json('/drivers?session_key=' + encodeURIComponent(resultKey))
-          : Promise.resolve(null);
-        return Promise.all([resultP, driversP]).then(function (pair) {
-          var results = pair[0];
-          var drivers = pair[1];
-          var out = cards.slice();
-          var href = (cards[0] && cards[0].url) || '';
-          var meta = (cfg && cfg.meta) || 'Live · race weekend';
-          var cmo = (cfg && cfg.cmo) || {};
-          if (completed && results && results.length) {
-            var line = f1Top3Line(results, drivers);
-            if (line) {
-              out[1] = {
-                tag: completed.tag,
-                headline: line,
-                snippet: completed.tag + ' result · OpenF1 historical',
+        return resultP.then(function (results) {
+          var driversP = (resultKey != null && results)
+            ? fetchOpenF1Json('/drivers?session_key=' + encodeURIComponent(resultKey))
+            : Promise.resolve(null);
+          return driversP.then(function (drivers) {
+            var out = cards.slice();
+            var href = (cards[0] && cards[0].url) || '';
+            var meta = (cfg && cfg.meta) || 'Live · race weekend';
+            var cmo = (cfg && cfg.cmo) || {};
+            if (completed && results && results.length) {
+              var line = f1Top3Line(results, drivers);
+              if (line) {
+                out[1] = {
+                  tag: completed.tag,
+                  headline: line,
+                  snippet: completed.tag + ' result · OpenF1 historical',
+                  meta: meta,
+                  url: href
+                };
+              }
+            }
+            var stateCard;
+            if (live) {
+              stateCard = {
+                tag: 'Live',
+                headline: live.tag + ' is on',
+                snippet: live.tag + ' is on · ' + f1FormatLocal(live.start),
+                meta: meta,
+                url: href
+              };
+            } else if (upcoming) {
+              stateCard = {
+                tag: 'Next',
+                headline: cmo.state || 'Next up',
+                snippet: upcoming.tag + ' · ' + f1FormatLocal(upcoming.start),
+                meta: meta,
+                url: href
+              };
+            } else {
+              var finished = !!(completed && !live && !upcoming);
+              var snip = cmo.next
+                ? cmo.next
+                : (finished ? 'This race is in the books.' : ((out[2] && out[2].snippet) || 'Race weekend'));
+              stateCard = {
+                tag: finished ? 'Finished' : ((out[2] && out[2].tag) || 'Next'),
+                headline: finished ? 'Just finished' : (cmo.state || (out[2] && out[2].headline) || 'Next up'),
+                snippet: snip,
                 meta: meta,
                 url: href
               };
             }
-          }
-          var stateCard;
-          if (live) {
-            stateCard = {
-              tag: 'Live',
-              headline: live.tag + ' is on',
-              snippet: live.tag + ' is on · ' + f1FormatLocal(live.start),
-              meta: meta,
-              url: href
-            };
-          } else if (upcoming) {
-            stateCard = {
-              tag: 'Next',
-              headline: cmo.state || 'Next up',
-              snippet: upcoming.tag + ' · ' + f1FormatLocal(upcoming.start),
-              meta: meta,
-              url: href
-            };
-          } else {
-            var finished = !!(completed && !live && !upcoming);
-            var snip = cmo.next
-              ? cmo.next
-              : (finished ? 'This race is in the books.' : ((out[2] && out[2].snippet) || 'Race weekend'));
-            stateCard = {
-              tag: finished ? 'Finished' : ((out[2] && out[2].tag) || 'Next'),
-              headline: finished ? 'Just finished' : (cmo.state || (out[2] && out[2].headline) || 'Next up'),
-              snippet: snip,
-              meta: meta,
-              url: href
-            };
-          }
-          if (out.length >= 3) out[2] = stateCard;
-          else out.push(stateCard);
-          return out;
+            if (out.length >= 3) out[2] = stateCard;
+            else out.push(stateCard);
+            return out;
+          });
         });
       });
     }).catch(function () {
