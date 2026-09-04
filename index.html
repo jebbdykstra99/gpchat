@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=10">
-  <link rel="preload" href="site.json" as="fetch" crossorigin="anonymous">
+  <link rel="preload" href="site.json?v=22" as="fetch" crossorigin="anonymous">
 </head>
 <body>
 <div class="preview-banner" role="status">Preview only. Accounts are not open.</div>
@@ -88,7 +88,7 @@
         </a>
       </li>
       <li>
-        <a href="#chat" class="nav-social-link" id="nav-chat" data-social="chat" data-soon>
+        <a href="#chat" class="nav-social-link" id="nav-chat" data-social="chat">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           Chat
         </a>
@@ -215,6 +215,7 @@
     <div class="profile-header-row">
       <div class="profile-avatar" id="profile-avatar">G</div>
       <button class="ghost-btn" id="profile-edit-btn" type="button">Edit profile</button>
+      <button class="accent-btn" id="profile-message-btn" type="button" hidden>Message</button>
     </div>
     <div class="profile-id">
       <div class="profile-display-name" id="profile-display-name">Guest</div>
@@ -238,7 +239,7 @@
     <div class="chat-threads-header">
       <div class="chat-threads-title-row">
         <div class="chat-threads-title">Chat</div>
-        <button class="chat-new-btn" id="chat-new-btn" type="button" title="DMs coming soon" disabled>Soon</button>
+        <button class="chat-new-btn" id="chat-new-btn" type="button" title="New message" hidden>New</button>
       </div>
       <div class="chat-search-bar">
         <input type="text" class="chat-search-input" id="chat-search-input" placeholder="Search chats" autocomplete="off">
@@ -248,9 +249,9 @@
   </div>
   <div class="chat-active-pane" id="chat-active-pane">
     <div class="chat-placeholder" id="chat-placeholder">
-      <div class="chat-placeholder-title">Chat — Soon</div>
-      <div class="chat-placeholder-sub">Direct messages are not live in this preview. No DMs graph. Sample thread copy in site.json is not a real inbox.</div>
-      <button class="accent-btn" id="chat-placeholder-new" type="button" disabled>Soon</button>
+      <div class="chat-placeholder-title">Join to chat</div>
+      <div class="chat-placeholder-sub">Sign in to send and receive direct messages. Guest cannot chat.</div>
+      <button class="accent-btn" id="chat-placeholder-new" type="button">Join</button>
     </div>
     <div class="chat-thread-view" id="chat-thread-view" hidden>
       <div class="chat-thread-header">
@@ -258,8 +259,8 @@
       </div>
       <div class="chat-messages" id="chat-messages"></div>
       <div class="chat-compose">
-        <textarea class="chat-compose-input" id="chat-compose-input" placeholder="Message about the grid…" rows="1"></textarea>
-        <button class="chat-send-btn" id="chat-send-btn" type="button" disabled>Soon</button>
+        <textarea class="chat-compose-input" id="chat-compose-input" placeholder="Message about the grid…" rows="1" maxlength="1000"></textarea>
+        <button class="chat-send-btn" id="chat-send-btn" type="button" disabled>Send</button>
       </div>
     </div>
   </div>
@@ -363,7 +364,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-  <script src="factory.js?v=21" data-site="site.json?v=20"></script>
+  <script src="factory.js?v=22" data-site="site.json?v=22"></script>
   <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
 </body>
 </html>
