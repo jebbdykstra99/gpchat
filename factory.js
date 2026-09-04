@@ -247,8 +247,8 @@
   }
   function requireVerified(action) {
     if (!isLiveUser()) {
-      composeErr('Sign in with email to ' + (action || 'post') + '. Guest can only browse.');
-      openAuth('login');
+      composeErr('Sign in to ' + (action || 'post') + '. Guest can only browse.');
+      openAuth('join');
       return false;
     }
     if (siteKilled) {
@@ -365,6 +365,10 @@
     if (brandSub) brandSub.textContent = tag;
     var authTitle = document.getElementById('auth-title');
     if (authTitle) authTitle.textContent = 'Join ' + title;
+    var authNote = document.querySelector('#cv-auth-overlay .conv-modal-note');
+    if (authNote) {
+      authNote.textContent = 'Continue with Google to join ' + title + '. Email is optional. Guest is browse-only.';
+    }
     var input = document.getElementById('thoughts-compose-input');
     if (input && site.composePlaceholder) {
       input.placeholder = site.composePlaceholder;
@@ -513,6 +517,8 @@
 
   function applyFbUser(user) {
     if (!user) return;
+    var draft = peekCompose();
+    var shouldLand = consumeAuthLand();
     const raw = user.displayName || (user.email || 'member').split('@')[0];
     currentUser = {
       uid: user.uid,
@@ -527,6 +533,8 @@
     hideDummyChrome();
     syncProfile();
     listenBlocks(user.uid);
+    restoreCompose(draft);
+    if (shouldLand) landInFeedCompose();
     if (!user.emailVerified) {
       composeErr('Verify your email before posting. Check your inbox, then refresh.');
     }
@@ -792,7 +800,7 @@
     if (currentTab === 'new') posts.sort(function (a, b) { return (b.ms || 0) - (a.ms || 0); });
 
     if (!posts.length) {
-      var empty = (site && site.emptyState) || 'This room is empty. Sign in with email to post. Guest can browse only.';
+      var empty = (site && site.emptyState) || 'This room is empty. Sign in to post. Guest can browse only.';
       el.innerHTML = '<div class="post-empty">' + escapeHtml(empty) + '</div>';
       return;
     }
@@ -1366,8 +1374,8 @@
     if (!isLiveUser()) {
       go('home');
       fillCompose(line);
-      composeErr('Sign in with email to post. Guest can only browse.');
-      openAuth('login');
+      composeErr('Sign in to post. Guest can only browse.');
+      openAuth('join');
       return;
     }
     if (!requireVerified('post')) return;
@@ -1507,21 +1515,185 @@
     }
   }
 
-  function openAuth(tab) {
-    const ov = document.getElementById('cv-auth-overlay');
-    ov.classList.add('open');
-    document.querySelectorAll('.conv-modal-tab').forEach(function (t) {
-      t.classList.toggle('active', t.dataset.tab === tab);
+  function peekCompose() {
+    var el = document.getElementById('thoughts-compose-input');
+    return el ? el.value : '';
+  }
+  function restoreCompose(v) {
+    var el = document.getElementById('thoughts-compose-input');
+    if (!el || typeof v !== 'string') return;
+    if (el.value !== v) {
+      el.value = v;
+      try { el.dispatchEvent(new Event('input')); } catch (e) {}
+    }
+  }
+  function markAuthLand() {
+    try { sessionStorage.setItem('subx.authLand', '1'); } catch (e) { /* private mode */ }
+  }
+  function consumeAuthLand() {
+    try {
+      if (sessionStorage.getItem('subx.authLand') === '1') {
+        sessionStorage.removeItem('subx.authLand');
+        return true;
+      }
+    } catch (e) { /* private mode */ }
+    return false;
+  }
+  function landInFeedCompose() {
+    closeAuth();
+    closeSocialOverlays();
+    if (normalizeRoute(location.hash) !== 'home') go('home');
+    else {
+      showContentPage('thoughts');
+      highlightSocial('home');
+    }
+    setTimeout(function () {
+      var input = document.getElementById('thoughts-compose-input');
+      if (!input) return;
+      try { input.focus(); } catch (e) {}
+      try { input.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e2) {}
+    }, 60);
+  }
+  function ensureJoinAuthCss() {
+    if (document.getElementById('join-auth-css')) return;
+    var st = document.createElement('style');
+    st.id = 'join-auth-css';
+    st.textContent =
+      '.conv-modal-tabs.is-join-hidden{display:none;}' +
+      '.conv-email-toggle{width:100%;padding:0.55rem;margin:0.15rem 0 0.35rem;' +
+        'background:transparent;border:1px solid var(--border,rgba(0,0,0,0.14));' +
+        'border-radius:50px;cursor:pointer;font-size:0.82rem;font-weight:600;' +
+        'color:var(--text-muted,#666);}' +
+      '.conv-email-toggle:hover{color:var(--text,#111);}' +
+      '.cv-email-signin{margin-top:0.2rem;}' +
+      '.conv-google-btn{margin-bottom:0.2rem;}';
+    document.head.appendChild(st);
+  }
+  function ageCheckLabel() {
+    var box = document.getElementById('cv-google-age');
+    if (!box) return null;
+    return box.closest('label') || box;
+  }
+  function fieldWrap(input) {
+    if (!input) return null;
+    return input.closest('.conv-modal-field') || input;
+  }
+  function toggleEmailAuth(forceOpen) {
+    var box = document.getElementById('cv-email-signin');
+    var btn = document.getElementById('cv-use-email-btn');
+    if (!box) return;
+    var open = forceOpen === true ? true : forceOpen === false ? false : box.hidden;
+    box.hidden = !open;
+    if (btn) btn.textContent = open ? 'Hide email' : 'Use email';
+  }
+  function ensureJoinAuthLayout() {
+    var panel = document.getElementById('cv-panel-login');
+    if (!panel) return;
+    ensureJoinAuthCss();
+    if (panel.getAttribute('data-join-layout') === '1') return;
+    panel.setAttribute('data-join-layout', '1');
+
+    var err = document.getElementById('cv-login-err');
+    var ageLab = ageCheckLabel();
+    var google = document.getElementById('cv-google-login');
+    var divider = panel.querySelector('.conv-modal-divider');
+    var guest = document.getElementById('cv-guest-login');
+    var emailIn = document.getElementById('cv-login-email');
+    var pwIn = document.getElementById('cv-login-pw');
+    var loginBtn = document.getElementById('cv-login-btn');
+
+    var emailBox = document.getElementById('cv-email-signin');
+    if (!emailBox) {
+      emailBox = document.createElement('div');
+      emailBox.id = 'cv-email-signin';
+      emailBox.className = 'cv-email-signin';
+    }
+    emailBox.hidden = true;
+
+    var emailField = fieldWrap(emailIn);
+    var pwField = fieldWrap(pwIn);
+    if (emailField && emailField.parentNode !== emailBox) emailBox.appendChild(emailField);
+    if (pwField && pwField.parentNode !== emailBox) emailBox.appendChild(pwField);
+    if (loginBtn && loginBtn.parentNode !== emailBox) emailBox.appendChild(loginBtn);
+
+    var gotoReg = document.getElementById('cv-goto-register');
+    if (!gotoReg) {
+      gotoReg = document.createElement('button');
+      gotoReg.id = 'cv-goto-register';
+      gotoReg.type = 'button';
+      gotoReg.className = 'conv-guest-btn';
+      gotoReg.textContent = 'Create an account';
+    }
+    if (gotoReg.parentNode !== emailBox) emailBox.appendChild(gotoReg);
+
+    var useEmail = document.getElementById('cv-use-email-btn');
+    if (!useEmail) {
+      useEmail = document.createElement('button');
+      useEmail.id = 'cv-use-email-btn';
+      useEmail.type = 'button';
+      useEmail.className = 'conv-email-toggle';
+      useEmail.textContent = 'Use email';
+    }
+
+    if (divider) divider.textContent = 'or use email';
+
+    [err, ageLab, google, divider, useEmail, emailBox, guest].forEach(function (n) {
+      if (n) panel.appendChild(n);
     });
-    document.getElementById('cv-panel-login').style.display = tab === 'login' ? '' : 'none';
-    document.getElementById('cv-panel-register').style.display = tab === 'register' ? '' : 'none';
-    const closeBtn = document.getElementById('cv-modal-close');
-    if (closeBtn) closeBtn.focus();
+
+    var reg = document.getElementById('cv-panel-register');
+    if (reg && !document.getElementById('cv-goto-join')) {
+      var back = document.createElement('button');
+      back.id = 'cv-goto-join';
+      back.type = 'button';
+      back.className = 'conv-guest-btn';
+      back.textContent = 'Continue with Google instead';
+      var regErr = document.getElementById('cv-reg-err');
+      if (regErr && regErr.nextSibling) reg.insertBefore(back, regErr.nextSibling);
+      else if (reg.firstChild) reg.insertBefore(back, reg.firstChild);
+      else reg.appendChild(back);
+    }
+  }
+  function openAuth(tab) {
+    ensureJoinAuthLayout();
+    var draft = peekCompose();
+    const ov = document.getElementById('cv-auth-overlay');
+    if (!ov) return;
+    ov.classList.add('open');
+    var mode = tab || 'join';
+    if (mode === 'login') mode = 'join';
+    var tabs = document.querySelector('#cv-auth-overlay .conv-modal-tabs');
+    var login = document.getElementById('cv-panel-login');
+    var reg = document.getElementById('cv-panel-register');
+    document.querySelectorAll('.conv-modal-tab').forEach(function (t) {
+      t.classList.toggle('active', t.dataset.tab === (mode === 'join' ? 'login' : mode));
+    });
+    if (tabs) tabs.classList.add('is-join-hidden');
+    if (mode === 'register') {
+      if (login) login.style.display = 'none';
+      if (reg) reg.style.display = '';
+    } else {
+      if (login) login.style.display = '';
+      if (reg) reg.style.display = 'none';
+      toggleEmailAuth(false);
+    }
+    restoreCompose(draft);
+    var google = document.getElementById('cv-google-login');
+    var closeBtn = document.getElementById('cv-modal-close');
+    if (mode !== 'register' && google) {
+      try { google.focus(); } catch (e) {}
+    } else if (closeBtn) {
+      closeBtn.focus();
+    }
   }
   function closeAuth() {
-    document.getElementById('cv-auth-overlay').classList.remove('open');
+    var draft = peekCompose();
+    var ov = document.getElementById('cv-auth-overlay');
+    if (ov) ov.classList.remove('open');
+    restoreCompose(draft);
   }
   function stubSignIn(name, handle) {
+    var draft = peekCompose();
     currentUser = {
       name: name || 'Guest',
       handle: (handle || 'guest415').replace(/^@/, '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'guest415',
@@ -1533,10 +1705,7 @@
     renderSidebarAuth();
     hideDummyChrome();
     syncProfile();
-    listenBlocks(user.uid);
-    if (!user.emailVerified) {
-      composeErr('Verify your email before posting. Check your inbox, then refresh.');
-    }
+    restoreCompose(draft);
   }
   function signOut() {
     if (fbAuth && fbAuth.currentUser) fbAuth.signOut();
@@ -1717,7 +1886,7 @@
     const pollReady = pollActive && [...document.querySelectorAll('#compose-poll .compose-poll-input')].filter(function (i) { return i.value.trim(); }).length >= 2;
     if (!(text || attachedFile || pollReady)) return;
     const live = fbAuth && fbAuth.currentUser;
-    if (!live) { composeErr('Sign in with email to post. Guest can only browse.'); openAuth('login'); return; }
+    if (!live) { composeErr('Sign in to post. Guest can only browse.'); openAuth('join'); return; }
     if (!requireVerified('post')) return;
     if (!fbDb) { composeErr('Feed is not connected.'); return; }
     const parentId = replyTo;
@@ -1801,8 +1970,8 @@
     var uid = liveUid();
     if (!requireVerified('vote')) return;
     if (!uid) {
-      composeErr('Sign in with email to vote. Guest cannot vote.');
-      openAuth('login');
+      composeErr('Sign in to vote. Guest cannot vote.');
+      openAuth('join');
       return;
     }
     if (!fbDb || !postId) return;
@@ -1818,8 +1987,8 @@
     var uid = liveUid();
     if (!requireVerified('like')) return;
     if (!uid) {
-      composeErr('Sign in with email to like. Guest cannot like.');
-      openAuth('login');
+      composeErr('Sign in to like. Guest cannot like.');
+      openAuth('join');
       return;
     }
     if (!fbDb || !postId) return;
@@ -1974,7 +2143,19 @@
         return;
       }
       if (e.target.closest('#auth-signin') || e.target.closest('#profile-signin-prompt-btn')) {
-        openAuth('login');
+        openAuth('join');
+        return;
+      }
+      if (e.target.closest('#cv-use-email-btn')) {
+        toggleEmailAuth();
+        return;
+      }
+      if (e.target.closest('#cv-goto-register')) {
+        openAuth('register');
+        return;
+      }
+      if (e.target.closest('#cv-goto-join')) {
+        openAuth('join');
         return;
       }
       if (e.target.closest('#auth-signout')) { signOut(); return; }
@@ -2016,7 +2197,7 @@
         return;
       }
       if (e.target.closest('[data-act="reply"]')) {
-        if (!isLiveUser()) { composeErr('Sign in with email to reply. Guest can only browse.'); openAuth('login'); return; }
+        if (!isLiveUser()) { composeErr('Sign in to reply. Guest can only browse.'); openAuth('join'); return; }
         const post = e.target.closest('[data-post-id]');
         if (!post) return;
         replyTo = post.dataset.parentId || post.dataset.postId;
@@ -2133,6 +2314,7 @@
       const pw = document.getElementById('cv-login-pw').value || '';
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
       err.textContent = '';
+      markAuthLand();
       fbAuth.signInWithEmailAndPassword(email, pw).catch(function (e) {
         err.textContent = (e && e.message) ? e.message : 'Sign-in failed.';
         err.classList.add('show');
@@ -2152,6 +2334,7 @@
       }
       if (!email || pw.length < 6) { err.textContent = 'Email and a password of at least 6 characters.'; err.classList.add('show'); return; }
       err.textContent = '';
+      markAuthLand();
       fbAuth.createUserWithEmailAndPassword(email, pw).then(function (cred) {
         const disp = name || email.split('@')[0];
         cred.user.sendEmailVerification().catch(function () {});
@@ -2182,6 +2365,7 @@
       }
       err.textContent = '';
       err.classList.remove('show');
+      markAuthLand();
       var provider = new firebase.auth.GoogleAuthProvider();
       var ua = navigator.userAgent || '';
       var isiOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -2253,6 +2437,7 @@
     TOPICS = site.topics || [];
     applyTheme(site.theme);
     applySiteChrome();
+    ensureJoinAuthLayout();
     hideDummyChrome();
 
     if (fbAuth) {
@@ -2286,6 +2471,7 @@
 
     listenKillSwitch();
     wireEvents();
+    document.addEventListener('subx-auth-land', function () { landInFeedCompose(); });
     renderTrends();
     renderExplore();
     renderNotifs();

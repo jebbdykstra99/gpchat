@@ -5,7 +5,7 @@
   "tagline": "Nothing but Grand Prix.",
   "composePlaceholder": "Say something. This is a work in progress.",
   "earlyWelcome": true,
-  "emptyState": "This room is empty. Sign in with email to post the first take about the Grand Prix. Guest can browse only.",
+  "emptyState": "This room is empty. Sign in to post the first take about the Grand Prix. Guest can browse only.",
   "theme": {
     "bg": "#141416",
     "surface": "#1c1c20",
