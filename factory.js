@@ -449,7 +449,7 @@
   }
 
   function earlyWelcomeKey(uid) {
-    return 'subx.earlyWelcome.' + (SITE_ID || '') + '.' + String(uid || '');
+    return 'subx.earlyWelcome.v2.' + (SITE_ID || '') + '.' + String(uid || '');
   }
 
   function earlyWelcomeDismissed(uid) {
@@ -500,7 +500,7 @@
       el.className = 'early-welcome';
       el.setAttribute('role', 'status');
       el.innerHTML =
-        '<div class="early-welcome-copy">You\'re early. This room is live but unfinished. Post if you want. We\'re learning what you need.</div>' +
+        '<div class="early-welcome-copy">You\'re early. This room is live but unfinished. Who do you sit with on the grid — driver, team, or both? Tell the room.</div>' +
         '<button type="button" class="early-welcome-dismiss" id="early-welcome-dismiss" aria-label="Dismiss">&times;</button>';
       var compose = document.getElementById('thoughts-compose-wrap');
       if (compose && compose.parentNode) compose.parentNode.insertBefore(el, compose.nextSibling);
