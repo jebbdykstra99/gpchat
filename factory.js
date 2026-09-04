@@ -1732,7 +1732,8 @@
       '.chat-user-picker-head{display:flex;align-items:center;justify-content:space-between;padding:0.85rem 1rem;border-bottom:1px solid var(--border,#2c2c32);font-weight:700;}' +
       '.chat-user-picker-head button{background:none;border:0;color:inherit;font-size:1.2rem;cursor:pointer;}' +
       '.chat-picker-item{display:flex;gap:0.7rem;align-items:center;padding:0.75rem 1rem;cursor:pointer;border-bottom:1px solid var(--border,#2c2c32);}' +
-      '.chat-picker-item:hover{background:rgba(225,6,0,0.08);}';
+      '.chat-picker-item:hover{background:rgba(225,6,0,0.08);}' +
+      '#chat-thread-view[hidden],#chat-placeholder[hidden],#chat-user-picker[hidden],#profile-message-btn[hidden]{display:none!important;}';
     document.head.appendChild(st);
   }
 
