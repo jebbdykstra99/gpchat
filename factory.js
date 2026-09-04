@@ -1174,13 +1174,14 @@
 
   function f1FormatLocal(d) {
     if (!d) return '';
-    return d.toLocaleString(undefined, {
+    return d.toLocaleString('en-US', {
+      timeZone: 'America/Denver',
       weekday: 'short',
       month: 'short',
       day: 'numeric',
       hour: 'numeric',
       minute: '2-digit'
-    });
+    }) + ' MT';
   }
 
   function f1Sessions(race) {
