@@ -498,22 +498,22 @@
     "title": "Room Brief",
     "kicker": "On the grid",
     "meta": "Live \u00b7 race weekend",
-    "footer": "Race calendar via Jolpica F1 API (Ergast). Quali classification via F1.com Quali report + OpenF1 historical session_key 11357 (after a session ends). Not a news ingest. Not official FIA. Not live timing.",
+    "footer": "Race calendar via Jolpica F1 API (Ergast). Starting grid after penalties via F1.com / race reports. Not a news ingest. Not official FIA. Not live timing.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "openf1SessionKey": 11357,
     "maxCards": 3,
     "cmo": {
       "title": "Italian GP \u00b7 Monza \u00b7 R13",
-      "state": "Quali done \u00b7 Race weekend LIVE",
+      "state": "Grid set \u00b7 Race weekend LIVE",
       "next": "Race Sun 7:00 AM MT"
     },
     "outbound": [
       {
-        "tag": "Quali",
-        "headline": "Gasly pole \u00b7 Russell P2 \u00b7 Piastri P3",
-        "snippet": "Quali result. Official/race state, not a news ingest.",
-        "meta": "F1.com \u00b7 OpenF1 11357",
+        "tag": "Grid",
+        "headline": "Gasly P1 \u00b7 Russell P2 \u00b7 Leclerc P3",
+        "snippet": "Starting grid after penalties. Piastri +3 (impeding) \u2192 P6. Not a news ingest.",
+        "meta": "F1.com \u00b7 penalties",
         "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
       },
       {
@@ -525,8 +525,8 @@
       },
       {
         "tag": "Pin",
-        "headline": "Antonelli + Albon \u2192 back row (PU)",
-        "snippet": "Refresh when the official starting grid drops. Lawson TBD.",
+        "headline": "Antonelli \u00b7 Albon \u00b7 Lawson \u2192 back (PU)",
+        "snippet": "PU allocation penalties. Back of the grid \u2014 not provisional.",
         "meta": "Grid",
         "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
       }
