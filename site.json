@@ -498,27 +498,36 @@
     "title": "Room Brief",
     "kicker": "On the grid",
     "meta": "Live \u00b7 race weekend",
-    "footer": "Race calendar via Jolpica F1 API (Ergast). Classification via OpenF1 historical (after a session ends). Not a news ingest. Not official FIA. Not live timing.",
+    "footer": "Race calendar via Jolpica F1 API (Ergast). Quali classification via F1.com Quali report + OpenF1 historical session_key 11357 (after a session ends). Not a news ingest. Not official FIA. Not live timing.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
+    "openf1SessionKey": 11357,
+    "maxCards": 3,
     "cmo": {
       "title": "Italian GP \u00b7 Monza \u00b7 R13",
-      "state": "Race weekend LIVE",
-      "next": "Quali Sat 8:00am MT (FP3 4:30am MT)"
+      "state": "Quali done \u00b7 Race weekend LIVE",
+      "next": "Race Sun 7:00 AM MT"
     },
     "outbound": [
       {
-        "tag": "Pin",
-        "headline": "Antonelli back-of-grid Sunday",
-        "snippet": "Weekend pin. Not a news ingest.",
+        "tag": "Quali",
+        "headline": "Gasly pole \u00b7 Russell P2 \u00b7 Piastri P3",
+        "snippet": "Quali result. Official/race state, not a news ingest.",
+        "meta": "F1.com \u00b7 OpenF1 11357",
+        "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
+      },
+      {
+        "tag": "Next",
+        "headline": "Race Sun 7:00 AM MT",
+        "snippet": "Italian GP \u00b7 Monza. Not a timing feed.",
         "meta": "Race day",
         "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
       },
       {
         "tag": "Pin",
-        "headline": "Ferrari home + Schumi 30yr tribute",
-        "snippet": "Weekend pin. Not a news ingest.",
-        "meta": "This weekend",
+        "headline": "Antonelli + Albon \u2192 back row (PU)",
+        "snippet": "Refresh when the official starting grid drops. Lawson TBD.",
+        "meta": "Grid",
         "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
       }
     ],

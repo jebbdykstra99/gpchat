@@ -1376,6 +1376,14 @@
 
   function f1FormatGap(gap) {
     if (gap == null || gap === '') return '';
+    if (Object.prototype.toString.call(gap) === '[object Array]') {
+      var lastGap = null;
+      var gi;
+      for (gi = gap.length - 1; gi >= 0; gi--) {
+        if (gap[gi] != null && gap[gi] !== '') { lastGap = gap[gi]; break; }
+      }
+      return f1FormatGap(lastGap);
+    }
     if (typeof gap === 'string') {
       var g = gap.replace(/^\s+|\s+$/g, '');
       if (!g || /^0+(\.0+)?$/.test(g)) return '';
@@ -1434,11 +1442,64 @@
     return parts.join(' · ');
   }
 
+  function f1SessionRank(item) {
+    var tag = (item && item.tag) || '';
+    if (tag === 'Race') return 80;
+    if (tag === 'Quali') return 70;
+    if (tag === 'Sprint') return 60;
+    if (tag === 'Sprint Quali') return 50;
+    if (tag === 'FP3') return 30;
+    if (tag === 'FP2') return 20;
+    if (tag === 'FP1') return 10;
+    return 0;
+  }
+
+  function f1SessionUsable(item, now) {
+    if (!item) return false;
+    if (item.endMs < now) return true;
+    if (item.startMs <= now) return true;
+    return false;
+  }
+
+  function f1PickResultSession(list, now, preferKey) {
+    var latestCompleted = null;
+    var quali = null;
+    var pinned = null;
+    var i;
+    for (i = 0; i < list.length; i++) {
+      var item = list[i];
+      var key = item.raw && item.raw.session_key;
+      if (preferKey != null && String(key) === String(preferKey)) pinned = item;
+      if (item.tag === 'Quali') quali = item;
+      if (item.endMs < now) latestCompleted = item;
+    }
+    var pick = latestCompleted;
+    if (quali && f1SessionUsable(quali, now)) pick = quali;
+    if (pinned && f1SessionUsable(pinned, now)) {
+      if (!pick || f1SessionRank(pinned) >= f1SessionRank(pick)) pick = pinned;
+    }
+    if (latestCompleted && (!pick || f1SessionRank(latestCompleted) > f1SessionRank(pick))) {
+      pick = latestCompleted;
+    }
+    return pick;
+  }
+
   function overlayOpenF1Cards(cards, cfg) {
     if (!cards || !cards.length) return Promise.resolve(cards);
-    return fetchOpenF1Json('/sessions?session_key=latest').then(function (latest) {
-      var meetingKey = latest && latest[0] && latest[0].meeting_key;
+    var pinnedKey = cfg && cfg.openf1SessionKey;
+    var latestP = fetchOpenF1Json('/sessions?session_key=latest');
+    var pinnedP = pinnedKey != null
+      ? fetchOpenF1Json('/sessions?session_key=' + encodeURIComponent(pinnedKey))
+      : Promise.resolve(null);
+    return Promise.all([latestP, pinnedP]).then(function (pair) {
+      var latestSess = pair[0] && pair[0][0];
+      var pinnedSess = pair[1] && pair[1][0];
+      var meetingKey = latestSess && latestSess.meeting_key;
+      if (meetingKey == null && pinnedSess) meetingKey = pinnedSess.meeting_key;
       if (meetingKey == null) return cards;
+      var preferKey = null;
+      if (pinnedSess && pinnedSess.meeting_key == meetingKey) preferKey = pinnedSess.session_key;
+      else if (pinnedKey != null && latestSess && latestSess.meeting_key == meetingKey) preferKey = pinnedKey;
       return fetchOpenF1Json('/sessions?meeting_key=' + encodeURIComponent(meetingKey)).then(function (sessions) {
         if (!sessions || !sessions.length) return cards;
         var now = Date.now();
@@ -1459,14 +1520,17 @@
           });
         }
         list.sort(function (a, b) { return a.startMs - b.startMs; });
-        var completed = null;
+        var completed = f1PickResultSession(list, now, preferKey);
         var live = null;
         var upcoming = null;
         for (i = 0; i < list.length; i++) {
           var item = list[i];
-          if (item.endMs < now) completed = item;
-          else if (item.startMs <= now && item.endMs > now) live = item;
+          if (item.startMs <= now && item.endMs > now) live = item;
           else if (item.startMs > now && !upcoming) upcoming = item;
+        }
+        if (completed && live && completed.raw && live.raw &&
+            String(completed.raw.session_key) === String(live.raw.session_key)) {
+          live = null;
         }
         var resultKey = completed && completed.raw.session_key;
         var resultP = resultKey != null
@@ -1487,7 +1551,8 @@
                 out[1] = {
                   tag: completed.tag,
                   headline: line,
-                  snippet: completed.tag + ' result · OpenF1 historical',
+                  snippet: completed.tag + ' result · OpenF1 historical' +
+                    (resultKey != null ? ' ' + resultKey : ''),
                   meta: meta,
                   url: href
                 };
@@ -1506,7 +1571,7 @@
               stateCard = {
                 tag: 'Next',
                 headline: cmo.state || 'Next up',
-                snippet: upcoming.tag + ' · ' + f1FormatLocal(upcoming.start),
+                snippet: cmo.next || (upcoming.tag + ' · ' + f1FormatLocal(upcoming.start)),
                 meta: meta,
                 url: href
               };
@@ -1561,7 +1626,7 @@
 
   function fallbackTrendCards() {
     var extra = outboundCards();
-    if (extra.length) return extra.slice(0, 1);
+    if (extra.length) return extra.slice(0, railNwsSlots());
     if (railKind() === 'f1-calendar') return (TRENDS || []).slice(0, railNwsSlots());
     if (railKind() || railCfg().porch) return [];
     return (TRENDS || []).slice(0, 1);
@@ -1572,11 +1637,41 @@
     var porchOn = !!(porch && porch.options && porch.options.length);
     var max = parseInt(railCfg().maxCards, 10) || RAIL_MAX;
     if (max < 1) max = RAIL_MAX;
-    if (railKind() === 'f1-calendar') {
-      var pins = outboundCards().length;
-      return 3 + pins;
-    }
+    if (railKind() === 'f1-calendar') return Math.min(3, max);
     return porchOn ? Math.max(1, max - 1) : max;
+  }
+
+  function staleFp2Card(card) {
+    if (!card) return false;
+    var tag = String(card.tag || '');
+    var head = String(card.headline || '');
+    var snip = String(card.snippet || '');
+    if (/^FP2$/i.test(tag)) return true;
+    if (/1:22\.559/.test(head) && /Lec|Ant/i.test(head)) return true;
+    if (/Russell/i.test(head) && /1:22/.test(head) && !/pole|P2/i.test(head)) return true;
+    if (/FP2/i.test(snip) && /Russell/i.test(head + snip) && !/pole/i.test(head)) return true;
+    return false;
+  }
+
+  function mergeF1Rail(cards, extra) {
+    var max = railNwsSlots();
+    var pins = [];
+    var i;
+    extra = extra || [];
+    for (i = 0; i < extra.length; i++) {
+      if (!staleFp2Card(extra[i])) pins.push(extra[i]);
+    }
+    if (pins.length >= max) return pins.slice(0, max);
+    var live = [];
+    if (cards && cards.length) {
+      if (cards[1] && !staleFp2Card(cards[1])) live.push(cards[1]);
+      if (cards[2]) live.push(cards[2]);
+      if (cards[0] && pins.length === 0) live.push(cards[0]);
+    }
+    var out = pins.slice();
+    for (i = 0; i < live.length && out.length < max; i++) out.push(live[i]);
+    if (!out.length) return (cards || []).slice(0, max);
+    return out.slice(0, max);
   }
 
   var f1RefreshTimer = null;
@@ -1594,7 +1689,9 @@
     if (!quiet) paintRail([]);
     liveFetch().then(function (cards) {
       var extra = outboundCards();
-      var merged = (cards || []).concat(extra);
+      var merged = railKind() === 'f1-calendar'
+        ? mergeF1Rail(cards, extra)
+        : (cards || []).concat(extra);
       if (merged.length) paintRail(merged.slice(0, railNwsSlots()));
       else paintRail(fallbackTrendCards());
     }).catch(function (err) {
