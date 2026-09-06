@@ -511,6 +511,7 @@
     "outbound": [
       {
         "tag": "Grid",
+        "topic": "grid",
         "headline": "Gasly P1 \u00b7 Russell P2 \u00b7 Leclerc P3",
         "snippet": "Starting grid after penalties. Piastri +3 (impeding) \u2192 P6. Not a news ingest.",
         "meta": "F1.com \u00b7 penalties",
@@ -518,6 +519,7 @@
       },
       {
         "tag": "Next",
+        "topic": "next",
         "headline": "Race Sun 7:00 AM MT",
         "snippet": "Italian GP \u00b7 Monza. Not a timing feed.",
         "meta": "Race day",
@@ -525,6 +527,7 @@
       },
       {
         "tag": "Pin",
+        "topic": "pin",
         "headline": "Antonelli \u00b7 Albon \u00b7 Lawson \u2192 back (PU)",
         "snippet": "PU allocation penalties. Back of the grid \u2014 not provisional.",
         "meta": "Grid",
@@ -532,6 +535,7 @@
       }
     ],
     "porch": {
+      "topic": "porch",
       "prompt": "Box or stay out?",
       "options": [
         "Box",

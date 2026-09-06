@@ -4,6 +4,7 @@
   const MOBILE_NAV_MQ = 900;
   const LS_USER = '415chat.user';
   const LS_LIKES = '415chat.likes';
+  const LS_TOPIC_FOLLOWS = 'subx.topicFollows';
   const SITE_JSON_URL = (document.currentScript && document.currentScript.getAttribute('data-site')) || 'site.json';
 
   let SITE_ID = '415chat';
@@ -67,6 +68,97 @@
   }
   function saveJSON(key, val) {
     try { localStorage.setItem(key, JSON.stringify(val)); } catch (e) { /* private mode */ }
+  }
+
+  function topicFollowsStoreKey() {
+    return LS_TOPIC_FOLLOWS + '.' + (SITE_ID || 'site');
+  }
+  function loadTopicFollows() {
+    var raw = loadJSON(topicFollowsStoreKey(), {});
+    return (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+  }
+  function topicFollowSlug(s) {
+    return String(s || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80);
+  }
+  function cardTopicKey(card) {
+    if (!card) return 'topic';
+    var explicit = card.followId || card.topic;
+    if (explicit) {
+      var fromExplicit = topicFollowSlug(explicit);
+      if (fromExplicit) return fromExplicit;
+    }
+    var tag = topicFollowSlug(card.tag);
+    var head = topicFollowSlug(card.headline);
+    if (tag && head) return (tag + '-' + head).slice(0, 80);
+    return tag || head || 'topic';
+  }
+  function isTopicFollowed(key) {
+    return !!(key && loadTopicFollows()[key]);
+  }
+  function setTopicFollowed(key, on) {
+    if (!key) return;
+    var map = loadTopicFollows();
+    if (on) map[key] = true;
+    else delete map[key];
+    saveJSON(topicFollowsStoreKey(), map);
+  }
+  function topicFollowLabel(card) {
+    return String((card && (card.tag || card.headline)) || 'topic');
+  }
+  function followIconSvg(on) {
+    if (on) {
+      return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>';
+    }
+    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
+  }
+  function renderFollowBtn(card) {
+    var key = cardTopicKey(card);
+    var label = topicFollowLabel(card);
+    var on = isLiveUser() && isTopicFollowed(key);
+    var aria = (on ? 'Following ' : 'Follow ') + label;
+    return '<button type="button" class="news-follow-btn' + (on ? ' is-following' : '') +
+      '" data-topic-follow="' + escapeHtml(key) +
+      '" data-topic-label="' + escapeHtml(label) +
+      '" aria-pressed="' + (on ? 'true' : 'false') +
+      '" aria-label="' + escapeHtml(aria) +
+      '" title="' + escapeHtml(aria) + '">' +
+      followIconSvg(on) +
+      '</button>';
+  }
+  function paintFollowBtn(btn, on) {
+    if (!btn) return;
+    var label = btn.getAttribute('data-topic-label') || 'topic';
+    var aria = (on ? 'Following ' : 'Follow ') + label;
+    btn.classList.toggle('is-following', !!on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.setAttribute('aria-label', aria);
+    btn.setAttribute('title', aria);
+    btn.innerHTML = followIconSvg(!!on);
+  }
+  function syncTopicFollowButtons() {
+    var buttons = document.querySelectorAll('[data-topic-follow]');
+    var signedIn = isLiveUser();
+    for (var i = 0; i < buttons.length; i++) {
+      var key = buttons[i].getAttribute('data-topic-follow');
+      paintFollowBtn(buttons[i], signedIn && isTopicFollowed(key));
+    }
+  }
+  function toggleTopicFollow(btn) {
+    if (!isLiveUser()) {
+      composeErr('Sign in to follow. Guest can only browse.');
+      openAuth('join');
+      return;
+    }
+    var key = btn && btn.getAttribute('data-topic-follow');
+    if (!key) return;
+    var next = !isTopicFollowed(key);
+    setTopicFollowed(key, next);
+    var buttons = document.querySelectorAll('[data-topic-follow="' + key + '"]');
+    for (var i = 0; i < buttons.length; i++) paintFollowBtn(buttons[i], next);
   }
 
   let currentUser = loadJSON(LS_USER, null);
@@ -466,6 +558,7 @@
     document.body.classList.toggle('is-guest', !isLiveUser());
     syncEarlyWelcome();
     syncChatChrome();
+    syncTopicFollowButtons();
   }
 
   function earlyWelcomeOn() {
@@ -862,22 +955,31 @@
   function renderTrendCard(t) {
     const href = t.url || '#explore';
     const extra = t.url ? ' target="_blank" rel="noopener noreferrer"' : '';
-    return '<a class="news-item" href="' + escapeHtml(href) + '"' + extra + '>' +
-      '<div class="news-item-tag">' + escapeHtml(t.tag) + '</div>' +
-      '<div class="news-item-headline">' + escapeHtml(t.headline) + '</div>' +
-      '<div class="news-item-snippet">' + escapeHtml(t.snippet) + '</div>' +
-      '<div class="news-item-meta">' + escapeHtml(t.meta) + '</div>' +
-    '</a>';
+    return '<article class="news-item">' +
+      renderFollowBtn(t) +
+      '<a class="news-item-main" href="' + escapeHtml(href) + '"' + extra + '>' +
+        '<div class="news-item-tag">' + escapeHtml(t.tag) + '</div>' +
+        '<div class="news-item-headline">' + escapeHtml(t.headline) + '</div>' +
+        '<div class="news-item-snippet">' + escapeHtml(t.snippet) + '</div>' +
+        '<div class="news-item-meta">' + escapeHtml(t.meta) + '</div>' +
+      '</a>' +
+    '</article>';
   }
 
   function porchCardHtml() {
     var porch = railCfg().porch;
     if (!porch || !porch.options || !porch.options.length) return '';
     var prompt = porch.prompt || 'Your call?';
+    var porchCard = {
+      tag: 'Porch',
+      headline: prompt,
+      topic: porch.topic || porch.followId || 'porch'
+    };
     var btns = porch.options.map(function (opt) {
       return '<button type="button" class="porch-btn" data-porch="' + escapeHtml(opt) + '">' + escapeHtml(opt) + '</button>';
     }).join('');
     return '<div class="news-item news-item-porch">' +
+      renderFollowBtn(porchCard) +
       '<div class="news-item-tag">Porch</div>' +
       '<div class="news-item-headline">' + escapeHtml(prompt) + '</div>' +
       '<div class="news-item-snippet">Pick a side. Posts to this room.</div>' +
@@ -891,15 +993,23 @@
     var st = document.createElement('style');
     st.id = 'rail-porch-css';
     st.textContent =
-      '.news-item{display:block;padding:1rem 1.4rem;border-bottom:1px solid rgba(255,255,255,0.06);}' +
-      'a.news-item{text-decoration:none;cursor:pointer;}' +
+      '.news-item{display:block;padding:1rem 2.8rem 1rem 1.4rem;border-bottom:1px solid rgba(255,255,255,0.06);position:relative;}' +
+      'a.news-item,.news-item-main{text-decoration:none;cursor:pointer;color:inherit;display:block;padding-right:2.15rem;}' +
+      '.news-follow-btn{position:absolute;top:0.75rem;right:0.85rem;z-index:2;width:28px;height:28px;padding:0;border-radius:999px;' +
+        'border:1px solid var(--accent,#e10600);background:transparent;color:var(--accent,#e10600);cursor:pointer;' +
+        'display:inline-flex;align-items:center;justify-content:center;}' +
+      '.news-follow-btn:hover{background:rgba(225,6,0,0.14);}' +
+      '.news-follow-btn:focus-visible{outline:2px solid var(--accent,#e10600);outline-offset:2px;}' +
+      '.news-follow-btn.is-following{background:var(--accent,#e10600);color:#fff;border-color:var(--accent,#e10600);}' +
       '.porch-btns{display:flex;gap:0.45rem;margin:0.45rem 0 0.2rem;flex-wrap:wrap;}' +
       '.porch-btn{font:inherit;font-size:0.78rem;font-weight:600;padding:0.35rem 0.8rem;border-radius:999px;' +
         'border:1px solid rgba(255,255,255,0.22);background:rgba(255,255,255,0.08);color:#f0f4f7;cursor:pointer;}' +
       '.porch-btn:hover{background:rgba(255,255,255,0.16);}' +
       '.news-page-list .news-item{background:var(--surface,#f4f7fa);border:1px solid var(--border,#c9d5de);border-radius:10px;padding:1.05rem 1.15rem;}' +
       '.news-page-list .porch-btn{border-color:var(--border,#c9d5de);background:#fff;color:var(--text,#12202c);}' +
-      '.news-page-list .porch-btn:hover{border-color:var(--accent,#c0362c);color:var(--accent,#c0362c);}';
+      '.news-page-list .porch-btn:hover{border-color:var(--accent,#c0362c);color:var(--accent,#c0362c);}' +
+      '.news-page-list .news-follow-btn{border-color:var(--accent,#c0362c);color:var(--accent,#c0362c);}' +
+      '.news-page-list .news-follow-btn.is-following{background:var(--accent,#c0362c);color:#fff;border-color:var(--accent,#c0362c);}';
     document.head.appendChild(st);
   }
 
@@ -1120,7 +1230,9 @@
         headline: t.headline,
         snippet: t.snippet || '',
         meta: t.meta || (railCfg().meta || 'This room'),
-        url: t.url || ''
+        url: t.url || '',
+        topic: t.topic || '',
+        followId: t.followId || ''
       });
     }
     return out;
@@ -1256,7 +1368,8 @@
       headline: cmo.title || race.raceName || 'Grand Prix',
       snippet: circuitLine || 'Race weekend',
       meta: raceWhen ? ('Race · ' + f1FormatLocal(raceWhen)) : meta,
-      url: href
+      url: href,
+      topic: race.round ? ('r' + race.round) : 'gp'
     });
     if (sessions.length) {
       cards.push({
@@ -1264,7 +1377,8 @@
         headline: 'Weekend timetable',
         snippet: sessions.map(function (s) { return s.label + ' ' + f1FormatLocal(s.when); }).join(' · '),
         meta: meta,
-        url: href
+        url: href,
+        topic: 'sessions'
       });
     }
     var nextSess = null;
@@ -1290,7 +1404,8 @@
       headline: stateHead,
       snippet: stateSnip,
       meta: meta,
-      url: href
+      url: href,
+      topic: justFinished ? 'finished' : (live ? 'live' : 'next')
     });
     return cards;
   }
@@ -1554,7 +1669,8 @@
                   snippet: completed.tag + ' result · OpenF1 historical' +
                     (resultKey != null ? ' ' + resultKey : ''),
                   meta: meta,
-                  url: href
+                  url: href,
+                  topic: topicFollowSlug(completed.tag) || 'result'
                 };
               }
             }
@@ -1565,7 +1681,8 @@
                 headline: live.tag + ' is on',
                 snippet: live.tag + ' is on · ' + f1FormatLocal(live.start),
                 meta: meta,
-                url: href
+                url: href,
+                topic: 'live'
               };
             } else if (upcoming) {
               stateCard = {
@@ -1573,7 +1690,8 @@
                 headline: cmo.state || 'Next up',
                 snippet: cmo.next || (upcoming.tag + ' · ' + f1FormatLocal(upcoming.start)),
                 meta: meta,
-                url: href
+                url: href,
+                topic: 'next'
               };
             } else {
               var finished = !!(completed && !live && !upcoming);
@@ -1585,7 +1703,8 @@
                 headline: finished ? 'Just finished' : (cmo.state || (out[2] && out[2].headline) || 'Next up'),
                 snippet: snip,
                 meta: meta,
-                url: href
+                url: href,
+                topic: finished ? 'finished' : 'next'
               };
             }
             if (out.length >= 3) out[2] = stateCard;
@@ -3092,6 +3211,14 @@
       }
       if (e.target.closest('#chat-picker-close')) {
         hideDmPicker();
+        return;
+      }
+
+      const followBtn = e.target.closest('[data-topic-follow]');
+      if (followBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleTopicFollow(followBtn);
         return;
       }
 
