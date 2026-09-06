@@ -1579,6 +1579,7 @@
   function f1PickResultSession(list, now, preferKey) {
     var latestCompleted = null;
     var quali = null;
+    var race = null;
     var pinned = null;
     var i;
     for (i = 0; i < list.length; i++) {
@@ -1586,10 +1587,12 @@
       var key = item.raw && item.raw.session_key;
       if (preferKey != null && String(key) === String(preferKey)) pinned = item;
       if (item.tag === 'Quali') quali = item;
+      if (item.tag === 'Race') race = item;
       if (item.endMs < now) latestCompleted = item;
     }
     var pick = latestCompleted;
     if (quali && f1SessionUsable(quali, now)) pick = quali;
+    if (race && f1SessionUsable(race, now)) pick = race;
     if (pinned && f1SessionUsable(pinned, now)) {
       if (!pick || f1SessionRank(pinned) >= f1SessionRank(pick)) pick = pinned;
     }
@@ -1760,15 +1763,22 @@
     return porchOn ? Math.max(1, max - 1) : max;
   }
 
-  function staleFp2Card(card) {
+  function stalePreRaceCard(card) {
     if (!card) return false;
     var tag = String(card.tag || '');
     var head = String(card.headline || '');
     var snip = String(card.snippet || '');
+    var blob = head + ' ' + snip;
     if (/^FP2$/i.test(tag)) return true;
     if (/1:22\.559/.test(head) && /Lec|Ant/i.test(head)) return true;
     if (/Russell/i.test(head) && /1:22/.test(head) && !/pole|P2/i.test(head)) return true;
     if (/FP2/i.test(snip) && /Russell/i.test(head + snip) && !/pole/i.test(head)) return true;
+    if (/^Grid$/i.test(tag)) return true;
+    if (/^Quali$/i.test(tag)) return true;
+    if (/Gasly P1/i.test(head) || /Gasly pole/i.test(head)) return true;
+    if (/Race Sun 7:00/i.test(blob)) return true;
+    if (/back(\s+of\s+the)?\s+(the\s+)?grid|back row|→ back/i.test(blob) && /PU/i.test(blob)) return true;
+    if (/OpenF1 11357|session_key 11357/i.test(blob)) return true;
     return false;
   }
 
@@ -1778,13 +1788,13 @@
     var i;
     extra = extra || [];
     for (i = 0; i < extra.length; i++) {
-      if (!staleFp2Card(extra[i])) pins.push(extra[i]);
+      if (!stalePreRaceCard(extra[i])) pins.push(extra[i]);
     }
     if (pins.length >= max) return pins.slice(0, max);
     var live = [];
     if (cards && cards.length) {
-      if (cards[1] && !staleFp2Card(cards[1])) live.push(cards[1]);
-      if (cards[2]) live.push(cards[2]);
+      if (cards[1] && !stalePreRaceCard(cards[1])) live.push(cards[1]);
+      if (cards[2] && !stalePreRaceCard(cards[2])) live.push(cards[2]);
       if (cards[0] && pins.length === 0) live.push(cards[0]);
     }
     var out = pins.slice();
