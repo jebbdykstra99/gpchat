@@ -496,42 +496,42 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "On the grid",
-    "meta": "Live \u00b7 race weekend",
-    "footer": "Race calendar via Jolpica F1 API (Ergast). Starting grid after penalties via F1.com / race reports. Not a news ingest. Not official FIA. Not live timing.",
+    "kicker": "Race + Post",
+    "meta": "Race done \u00b7 provisional",
+    "footer": "Race result + standings via F1.com. OpenF1 historical session_key 11361 (Monza Race). Provisional until RUS yellow-flag / TSU items clear. Not a news ingest. Not official FIA. Not live timing.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
-    "openf1SessionKey": 11357,
+    "openf1SessionKey": 11361,
     "maxCards": 3,
     "cmo": {
       "title": "Italian GP \u00b7 Monza \u00b7 R13",
-      "state": "Grid set \u00b7 Race weekend LIVE",
-      "next": "Race Sun 7:00 AM MT"
+      "state": "Race done \u00b7 provisional",
+      "next": "Spanish GP Madrid \u00b7 Fri\u2013Sun Sep 11\u201313"
     },
     "outbound": [
       {
-        "tag": "Grid",
-        "topic": "grid",
-        "headline": "Gasly P1 \u00b7 Russell P2 \u00b7 Leclerc P3",
-        "snippet": "Starting grid after penalties. Piastri +3 (impeding) \u2192 P6. Not a news ingest.",
-        "meta": "F1.com \u00b7 penalties",
+        "tag": "Race",
+        "topic": "race",
+        "headline": "Antonelli wins Monza \u2014 Mercedes 1\u20132 (RUS +3.857s) \u00b7 provisional",
+        "snippet": "Provisional race result. RUS yellow-flag / TSU items still open. OpenF1 11361. Not a news ingest.",
+        "meta": "F1.com \u00b7 OpenF1 11361",
         "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
+      },
+      {
+        "tag": "WDC",
+        "topic": "wdc",
+        "headline": "WDC: ANT 267 \u00b7 RUS 201 \u00b7 HAM 191",
+        "snippet": "Drivers' standings after Monza. Provisional until RUS yellow-flag / TSU items clear.",
+        "meta": "F1.com \u00b7 standings",
+        "url": "https://en.wikipedia.org/wiki/2026_Formula_One_World_Championship"
       },
       {
         "tag": "Next",
         "topic": "next",
-        "headline": "Race Sun 7:00 AM MT",
-        "snippet": "Italian GP \u00b7 Monza. Not a timing feed.",
-        "meta": "Race day",
-        "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
-      },
-      {
-        "tag": "Pin",
-        "topic": "pin",
-        "headline": "Antonelli \u00b7 Albon \u00b7 Lawson \u2192 back (PU)",
-        "snippet": "PU allocation penalties. Back of the grid \u2014 not provisional.",
-        "meta": "Grid",
-        "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
+        "headline": "Next: Spanish GP Madrid \u00b7 Fri\u2013Sun Sep 11\u201313",
+        "snippet": "Round 14. Madrid. Not a timing feed.",
+        "meta": "Calendar",
+        "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
       }
     ],
     "porch": {
