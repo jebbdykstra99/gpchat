@@ -399,7 +399,9 @@
       gateErr('This room is paused.');
       return false;
     }
-    if (!isEmailVerified()) {
+    // Chat/DM replies: signed-in + not killed is enough. Google members
+    // can send without emailVerified. Post/like/vote/report/block still gate.
+    if (action !== 'chat' && !isEmailVerified()) {
       gateErr('Verify your email before you ' + (action || 'post') + '. Check your inbox, then refresh.');
       var u = fbAuth.currentUser;
       if (u && u.sendEmailVerification) u.sendEmailVerification().catch(function () {});
