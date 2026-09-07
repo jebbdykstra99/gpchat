@@ -201,8 +201,48 @@
   function isLiveUser() {
     return !!(fbAuth && fbAuth.currentUser);
   }
+  function sessionSeedList() {
+    if (site && Array.isArray(site.sessionSeeds) && site.sessionSeeds.length) {
+      return site.sessionSeeds;
+    }
+    if (site && Array.isArray(site.seed)) {
+      return site.seed.filter(function (p) { return p && p.session === true; });
+    }
+    return [];
+  }
+
+  function sessionSeedPosts() {
+    var now = Date.now();
+    return sessionSeedList().map(function (p, i) {
+      var hours = (p.hours != null) ? p.hours : i;
+      return {
+        id: String(p.id || ('session-seed-' + i)),
+        authorUid: null,
+        name: p.name || 'Room',
+        handle: p.handle || 'room',
+        text: p.text || '',
+        ms: now - hours * 3600000,
+        hours: hours,
+        likedBy: {},
+        likes: p.likes || 0,
+        replies: p.replies || 0,
+        parentId: null,
+        live: false,
+        sessionSeed: true,
+        imageUrl: p.imageUrl || null,
+        poll: null
+      };
+    });
+  }
+
+  function isSessionSeedPost(post) {
+    return !!(post && post.sessionSeed);
+  }
+
   function findPost(id) {
     for (var i = 0; i < livePosts.length; i++) if (livePosts[i].id === id) return livePosts[i];
+    var seeds = sessionSeedPosts();
+    for (var j = 0; j < seeds.length; j++) if (seeds[j].id === id) return seeds[j];
     return null;
   }
 
@@ -408,7 +448,7 @@
   function reportPost(id) {
     if (!requireVerified('report')) return;
     var post = findPost(id);
-    if (!post || !fbDb) return;
+    if (!post || !fbDb || isSessionSeedPost(post)) return;
     fbDb.collection('reports').add({
       siteId: SITE_ID,
       postId: id,
@@ -921,6 +961,10 @@
     let posts = topLevelPosts().slice();
     if (currentTab === 'hot') posts.sort(function (a, b) { return (b.likes || 0) - (a.likes || 0); });
     if (currentTab === 'new') posts.sort(function (a, b) { return (b.ms || 0) - (a.ms || 0); });
+    var seeds = sessionSeedPosts();
+    var seedIds = {};
+    for (var si = 0; si < seeds.length; si++) seedIds[seeds[si].id] = true;
+    posts = seeds.concat(posts.filter(function (p) { return !seedIds[p.id]; }));
 
     if (!posts.length) {
       var empty = (site && site.emptyState) || 'This room is empty. Sign in to post. Guest can browse only.';
@@ -3023,6 +3067,10 @@
     }
     if (!fbDb || !postId) return;
     var post = findPost(postId);
+    if (isSessionSeedPost(post)) {
+      composeErr('Reply in the compose box — this is a session ask.');
+      return;
+    }
     var likedBy = (post && post.likedBy) || {};
     var patch = {};
     if (likedBy[uid]) {
@@ -3272,6 +3320,17 @@
         if (!isLiveUser()) { composeErr('Sign in to reply. Guest can only browse.'); openAuth('join'); return; }
         const post = e.target.closest('[data-post-id]');
         if (!post) return;
+        var seedPost = findPost(post.dataset.postId);
+        if (isSessionSeedPost(seedPost)) {
+          replyTo = null;
+          const seedInput = document.getElementById('thoughts-compose-input');
+          if (seedInput) {
+            if (!seedInput.getAttribute('data-ph')) seedInput.setAttribute('data-ph', seedInput.placeholder);
+            seedInput.placeholder = 'Answer the room…';
+            seedInput.focus();
+          }
+          return;
+        }
         replyTo = post.dataset.parentId || post.dataset.postId;
         const input = document.getElementById('thoughts-compose-input');
         if (!input.getAttribute('data-ph')) input.setAttribute('data-ph', input.placeholder);

@@ -168,8 +168,70 @@
       "snippet": "Tire temps, a stall on the grid, P1 lights that take forever."
     }
   ],
-  "seedNote": "sample \u2014 not mixed into the live feed",
+  "sessionSeeds": [
+    {
+      "id": "madrid-seat",
+      "name": "Grid Seat",
+      "handle": "gridseat",
+      "text": "Who are you sitting with this week in Madrid \u2014 driver, team, or both?",
+      "hours": 0,
+      "likes": 12,
+      "replies": 3,
+      "session": true
+    },
+    {
+      "id": "madrid-lap1",
+      "name": "Lap One",
+      "handle": "lapone",
+      "text": "First Spanish GP in Madrid \u2014 what do you want to see on lap 1?",
+      "hours": 1,
+      "likes": 9,
+      "replies": 2,
+      "session": true
+    },
+    {
+      "id": "madrid-gap",
+      "name": "Gap Watch",
+      "handle": "gapwatch",
+      "text": "After Monza: Antonelli\u2019s still out front. Who\u2019s your pick to close the gap here?",
+      "hours": 2,
+      "likes": 14,
+      "replies": 4,
+      "session": true
+    }
+  ],
+  "seedNote": "sample \u2014 not mixed into the live feed. sessionSeeds pin at the top of the live room.",
   "seed": [
+    {
+      "id": "madrid-seat",
+      "name": "Grid Seat",
+      "handle": "gridseat",
+      "text": "Who are you sitting with this week in Madrid \u2014 driver, team, or both?",
+      "hours": 0,
+      "likes": 12,
+      "replies": 3,
+      "session": true
+    },
+    {
+      "id": "madrid-lap1",
+      "name": "Lap One",
+      "handle": "lapone",
+      "text": "First Spanish GP in Madrid \u2014 what do you want to see on lap 1?",
+      "hours": 1,
+      "likes": 9,
+      "replies": 2,
+      "session": true
+    },
+    {
+      "id": "madrid-gap",
+      "name": "Gap Watch",
+      "handle": "gapwatch",
+      "text": "After Monza: Antonelli\u2019s still out front. Who\u2019s your pick to close the gap here?",
+      "hours": 2,
+      "likes": 14,
+      "replies": 4,
+      "session": true
+    },
     {
       "id": "p1",
       "name": "Grid Watch",
@@ -536,7 +598,7 @@
     ],
     "porch": {
       "topic": "porch",
-      "prompt": "Box or stay out?",
+      "prompt": "Madrid weekend \u2014 box or stay out?",
       "options": [
         "Box",
         "Stay out"
