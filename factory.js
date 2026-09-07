@@ -949,19 +949,19 @@
       return;
     }
 
-    if (liveError) {
+    var seeds = sessionSeedPosts();
+    if (liveError && !seeds.length) {
       el.innerHTML = '<div class="post-empty">Live feed could not load. The error is in the compose line above — this is not an empty room.</div>';
       return;
     }
-    if (!liveReady) {
+    if (!liveReady && !seeds.length) {
       el.innerHTML = '<div class="post-empty">Connecting to the live feed…</div>';
       return;
     }
 
-    let posts = topLevelPosts().slice();
-    if (currentTab === 'hot') posts.sort(function (a, b) { return (b.likes || 0) - (a.likes || 0); });
-    if (currentTab === 'new') posts.sort(function (a, b) { return (b.ms || 0) - (a.ms || 0); });
-    var seeds = sessionSeedPosts();
+    let posts = (liveReady && !liveError) ? topLevelPosts().slice() : [];
+    if (liveReady && !liveError && currentTab === 'hot') posts.sort(function (a, b) { return (b.likes || 0) - (a.likes || 0); });
+    if (liveReady && !liveError && currentTab === 'new') posts.sort(function (a, b) { return (b.ms || 0) - (a.ms || 0); });
     var seedIds = {};
     for (var si = 0; si < seeds.length; si++) seedIds[seeds[si].id] = true;
     posts = seeds.concat(posts.filter(function (p) { return !seedIds[p.id]; }));
