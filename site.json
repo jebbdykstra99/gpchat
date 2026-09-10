@@ -558,41 +558,40 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Race + Post",
-    "meta": "Race done",
-    "footer": "Race result + standings via F1.com. OpenF1 historical session_key 11361 (Monza Race). Stewards NFA on RUS yellow-flag and TSU start items; classification unchanged. Not a news ingest. Not official FIA. Not live timing.",
+    "kicker": "Pre-day",
+    "meta": "Pre-day",
+    "footer": "F1.com Spain timetable + Jolpica R14/Madring + standings after R13. Not a news ingest. Not official FIA. Not live timing.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
-    "openf1SessionKey": 11361,
     "maxCards": 3,
     "cmo": {
-      "title": "Italian GP \u00b7 Monza \u00b7 R13",
-      "state": "Race done",
-      "next": "Spanish GP Madrid \u00b7 Fri\u2013Sun Sep 11\u201313"
+      "title": "Spanish GP Madrid \u00b7 Madring",
+      "state": "Pre-day",
+      "next": "Fri\u2013Sun Sep 11\u201313"
     },
     "outbound": [
       {
-        "tag": "Race",
-        "topic": "race",
-        "headline": "Antonelli wins Monza \u2014 Mercedes 1\u20132 (RUS +3.857s)",
-        "snippet": "Race result. Stewards NFA on RUS yellow-flag and TSU start items; classification unchanged. OpenF1 11361. Not a news ingest.",
-        "meta": "F1.com \u00b7 OpenF1 11361",
-        "url": "https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix"
+        "tag": "Weekend",
+        "topic": "weekend",
+        "headline": "Spanish GP Madrid \u00b7 Fri\u2013Sun Sep 11\u201313 (Madring debut)",
+        "snippet": "Round 14. Madring debut. Not a timing feed.",
+        "meta": "F1.com Spain timetable \u00b7 Jolpica R14",
+        "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
       },
       {
         "tag": "WDC",
         "topic": "wdc",
         "headline": "WDC: ANT 267 \u00b7 RUS 201 \u00b7 HAM 191",
-        "snippet": "Drivers' standings after Monza. Stewards NFA; classification unchanged.",
-        "meta": "F1.com \u00b7 standings",
+        "snippet": "Drivers' standings after R13.",
+        "meta": "Standings after R13",
         "url": "https://en.wikipedia.org/wiki/2026_Formula_One_World_Championship"
       },
       {
-        "tag": "Next",
-        "topic": "next",
-        "headline": "Next: Spanish GP Madrid \u00b7 Fri\u2013Sun Sep 11\u201313",
-        "snippet": "Round 14. Madrid. Not a timing feed.",
-        "meta": "Calendar",
+        "tag": "Race",
+        "topic": "race",
+        "headline": "Race Sun 7:00 AM MT (57 laps)",
+        "snippet": "Spanish GP Madrid \u00b7 Madring. Not a timing feed.",
+        "meta": "F1.com Spain timetable \u00b7 Jolpica R14",
         "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
       }
     ],

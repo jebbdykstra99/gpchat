@@ -1822,7 +1822,7 @@
     if (/^Grid$/i.test(tag)) return true;
     if (/^Quali$/i.test(tag)) return true;
     if (/Gasly P1/i.test(head) || /Gasly pole/i.test(head)) return true;
-    if (/Race Sun 7:00/i.test(blob)) return true;
+    if (/Race Sun 7:00/i.test(blob) && !/57 laps/i.test(blob)) return true;
     if (/back(\s+of\s+the)?\s+(the\s+)?grid|back row|→ back/i.test(blob) && /PU/i.test(blob)) return true;
     if (/OpenF1 11357|session_key 11357/i.test(blob)) return true;
     return false;
