@@ -170,11 +170,21 @@
   ],
   "sessionSeeds": [
     {
+      "id": "madrid-fp2",
+      "name": "Pace Note",
+      "handle": "pacenote",
+      "text": "FP2\u2019s in the books \u2014 who looked like they figured Madring out?",
+      "hours": 0,
+      "likes": 11,
+      "replies": 3,
+      "session": true
+    },
+    {
       "id": "madrid-seat",
       "name": "Grid Seat",
       "handle": "gridseat",
       "text": "Who are you sitting with this week in Madrid \u2014 driver, team, or both?",
-      "hours": 0,
+      "hours": 1,
       "likes": 12,
       "replies": 3,
       "session": true
@@ -184,7 +194,7 @@
       "name": "Lap One",
       "handle": "lapone",
       "text": "First Spanish GP in Madrid \u2014 what do you want to see on lap 1?",
-      "hours": 1,
+      "hours": 2,
       "likes": 9,
       "replies": 2,
       "session": true
@@ -194,7 +204,7 @@
       "name": "Gap Watch",
       "handle": "gapwatch",
       "text": "After Monza: Antonelli\u2019s still out front. Who\u2019s your pick to close the gap here?",
-      "hours": 2,
+      "hours": 3,
       "likes": 14,
       "replies": 4,
       "session": true
@@ -203,11 +213,21 @@
   "seedNote": "sample \u2014 not mixed into the live feed. sessionSeeds pin at the top of the live room.",
   "seed": [
     {
+      "id": "madrid-fp2",
+      "name": "Pace Note",
+      "handle": "pacenote",
+      "text": "FP2\u2019s in the books \u2014 who looked like they figured Madring out?",
+      "hours": 0,
+      "likes": 11,
+      "replies": 3,
+      "session": true
+    },
+    {
       "id": "madrid-seat",
       "name": "Grid Seat",
       "handle": "gridseat",
       "text": "Who are you sitting with this week in Madrid \u2014 driver, team, or both?",
-      "hours": 0,
+      "hours": 1,
       "likes": 12,
       "replies": 3,
       "session": true
@@ -217,7 +237,7 @@
       "name": "Lap One",
       "handle": "lapone",
       "text": "First Spanish GP in Madrid \u2014 what do you want to see on lap 1?",
-      "hours": 1,
+      "hours": 2,
       "likes": 9,
       "replies": 2,
       "session": true
@@ -227,7 +247,7 @@
       "name": "Gap Watch",
       "handle": "gapwatch",
       "text": "After Monza: Antonelli\u2019s still out front. Who\u2019s your pick to close the gap here?",
-      "hours": 2,
+      "hours": 3,
       "likes": 14,
       "replies": 4,
       "session": true
@@ -558,33 +578,25 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Pre-day",
-    "meta": "Pre-day",
-    "footer": "F1.com Spain timetable + Jolpica R14/Madring + standings after R13. Not a news ingest. Not official FIA. Not live timing.",
+    "kicker": "FP2",
+    "meta": "FP2",
+    "footer": "FP2 result + F1.com Spain timetable \u00b7 Jolpica R14/Madring. Not a news ingest. Not official FIA. Not live timing.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
-    "maxCards": 3,
+    "maxCards": 2,
     "cmo": {
       "title": "Spanish GP Madrid \u00b7 Madring",
-      "state": "Pre-day",
-      "next": "Fri\u2013Sun Sep 11\u201313"
+      "state": "FP2",
+      "next": "Race Sun 7:00 AM MT"
     },
     "outbound": [
       {
-        "tag": "Weekend",
-        "topic": "weekend",
-        "headline": "Spanish GP Madrid \u00b7 Fri\u2013Sun Sep 11\u201313 (Madring debut)",
-        "snippet": "Round 14. Madring debut. Not a timing feed.",
-        "meta": "F1.com Spain timetable \u00b7 Jolpica R14",
+        "tag": "FP2",
+        "topic": "fp2",
+        "headline": "Antonelli tops FP2 \u2014 1:33.662",
+        "snippet": "Spanish GP Madrid \u00b7 Madring. Not a timing feed.",
+        "meta": "FP2",
         "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
-      },
-      {
-        "tag": "WDC",
-        "topic": "wdc",
-        "headline": "WDC: ANT 267 \u00b7 RUS 201 \u00b7 HAM 191",
-        "snippet": "Drivers' standings after R13.",
-        "meta": "Standings after R13",
-        "url": "https://en.wikipedia.org/wiki/2026_Formula_One_World_Championship"
       },
       {
         "tag": "Race",
@@ -597,7 +609,7 @@
     ],
     "porch": {
       "topic": "porch",
-      "prompt": "Madrid weekend \u2014 box or stay out?",
+      "prompt": "FP2\u2019s done \u2014 box or stay out?",
       "options": [
         "Box",
         "Stay out"
