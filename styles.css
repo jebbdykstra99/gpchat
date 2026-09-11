@@ -959,8 +959,25 @@ body.legal-page {
   cursor: pointer;
 }
 .porch-btn:hover { background: rgba(255,255,255,0.16); }
+.porch-btn-picked {
+  border-color: var(--accent);
+  background: rgba(225, 6, 0, 0.28);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.porch-tally {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #8aa0b0;
+  margin: 0.28rem 0 0.1rem;
+}
 .news-page-list .porch-btn {
   border-color: var(--border);
   background: #fff;
   color: var(--text);
 }
+.news-page-list .porch-btn-picked {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(192, 54, 44, 0.08);
+}
+.news-page-list .porch-tally { color: var(--text-muted); }
