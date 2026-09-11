@@ -1055,7 +1055,8 @@
       '.news-page-list .porch-btn{border-color:var(--border,#c9d5de);background:#fff;color:var(--text,#12202c);}' +
       '.news-page-list .porch-btn:hover{border-color:var(--accent,#c0362c);color:var(--accent,#c0362c);}' +
       '.news-page-list .news-follow-btn{border-color:var(--accent,#c0362c);color:var(--accent,#c0362c);}' +
-      '.news-page-list .news-follow-btn.is-following{background:var(--accent,#c0362c);color:#fff;border-color:var(--accent,#c0362c);}';
+      '.news-page-list .news-follow-btn.is-following{background:var(--accent,#c0362c);color:#fff;border-color:var(--accent,#c0362c);}' +
+      '[data-porch-dwell] .news-item-porch{padding-top:1.25rem;padding-bottom:1.25rem;}';
     document.head.appendChild(st);
   }
 
@@ -1850,6 +1851,143 @@
   }
 
   var f1RefreshTimer = null;
+  var PORCH_DWELL_DEFAULT_MS = 9000;
+  var porchDwellActive = false;
+  var porchDwellPaused = false;
+  var porchDwellTimer = null;
+  var porchDwellRemaining = 0;
+  var porchDwellTickAt = 0;
+  var porchDwellPendingItems = null;
+  var porchDwellHoverBound = false;
+
+  function porchDwellMs() {
+    var porch = railCfg().porch || {};
+    var n = parseInt(porch.dwellMs, 10);
+    if (isNaN(n)) n = PORCH_DWELL_DEFAULT_MS;
+    return n;
+  }
+
+  function porchDwellSessionKey() {
+    return 'subx.porchDwell.' + (SITE_ID || 'site');
+  }
+
+  function porchDwellDoneThisSession() {
+    try { return sessionStorage.getItem(porchDwellSessionKey()) === '1'; } catch (e) { return false; }
+  }
+
+  function markPorchDwellDone() {
+    try { sessionStorage.setItem(porchDwellSessionKey(), '1'); } catch (e) { /* private mode */ }
+  }
+
+  function porchEnabled() {
+    var porch = railCfg().porch;
+    return !!(porch && porch.options && porch.options.length);
+  }
+
+  function shouldPorchDwell() {
+    return porchEnabled() && porchDwellMs() > 0 && !porchDwellDoneThisSession();
+  }
+
+  function railHasItems() {
+    var rail = document.getElementById('news-feed') || document.getElementById('news-page-list');
+    return !!(rail && rail.querySelector('.news-item'));
+  }
+
+  function setPorchDwellAttr(on) {
+    ['news-feed', 'news-page-list', 'right-panel'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (on) el.setAttribute('data-porch-dwell', '1');
+      else el.removeAttribute('data-porch-dwell');
+    });
+  }
+
+  function isPorchDwellHovered() {
+    var ids = ['right-panel', 'news-page-list'];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      try { if (el && el.matches(':hover')) return true; } catch (e) {}
+    }
+    return false;
+  }
+
+  function bindPorchDwellHover() {
+    if (porchDwellHoverBound) return;
+    porchDwellHoverBound = true;
+    ['right-panel', 'news-page-list'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('pointerenter', pausePorchDwell);
+      el.addEventListener('pointerleave', resumePorchDwell);
+    });
+  }
+
+  function seedRail() {
+    var extra = outboundCards();
+    paintRail(extra.length ? extra.slice(0, railNwsSlots()) : []);
+  }
+
+  function commitRail(items) {
+    if (porchDwellActive) {
+      porchDwellPendingItems = items;
+      return;
+    }
+    paintRail(items);
+  }
+
+  function schedulePorchDwell() {
+    if (porchDwellTimer) clearTimeout(porchDwellTimer);
+    porchDwellTickAt = Date.now();
+    porchDwellTimer = setTimeout(finishPorchDwell, Math.max(0, porchDwellRemaining));
+  }
+
+  function pausePorchDwell() {
+    if (!porchDwellActive || porchDwellPaused) return;
+    porchDwellPaused = true;
+    porchDwellRemaining -= (Date.now() - porchDwellTickAt);
+    if (porchDwellRemaining < 0) porchDwellRemaining = 0;
+    if (porchDwellTimer) {
+      clearTimeout(porchDwellTimer);
+      porchDwellTimer = null;
+    }
+  }
+
+  function resumePorchDwell() {
+    if (!porchDwellActive || !porchDwellPaused) return;
+    porchDwellPaused = false;
+    schedulePorchDwell();
+  }
+
+  function finishPorchDwell() {
+    if (!porchDwellActive) return;
+    porchDwellActive = false;
+    porchDwellPaused = false;
+    if (porchDwellTimer) {
+      clearTimeout(porchDwellTimer);
+      porchDwellTimer = null;
+    }
+    setPorchDwellAttr(false);
+    var items = porchDwellPendingItems;
+    porchDwellPendingItems = null;
+    if (items && items.length) paintRail(items);
+    else seedRail();
+  }
+
+  function startPorchDwell() {
+    if (porchDwellActive || !shouldPorchDwell()) return;
+    markPorchDwellDone();
+    porchDwellActive = true;
+    porchDwellPaused = false;
+    porchDwellRemaining = porchDwellMs();
+    setPorchDwellAttr(true);
+    bindPorchDwellHover();
+    if (isPorchDwellHovered()) {
+      porchDwellPaused = true;
+      porchDwellTickAt = Date.now();
+      return;
+    }
+    schedulePorchDwell();
+  }
 
   function renderTrends(quiet) {
     var liveFetch = null;
@@ -1858,20 +1996,31 @@
     else if (railKind() === 'f1-calendar') liveFetch = fetchF1Cards;
     else if (railUsesNws()) liveFetch = fetchNwsCards;
     if (!liveFetch) {
-      paintRail(outboundCards().slice(0, railNwsSlots()));
+      if (!quiet && !railHasItems() && shouldPorchDwell()) {
+        paintRail([]);
+        startPorchDwell();
+      }
+      commitRail(outboundCards().slice(0, railNwsSlots()));
       return;
     }
-    if (!quiet) paintRail([]);
+    if (!quiet && !railHasItems()) {
+      if (shouldPorchDwell()) {
+        paintRail([]);
+        startPorchDwell();
+      } else {
+        seedRail();
+      }
+    }
     liveFetch().then(function (cards) {
       var extra = outboundCards();
       var merged = railKind() === 'f1-calendar'
         ? mergeF1Rail(cards, extra)
         : (cards || []).concat(extra);
-      if (merged.length) paintRail(merged.slice(0, railNwsSlots()));
-      else paintRail(fallbackTrendCards());
+      if (merged.length) commitRail(merged.slice(0, railNwsSlots()));
+      else commitRail(fallbackTrendCards());
     }).catch(function (err) {
       console.warn(railKind() || 'rail', err);
-      paintRail(fallbackTrendCards());
+      commitRail(fallbackTrendCards());
     });
     if (railKind() === 'f1-calendar' && !f1RefreshTimer) {
       f1RefreshTimer = setInterval(function () {
@@ -1911,6 +2060,7 @@
   }
 
   function porchPick(option) {
+    finishPorchDwell();
     var line = porchLine(option);
     if (!line || line === '.') return;
     if (!isLiveUser()) {
