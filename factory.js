@@ -948,16 +948,19 @@
 
     if (currentTab === 'following') {
       el.innerHTML = '<div class="post-empty soon-panel"><strong>Following — Soon.</strong> There is no follows graph in this preview. The live room is on For You.</div>';
+      refreshPorchUi();
       return;
     }
 
     var seeds = sessionSeedPosts();
     if (liveError && !seeds.length) {
       el.innerHTML = '<div class="post-empty">Live feed could not load. The error is in the compose line above — this is not an empty room.</div>';
+      refreshPorchUi();
       return;
     }
     if (!liveReady && !seeds.length) {
       el.innerHTML = '<div class="post-empty">Connecting to the live feed…</div>';
+      refreshPorchUi();
       return;
     }
 
@@ -971,6 +974,7 @@
     if (!posts.length) {
       var empty = (site && site.emptyState) || 'This room is empty. Sign in to post. Guest can browse only.';
       el.innerHTML = '<div class="post-empty">' + escapeHtml(empty) + '</div>';
+      refreshPorchUi();
       return;
     }
 
@@ -979,6 +983,7 @@
       return renderPost(p, false) + kids.map(function (r) { return renderPost(r, true); }).join('');
     }).join('');
     highlightDeepPost();
+    refreshPorchUi();
   }
 
   var RAIL_MAX = 3;
@@ -1021,8 +1026,11 @@
       headline: prompt,
       topic: porch.topic || porch.followId || 'porch'
     };
+    var last = lastPorchPick();
     var btns = porch.options.map(function (opt) {
-      return '<button type="button" class="porch-btn" data-porch="' + escapeHtml(opt) + '">' + escapeHtml(opt) + '</button>';
+      var picked = last && String(opt) === last ? ' porch-btn-picked' : '';
+      var aria = picked ? ' aria-pressed="true"' : ' aria-pressed="false"';
+      return '<button type="button" class="porch-btn' + picked + '" data-porch="' + escapeHtml(opt) + '"' + aria + '>' + escapeHtml(opt) + '</button>';
     }).join('');
     return '<div class="news-item news-item-porch">' +
       renderFollowBtn(porchCard) +
@@ -1030,6 +1038,7 @@
       '<div class="news-item-headline">' + escapeHtml(prompt) + '</div>' +
       '<div class="news-item-snippet">Pick a side. Posts to this room.</div>' +
       '<div class="porch-btns">' + btns + '</div>' +
+      '<div class="porch-tally" aria-live="polite">' + escapeHtml(porchTallyLine()) + '</div>' +
       '<div class="news-item-meta">This room</div>' +
     '</div>';
   }
@@ -1051,9 +1060,13 @@
       '.porch-btn{font:inherit;font-size:0.78rem;font-weight:600;padding:0.35rem 0.8rem;border-radius:999px;' +
         'border:1px solid rgba(255,255,255,0.22);background:rgba(255,255,255,0.08);color:#f0f4f7;cursor:pointer;}' +
       '.porch-btn:hover{background:rgba(255,255,255,0.16);}' +
+      '.porch-btn-picked{border-color:var(--accent,#e10600);background:rgba(225,6,0,0.28);box-shadow:inset 0 0 0 1px var(--accent,#e10600);}' +
+      '.porch-tally{font-size:0.75rem;line-height:1.4;color:#8aa0b0;margin:0.28rem 0 0.1rem;}' +
       '.news-page-list .news-item{background:var(--surface,#f4f7fa);border:1px solid var(--border,#c9d5de);border-radius:10px;padding:1.05rem 1.15rem;}' +
       '.news-page-list .porch-btn{border-color:var(--border,#c9d5de);background:#fff;color:var(--text,#12202c);}' +
       '.news-page-list .porch-btn:hover{border-color:var(--accent,#c0362c);color:var(--accent,#c0362c);}' +
+      '.news-page-list .porch-btn-picked{border-color:var(--accent,#c0362c);color:var(--accent,#c0362c);background:rgba(192,54,44,0.08);}' +
+      '.news-page-list .porch-tally{color:var(--text-muted,#4a5f66);}' +
       '.news-page-list .news-follow-btn{border-color:var(--accent,#c0362c);color:var(--accent,#c0362c);}' +
       '.news-page-list .news-follow-btn.is-following{background:var(--accent,#c0362c);color:#fff;border-color:var(--accent,#c0362c);}' +
       '[data-porch-dwell] .news-item-porch{padding-top:1.25rem;padding-bottom:1.25rem;}';
@@ -2029,8 +2042,103 @@
     }
   }
 
+  function porchPrompt() {
+    return String((railCfg().porch || {}).prompt || 'Porch').trim() || 'Porch';
+  }
+
+  function porchPromptStem() {
+    return porchPrompt().replace(/[?]+$/, '').trim();
+  }
+
+  function porchPickStorageKey() {
+    return (SITE_ID || 'room') + ':porchPick';
+  }
+
+  function lastPorchPick() {
+    try { return sessionStorage.getItem(porchPickStorageKey()) || ''; } catch (e) { return ''; }
+  }
+
+  function rememberPorchPick(option) {
+    var opt = String(option || '').trim();
+    if (!opt) return;
+    try { sessionStorage.setItem(porchPickStorageKey(), opt); } catch (e) { /* private mode */ }
+  }
+
   function porchLine(option) {
-    return String(option || '').trim().replace(/\.+$/, '') + '.';
+    var opt = String(option || '').trim().replace(/\.+$/, '');
+    if (!opt) return '';
+    var prompt = porchPrompt();
+    var line = 'Porch · ' + prompt + ' → ' + opt;
+    if (line.length > 280) line = line.slice(0, 280);
+    return line;
+  }
+
+  function porchOptionFromText(text) {
+    var raw = String(text || '').replace(/\s+/g, ' ').trim().replace(/\.+$/, '');
+    if (!raw) return '';
+    var porch = railCfg().porch || {};
+    var options = porch.options || [];
+    var stem = porchPromptStem().toLowerCase();
+    var i;
+    for (i = 0; i < options.length; i++) {
+      var opt = String(options[i] || '').trim();
+      if (!opt) continue;
+      var canonical = porchLine(opt).replace(/\.+$/, '');
+      if (raw === canonical) return opt;
+      var alt = (porchPromptStem() + ': ' + opt).replace(/\s+/g, ' ').trim();
+      if (raw.toLowerCase() === alt.toLowerCase()) return opt;
+      if (raw === opt) return opt;
+    }
+    var arrow = raw.indexOf('→');
+    if (arrow < 0) arrow = raw.indexOf('->');
+    if (arrow >= 0) {
+      var left = raw.slice(0, arrow).toLowerCase();
+      var right = raw.slice(arrow).replace(/^→\s*|^->\s*/, '').trim();
+      if (stem && left.indexOf(stem) !== -1) {
+        for (i = 0; i < options.length; i++) {
+          if (right === String(options[i] || '').trim()) return options[i];
+        }
+      }
+    }
+    return '';
+  }
+
+  function porchTallyCounts() {
+    var porch = railCfg().porch || {};
+    var options = porch.options || [];
+    var counts = {};
+    var i;
+    for (i = 0; i < options.length; i++) counts[options[i]] = 0;
+    var posts = livePosts || [];
+    for (i = 0; i < posts.length; i++) {
+      var post = posts[i];
+      if (!post || post.parentId) continue;
+      var opt = porchOptionFromText(post.text);
+      if (opt && Object.prototype.hasOwnProperty.call(counts, opt)) counts[opt] += 1;
+    }
+    return counts;
+  }
+
+  function porchTallyLine() {
+    var porch = railCfg().porch || {};
+    var options = porch.options || [];
+    var counts = porchTallyCounts();
+    return options.map(function (opt) {
+      return String(opt) + ' ' + (counts[opt] || 0);
+    }).join(' · ');
+  }
+
+  function refreshPorchUi() {
+    var nodes = document.querySelectorAll('.news-item-porch');
+    if (!nodes.length) return;
+    var html = porchCardHtml();
+    if (!html) return;
+    for (var i = 0; i < nodes.length; i++) {
+      var wrap = document.createElement('div');
+      wrap.innerHTML = html;
+      var next = wrap.firstElementChild;
+      if (next && nodes[i].parentNode) nodes[i].parentNode.replaceChild(next, nodes[i]);
+    }
   }
 
   function fillCompose(text) {
@@ -2062,7 +2170,9 @@
   function porchPick(option) {
     finishPorchDwell();
     var line = porchLine(option);
-    if (!line || line === '.') return;
+    if (!line) return;
+    rememberPorchPick(option);
+    refreshPorchUi();
     if (!isLiveUser()) {
       go('home');
       fillCompose(line);
@@ -2075,6 +2185,7 @@
     composeErr('');
     addRoomTextPost(line).then(function () {
       composeErr('Posted.');
+      refreshPorchUi();
     }).catch(function (e) {
       composeErr((e && e.message) ? e.message : 'Could not post.');
     });
