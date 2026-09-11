@@ -610,6 +610,7 @@
     "porch": {
       "topic": "porch",
       "prompt": "FP2\u2019s done \u2014 box or stay out?",
+      "dwellMs": 9000,
       "options": [
         "Box",
         "Stay out"
