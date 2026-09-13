@@ -170,11 +170,21 @@
   ],
   "sessionSeeds": [
     {
+      "id": "madrid-grid",
+      "name": "Grid Seat",
+      "handle": "gridseat",
+      "text": "Norris snuck pole by eleven thousandths \u2014 who are you sitting with for lights out?",
+      "hours": 0,
+      "likes": 14,
+      "replies": 4,
+      "session": true
+    },
+    {
       "id": "madrid-fp2",
       "name": "Pace Note",
       "handle": "pacenote",
       "text": "FP2\u2019s in the books \u2014 who looked like they figured Madring out?",
-      "hours": 0,
+      "hours": 1,
       "likes": 11,
       "replies": 3,
       "session": true
@@ -184,7 +194,7 @@
       "name": "Grid Seat",
       "handle": "gridseat",
       "text": "Who are you sitting with this week in Madrid \u2014 driver, team, or both?",
-      "hours": 1,
+      "hours": 2,
       "likes": 12,
       "replies": 3,
       "session": true
@@ -194,7 +204,7 @@
       "name": "Lap One",
       "handle": "lapone",
       "text": "First Spanish GP in Madrid \u2014 what do you want to see on lap 1?",
-      "hours": 2,
+      "hours": 3,
       "likes": 9,
       "replies": 2,
       "session": true
@@ -204,7 +214,7 @@
       "name": "Gap Watch",
       "handle": "gapwatch",
       "text": "After Monza: Antonelli\u2019s still out front. Who\u2019s your pick to close the gap here?",
-      "hours": 3,
+      "hours": 4,
       "likes": 14,
       "replies": 4,
       "session": true
@@ -213,11 +223,21 @@
   "seedNote": "sample \u2014 not mixed into the live feed. sessionSeeds pin at the top of the live room.",
   "seed": [
     {
+      "id": "madrid-grid",
+      "name": "Grid Seat",
+      "handle": "gridseat",
+      "text": "Norris snuck pole by eleven thousandths \u2014 who are you sitting with for lights out?",
+      "hours": 0,
+      "likes": 14,
+      "replies": 4,
+      "session": true
+    },
+    {
       "id": "madrid-fp2",
       "name": "Pace Note",
       "handle": "pacenote",
       "text": "FP2\u2019s in the books \u2014 who looked like they figured Madring out?",
-      "hours": 0,
+      "hours": 1,
       "likes": 11,
       "replies": 3,
       "session": true
@@ -227,7 +247,7 @@
       "name": "Grid Seat",
       "handle": "gridseat",
       "text": "Who are you sitting with this week in Madrid \u2014 driver, team, or both?",
-      "hours": 1,
+      "hours": 2,
       "likes": 12,
       "replies": 3,
       "session": true
@@ -237,7 +257,7 @@
       "name": "Lap One",
       "handle": "lapone",
       "text": "First Spanish GP in Madrid \u2014 what do you want to see on lap 1?",
-      "hours": 2,
+      "hours": 3,
       "likes": 9,
       "replies": 2,
       "session": true
@@ -247,7 +267,7 @@
       "name": "Gap Watch",
       "handle": "gapwatch",
       "text": "After Monza: Antonelli\u2019s still out front. Who\u2019s your pick to close the gap here?",
-      "hours": 3,
+      "hours": 4,
       "likes": 14,
       "replies": 4,
       "session": true
@@ -578,42 +598,50 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "FP2",
-    "meta": "FP2",
-    "footer": "FP2 result + F1.com Spain timetable \u00b7 Jolpica R14/Madring. Not a news ingest. Not official FIA. Not live timing.",
+    "kicker": "Grid",
+    "meta": "Grid",
+    "footer": "Starting grid + F1.com Spain timetable \u00b7 Jolpica R14/Madring. Not a news ingest. Not official FIA. Not live timing.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
-    "maxCards": 2,
+    "maxCards": 3,
     "cmo": {
       "title": "Spanish GP Madrid \u00b7 Madring",
-      "state": "FP2",
+      "state": "Grid",
       "next": "Race Sun 7:00 AM MT"
     },
     "outbound": [
       {
-        "tag": "FP2",
-        "topic": "fp2",
-        "headline": "Antonelli tops FP2 \u2014 1:33.662",
+        "tag": "Grid",
+        "topic": "grid",
+        "headline": "Norris pole / front-row NOR\u2013ANT",
         "snippet": "Spanish GP Madrid \u00b7 Madring. Not a timing feed.",
-        "meta": "FP2",
+        "meta": "Grid",
         "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
       },
       {
         "tag": "Race",
         "topic": "race",
-        "headline": "Race Sun 7:00 AM MT (57 laps)",
+        "headline": "Race Sun 7:00 AM MT \u00b7 57 laps",
         "snippet": "Spanish GP Madrid \u00b7 Madring. Not a timing feed.",
         "meta": "F1.com Spain timetable \u00b7 Jolpica R14",
+        "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
+      },
+      {
+        "tag": "Grid",
+        "topic": "grid",
+        "headline": "Sainz +3 \u2192 P20 \u00b7 Stroll back-grid",
+        "snippet": "Spanish GP Madrid \u00b7 Madring. Not a timing feed.",
+        "meta": "Grid",
         "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
       }
     ],
     "porch": {
       "topic": "porch",
-      "prompt": "FP2\u2019s done \u2014 box or stay out?",
+      "prompt": "Who are you sitting with for lights out?",
       "dwellMs": 9000,
       "options": [
-        "Box",
-        "Stay out"
+        "Norris",
+        "Antonelli"
       ]
     }
   }

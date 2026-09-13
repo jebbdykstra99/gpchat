@@ -1829,7 +1829,9 @@
     var head = String(card.headline || '');
     var snip = String(card.snippet || '');
     var blob = head + ' ' + snip;
-    if (/^FP2$/i.test(tag) && !/1:33\.662/.test(head)) return true;
+    if (/Norris pole|front-row NOR|Sainz \+3|Stroll back-grid/i.test(head)) return false;
+    if (/Race Sun 7:00/i.test(blob) && /57 laps/i.test(blob)) return false;
+    if (/^FP2$/i.test(tag) || /1:33\.662/.test(head) || /Antonelli tops FP2/i.test(head)) return true;
     if (/1:22\.559/.test(head) && /Lec|Ant/i.test(head)) return true;
     if (/Russell/i.test(head) && /1:22/.test(head) && !/pole|P2/i.test(head)) return true;
     if (/FP2/i.test(snip) && /Russell/i.test(head + snip) && !/pole/i.test(head)) return true;
