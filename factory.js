@@ -601,6 +601,7 @@
     syncEarlyWelcome();
     syncChatChrome();
     syncTopicFollowButtons();
+    syncStoriesTray();
   }
 
   function earlyWelcomeOn() {
@@ -3640,6 +3641,8 @@
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
+      if (closeStoriesViewer()) { e.preventDefault(); return; }
+      if (closeStoriesComposer()) { e.preventDefault(); return; }
       const picker = document.getElementById('chat-user-picker');
       if (picker && !picker.hidden) { e.preventDefault(); hideDmPicker(); return; }
       const shareOv = document.getElementById('share-sheet');
@@ -3841,6 +3844,745 @@
     });
   }
 
+  var STORIES_TTL_MS = 24 * 60 * 60 * 1000;
+  var STORIES_PER_DAY = 6;
+  var STORIES_TEXT_MAX = 280;
+  var STORIES_CAPTION_MAX = 140;
+  var liveStories = [];
+  var storiesUnsub = null;
+  var storiesWired = false;
+  var storyFile = null;
+  var storyFileUrl = null;
+  var storyType = 'text';
+  var storyViewerList = [];
+  var storyViewerIdx = 0;
+  var storyViewerTimer = null;
+  var storyViewerPrevFocus = null;
+  var storyViewerOnKey = null;
+
+  function storiesCfg() {
+    return (site && site.stories) || {};
+  }
+  function storiesOn() {
+    return !!(storiesCfg().enabled);
+  }
+  function storiesMaxBytes() {
+    var n = parseInt(storiesCfg().maxBytes, 10);
+    return n > 0 ? n : 8000000;
+  }
+  function storiesMaxSeconds() {
+    var n = parseInt(storiesCfg().maxSeconds, 10);
+    return n > 0 ? n : 15;
+  }
+  function storiesReduceMotion() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (e) { return false; }
+  }
+  function storiesLocalHost() {
+    var h = (location.hostname || '').toLowerCase();
+    return h === 'localhost' || h === '127.0.0.1';
+  }
+  function storiesSeenKey() {
+    return 'subx.storiesSeen.' + (SITE_ID || '');
+  }
+  function storiesSeenMap() {
+    try { return JSON.parse(sessionStorage.getItem(storiesSeenKey()) || '{}') || {}; }
+    catch (e) { return {}; }
+  }
+  function markStoriesSeen(ids) {
+    var map = storiesSeenMap();
+    (ids || []).forEach(function (id) { if (id) map[id] = 1; });
+    try { sessionStorage.setItem(storiesSeenKey(), JSON.stringify(map)); } catch (e) { /* private mode */ }
+  }
+  function groupHasUnseen(stories) {
+    var seen = storiesSeenMap();
+    return (stories || []).some(function (s) { return !seen[s.id]; });
+  }
+  function storiesQuotaKey() {
+    var d = new Date();
+    var day = d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate();
+    return 'subx.storiesQuota.' + (SITE_ID || '') + '.' + (liveUid() || 'x') + '.' + day;
+  }
+  function storiesPostedToday() {
+    try { return parseInt(localStorage.getItem(storiesQuotaKey()) || '0', 10) || 0; }
+    catch (e) { return 0; }
+  }
+  function bumpStoriesQuota() {
+    try { localStorage.setItem(storiesQuotaKey(), String(storiesPostedToday() + 1)); }
+    catch (e) { /* private mode */ }
+  }
+  function findStory(id) {
+    for (var i = 0; i < liveStories.length; i++) if (liveStories[i].id === id) return liveStories[i];
+    return null;
+  }
+  function mapStory(doc) {
+    var d = doc.data() || {};
+    var uid = d.authorUid || '';
+    var created = d.createdAt && d.createdAt.toMillis ? d.createdAt.toMillis() : Date.now();
+    var exp = d.expiresAt && d.expiresAt.toMillis ? d.expiresAt.toMillis() : (created + STORIES_TTL_MS);
+    return {
+      id: doc.id,
+      siteId: d.siteId || '',
+      authorUid: uid,
+      name: humanName(d, uid),
+      handle: humanHandle(d, uid),
+      type: d.type || 'text',
+      text: d.text || '',
+      mediaUrl: d.mediaUrl || '',
+      mediaContentType: d.mediaContentType || '',
+      ms: created,
+      expiresAtMs: exp,
+      likeCount: d.likeCount || 0,
+      likedBy: d.likes || {}
+    };
+  }
+  function storyGroups() {
+    var now = Date.now();
+    var byUid = {};
+    var order = [];
+    liveStories.forEach(function (s) {
+      if (s.siteId && s.siteId !== SITE_ID) return;
+      if (s.expiresAtMs && s.expiresAtMs <= now) return;
+      var uid = s.authorUid || s.id;
+      if (!byUid[uid]) {
+        byUid[uid] = [];
+        order.push(uid);
+      }
+      byUid[uid].push(s);
+    });
+    order.forEach(function (uid) {
+      byUid[uid].sort(function (a, b) { return (a.ms || 0) - (b.ms || 0); });
+    });
+    order.sort(function (a, b) {
+      var lastA = byUid[a][byUid[a].length - 1].ms || 0;
+      var lastB = byUid[b][byUid[b].length - 1].ms || 0;
+      return lastB - lastA;
+    });
+    var me = liveUid();
+    if (me && byUid[me]) {
+      order = [me].concat(order.filter(function (u) { return u !== me; }));
+    }
+    return order.map(function (uid) {
+      return { uid: uid, stories: byUid[uid] };
+    });
+  }
+  function ensureStoriesTray() {
+    var el = document.getElementById('stories-tray');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'stories-tray';
+    el.className = 'stories-tray';
+    el.setAttribute('role', 'list');
+    el.setAttribute('aria-label', 'Stories');
+    el.hidden = true;
+    var compose = document.getElementById('thoughts-compose-wrap');
+    var feed = document.getElementById('thoughts-feed');
+    if (compose && compose.parentNode) {
+      var after = compose.nextSibling;
+      var welcome = document.getElementById('early-welcome');
+      if (welcome && welcome.parentNode === compose.parentNode) after = welcome.nextSibling;
+      compose.parentNode.insertBefore(el, after);
+    } else if (feed && feed.parentNode) {
+      feed.parentNode.insertBefore(el, feed);
+    } else {
+      return el;
+    }
+    return el;
+  }
+  function storiesErr(msg) {
+    var el = document.getElementById('stories-composer-err');
+    if (el) el.textContent = msg || '';
+  }
+  function revokeStoryFileUrl() {
+    if (storyFileUrl) {
+      try { URL.revokeObjectURL(storyFileUrl); } catch (e) {}
+      storyFileUrl = null;
+    }
+  }
+  function setStoryType(type) {
+    storyType = type === 'image' || type === 'video' ? type : 'text';
+    document.querySelectorAll('[data-story-type]').forEach(function (btn) {
+      btn.classList.toggle('is-on', btn.getAttribute('data-story-type') === storyType);
+    });
+    var text = document.getElementById('stories-composer-text');
+    var caption = document.getElementById('stories-composer-caption');
+    var imgIn = document.getElementById('stories-composer-image');
+    var vidIn = document.getElementById('stories-composer-video');
+    if (text) text.hidden = storyType !== 'text';
+    if (caption) caption.hidden = storyType === 'text';
+    if (imgIn) imgIn.hidden = storyType !== 'image';
+    if (vidIn) vidIn.hidden = storyType !== 'video';
+    if (storyType === 'text') {
+      storyFile = null;
+      revokeStoryFileUrl();
+      var prev = document.getElementById('stories-composer-preview');
+      if (prev) {
+        prev.classList.remove('is-on');
+        prev.innerHTML = '';
+      }
+    }
+  }
+  function previewStoryFile(file) {
+    var prev = document.getElementById('stories-composer-preview');
+    if (!prev) return;
+    revokeStoryFileUrl();
+    storyFileUrl = URL.createObjectURL(file);
+    prev.classList.add('is-on');
+    if ((file.type || '').indexOf('video/') === 0) {
+      prev.innerHTML = '<video src="' + storyFileUrl + '" muted playsinline controls></video>';
+    } else {
+      prev.innerHTML = '<img src="' + storyFileUrl + '" alt="">';
+    }
+  }
+  function probeStoryVideo(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var v = document.createElement('video');
+      v.preload = 'metadata';
+      v.onloadedmetadata = function () {
+        var dur = v.duration;
+        URL.revokeObjectURL(url);
+        if (!isFinite(dur) || dur <= 0) {
+          reject(new Error('Could not read that clip.'));
+          return;
+        }
+        if (dur > storiesMaxSeconds() + 0.35) {
+          reject(new Error('Clips must be ' + storiesMaxSeconds() + ' seconds or shorter.'));
+          return;
+        }
+        resolve(dur);
+      };
+      v.onerror = function () {
+        URL.revokeObjectURL(url);
+        reject(new Error('Could not read that clip.'));
+      };
+      v.src = url;
+    });
+  }
+  function onStoryFileChosen(file) {
+    if (!file) return;
+    storiesErr('');
+    if (file.size > storiesMaxBytes()) {
+      storiesErr('Keep the file under ' + Math.round(storiesMaxBytes() / 1000000) + ' MB.');
+      return;
+    }
+    if (storyType === 'image') {
+      if (!isProbablyImage(file) || isVideoFile(file)) {
+        storiesErr('Use a photo (jpeg, png, gif, or webp).');
+        return;
+      }
+      storyFile = file;
+      previewStoryFile(file);
+      return;
+    }
+    if (storyType === 'video') {
+      var t = (file.type || '').toLowerCase();
+      var okType = t === 'video/mp4' || t === 'video/webm' || /\.(mp4|webm)$/i.test(file.name || '');
+      if (!okType) {
+        storiesErr('Use a short mp4 or webm clip.');
+        return;
+      }
+      probeStoryVideo(file).then(function () {
+        storyFile = file;
+        previewStoryFile(file);
+      }).catch(function (e) {
+        storyFile = null;
+        storiesErr((e && e.message) ? e.message : 'Could not use that clip.');
+      });
+    }
+  }
+  function ensureStoriesComposer() {
+    var ov = document.getElementById('stories-composer');
+    if (ov) return ov;
+    ov = document.createElement('div');
+    ov.id = 'stories-composer';
+    ov.className = 'stories-composer-overlay';
+    ov.hidden = true;
+    ov.innerHTML =
+      '<div class="stories-composer" role="dialog" aria-modal="true" aria-labelledby="stories-composer-title">' +
+        '<h2 id="stories-composer-title">Add a story</h2>' +
+        '<p class="stories-composer-note">Lives 24 hours on this room only. Text, a photo, or a short clip.</p>' +
+        '<div class="stories-composer-types">' +
+          '<button type="button" data-story-type="text" class="is-on">Text</button>' +
+          '<button type="button" data-story-type="image">Photo</button>' +
+          '<button type="button" data-story-type="video">Clip</button>' +
+        '</div>' +
+        '<textarea id="stories-composer-text" maxlength="' + STORIES_TEXT_MAX + '" placeholder="What is happening on the grid right now?"></textarea>' +
+        '<input class="stories-composer-file" id="stories-composer-image" type="file" accept="image/jpeg,image/png,image/gif,image/webp,.jpg,.jpeg,.png,.gif,.webp" hidden>' +
+        '<input class="stories-composer-file" id="stories-composer-video" type="file" accept="video/mp4,video/webm,.mp4,.webm" hidden>' +
+        '<div class="stories-composer-preview" id="stories-composer-preview"></div>' +
+        '<input class="stories-composer-caption" id="stories-composer-caption" maxlength="' + STORIES_CAPTION_MAX + '" placeholder="Caption (optional)" hidden>' +
+        '<div class="stories-composer-err" id="stories-composer-err" role="status"></div>' +
+        '<div class="stories-composer-bar">' +
+          '<button type="button" class="stories-composer-close" id="stories-composer-close">Cancel</button>' +
+          '<button type="button" class="stories-composer-post" id="stories-composer-post">Share story</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', function (e) {
+      if (e.target === ov) closeStoriesComposer();
+    });
+    ov.querySelectorAll('[data-story-type]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        setStoryType(btn.getAttribute('data-story-type'));
+        storiesErr('');
+        if (storyType === 'image') {
+          var imgIn = document.getElementById('stories-composer-image');
+          if (imgIn) imgIn.hidden = false;
+        }
+        if (storyType === 'video') {
+          var vidIn = document.getElementById('stories-composer-video');
+          if (vidIn) vidIn.hidden = false;
+        }
+      });
+    });
+    var imgIn = document.getElementById('stories-composer-image');
+    var vidIn = document.getElementById('stories-composer-video');
+    if (imgIn) imgIn.addEventListener('change', function () { onStoryFileChosen(imgIn.files && imgIn.files[0]); });
+    if (vidIn) vidIn.addEventListener('change', function () { onStoryFileChosen(vidIn.files && vidIn.files[0]); });
+    var closeBtn = document.getElementById('stories-composer-close');
+    if (closeBtn) closeBtn.addEventListener('click', function () { closeStoriesComposer(); });
+    var postBtn = document.getElementById('stories-composer-post');
+    if (postBtn) postBtn.addEventListener('click', submitStory);
+    return ov;
+  }
+  function openStoriesComposer(force) {
+    if (!storiesOn()) return;
+    if (!force && !requireVerified('add a story')) return;
+    if (!force && storiesPostedToday() >= STORIES_PER_DAY) {
+      composeErr('Easy — a few stories a day is enough. Try again tomorrow.');
+      return;
+    }
+    ensureStoriesComposer();
+    setStoryType('text');
+    storyFile = null;
+    revokeStoryFileUrl();
+    var text = document.getElementById('stories-composer-text');
+    var caption = document.getElementById('stories-composer-caption');
+    var imgIn = document.getElementById('stories-composer-image');
+    var vidIn = document.getElementById('stories-composer-video');
+    if (text) text.value = '';
+    if (caption) caption.value = '';
+    if (imgIn) imgIn.value = '';
+    if (vidIn) vidIn.value = '';
+    storiesErr('');
+    var ov = document.getElementById('stories-composer');
+    if (ov) ov.hidden = false;
+  }
+  function closeStoriesComposer() {
+    var ov = document.getElementById('stories-composer');
+    if (!ov || ov.hidden) return false;
+    ov.hidden = true;
+    storyFile = null;
+    revokeStoryFileUrl();
+    return true;
+  }
+  function uploadStoryMedia(file, uid, storyId) {
+    if (!fbStorage) return Promise.reject(new Error('Storage not ready'));
+    var ext = (file.name.split('.').pop() || (storyType === 'video' ? 'mp4' : 'jpg')).toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+    var path = 'stories/' + SITE_ID + '/' + uid + '/' + storyId + '.' + ext;
+    var ref = fbStorage.ref(path);
+    var ctype = file.type || (storyType === 'video' ? 'video/mp4' : 'image/jpeg');
+    return new Promise(function (resolve, reject) {
+      var task = ref.put(file, { contentType: ctype });
+      task.on('state_changed', function () {}, reject, function () {
+        task.snapshot.ref.getDownloadURL().then(resolve).catch(reject);
+      });
+    });
+  }
+  function submitStory() {
+    if (!requireVerified('add a story')) return;
+    if (!fbDb) { storiesErr('Stories are not connected.'); return; }
+    if (siteKilled) { storiesErr('This room is paused.'); return; }
+    if (storiesPostedToday() >= STORIES_PER_DAY) {
+      storiesErr('Easy — a few stories a day is enough.');
+      return;
+    }
+    var live = fbAuth && fbAuth.currentUser;
+    if (!live) return;
+    var textEl = document.getElementById('stories-composer-text');
+    var capEl = document.getElementById('stories-composer-caption');
+    var body = ((textEl && textEl.value) || '').trim().slice(0, STORIES_TEXT_MAX);
+    var caption = ((capEl && capEl.value) || '').trim().slice(0, STORIES_CAPTION_MAX);
+    if (storyType === 'text' && !body) {
+      storiesErr('Write a short card, or switch to photo / clip.');
+      return;
+    }
+    if ((storyType === 'image' || storyType === 'video') && !storyFile) {
+      storiesErr(storyType === 'video' ? 'Choose a short mp4 or webm clip.' : 'Choose a photo.');
+      return;
+    }
+    var btn = document.getElementById('stories-composer-post');
+    if (btn) btn.disabled = true;
+    storiesErr(storyFile ? 'Uploading…' : '');
+    var docRef = fbDb.collection('stories').doc();
+    var wait = (storyType === 'video' && storyFile)
+      ? probeStoryVideo(storyFile)
+      : Promise.resolve(null);
+    wait.then(function () {
+      return storyFile ? uploadStoryMedia(storyFile, live.uid, docRef.id) : Promise.resolve('');
+    }).then(function (mediaUrl) {
+      var disp = (currentUser && currentUser.name) || live.displayName || (live.email || 'member').split('@')[0] || 'Member';
+      var handle = (currentUser && currentUser.handle) || String(disp).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'member';
+      var now = firebase.firestore.Timestamp.now();
+      var doc = {
+        siteId: SITE_ID,
+        authorUid: live.uid,
+        authorName: disp,
+        authorHandle: handle,
+        type: storyType,
+        createdAt: now,
+        expiresAt: firebase.firestore.Timestamp.fromMillis(now.toMillis() + STORIES_TTL_MS),
+        likeCount: 0
+      };
+      if (storyType === 'text') doc.text = body;
+      else if (caption) doc.text = caption;
+      if (mediaUrl) {
+        doc.mediaUrl = mediaUrl;
+        doc.mediaContentType = (storyFile && storyFile.type) || (storyType === 'video' ? 'video/mp4' : 'image/jpeg');
+      }
+      return docRef.set(doc);
+    }).then(function () {
+      bumpStoriesQuota();
+      if (btn) btn.disabled = false;
+      closeStoriesComposer();
+      composeErr('Story is up for 24 hours.');
+    }).catch(function (e) {
+      if (btn) btn.disabled = false;
+      storiesErr((e && e.message) ? e.message : 'Could not share that story.');
+    });
+  }
+  function clearStoryViewerTimer() {
+    if (storyViewerTimer) {
+      clearTimeout(storyViewerTimer);
+      storyViewerTimer = null;
+    }
+  }
+  function closeStoriesViewer() {
+    var el = document.getElementById('stories-viewer');
+    if (!el || el.hidden) return false;
+    clearStoryViewerTimer();
+    if (storyViewerOnKey) {
+      document.removeEventListener('keydown', storyViewerOnKey, true);
+      storyViewerOnKey = null;
+    }
+    var vid = el.querySelector('video');
+    if (vid) {
+      try { vid.pause(); } catch (e) {}
+      vid.removeAttribute('src');
+    }
+    el.hidden = true;
+    document.body.style.overflow = '';
+    var prev = storyViewerPrevFocus;
+    storyViewerPrevFocus = null;
+    if (prev && prev.focus) {
+      try { prev.focus(); } catch (e2) {}
+    }
+    return true;
+  }
+  function storyAdvanceMs(story) {
+    if (storiesReduceMotion()) return 0;
+    if (!story || story.type === 'video') return 0;
+    return 5500;
+  }
+  function paintStoryViewer() {
+    var el = document.getElementById('stories-viewer');
+    if (!el) return;
+    var story = storyViewerList[storyViewerIdx];
+    if (!story) { closeStoriesViewer(); return; }
+    markStoriesSeen([story.id]);
+    var segs = storyViewerList.map(function (_, i) {
+      var cls = i < storyViewerIdx ? ' is-done' : (i === storyViewerIdx ? ' is-active' : '');
+      var dur = storyAdvanceMs(storyViewerList[i]);
+      var style = (i === storyViewerIdx && dur) ? ('animation-duration:' + dur + 'ms') : '';
+      return '<div class="stories-progress-seg' + cls + '"><span class="stories-progress-fill" style="' + style + '"></span></div>';
+    }).join('');
+    var ago = Math.max(0, Math.round((Date.now() - (story.ms || Date.now())) / 3600000));
+    var when = ago < 1 ? 'now' : (ago + 'h');
+    var media = '';
+    if (story.type === 'image' && story.mediaUrl) {
+      media = '<img src="' + escapeHtml(story.mediaUrl) + '" alt="">';
+    } else if (story.type === 'video' && story.mediaUrl) {
+      var auto = storiesReduceMotion() ? '' : ' autoplay';
+      media = '<video src="' + escapeHtml(story.mediaUrl) + '" playsinline' + auto + ' controls></video>';
+    } else {
+      media = '<div class="stories-text-card"><p>' + escapeHtml(story.text || '') + '</p></div>';
+    }
+    var caption = (story.type !== 'text' && story.text)
+      ? '<div class="stories-caption">' + escapeHtml(story.text) + '</div>'
+      : '';
+    var canReport = isLiveUser() && story.authorUid && story.authorUid !== liveUid();
+    el.innerHTML =
+      '<div class="stories-viewer-card">' +
+        '<div class="stories-progress">' + segs + '</div>' +
+        '<div class="stories-viewer-top">' +
+          '<div class="stories-avatar" style="width:32px;height:32px;font-size:0.65rem;background:' + colorFor(story.handle) + '">' + escapeHtml(initials(story.name)) + '</div>' +
+          '<div><div class="stories-viewer-who">' + escapeHtml(story.name) + '</div>' +
+          '<div class="stories-viewer-meta">@' + escapeHtml(story.handle) + ' · ' + when + '</div></div>' +
+          '<button type="button" class="stories-viewer-close" data-story-ui="close" aria-label="Close">&times;</button>' +
+        '</div>' +
+        '<div class="stories-stage">' +
+          media + caption +
+          '<button type="button" class="stories-stage-hit prev" data-story-ui="prev" aria-label="Previous"></button>' +
+          '<button type="button" class="stories-stage-hit next" data-story-ui="next" aria-label="Next"></button>' +
+        '</div>' +
+        '<div class="stories-viewer-actions">' +
+          (canReport ? '<button type="button" data-story-ui="report">Report</button>' : '') +
+          (story.authorUid === liveUid() ? '<button type="button" data-story-ui="delete">Delete</button>' : '') +
+        '</div>' +
+      '</div>';
+    clearStoryViewerTimer();
+    var ms = storyAdvanceMs(story);
+    if (ms) {
+      storyViewerTimer = setTimeout(function () { stepStoriesViewer(1); }, ms);
+    }
+    var vid = el.querySelector('video');
+    if (vid && !storiesReduceMotion()) {
+      vid.addEventListener('ended', function () { stepStoriesViewer(1); });
+    }
+    syncStoriesTray();
+  }
+  function stepStoriesViewer(dir) {
+    var next = storyViewerIdx + (dir < 0 ? -1 : 1);
+    if (next < 0 || next >= storyViewerList.length) {
+      closeStoriesViewer();
+      syncStoriesTray();
+      return;
+    }
+    storyViewerIdx = next;
+    paintStoryViewer();
+  }
+  function openStoriesViewer(startId) {
+    if (!storiesOn()) return;
+    var flat = [];
+    storyGroups().forEach(function (g) {
+      g.stories.forEach(function (s) { flat.push(s); });
+    });
+    if (!flat.length) return;
+    var idx = 0;
+    if (startId) {
+      for (var i = 0; i < flat.length; i++) if (flat[i].id === startId) { idx = i; break; }
+    }
+    ensureStoriesViewer();
+    storyViewerList = flat;
+    storyViewerIdx = idx;
+    storyViewerPrevFocus = document.activeElement;
+    var el = document.getElementById('stories-viewer');
+    el.hidden = false;
+    document.body.style.overflow = 'hidden';
+    if (!storyViewerOnKey) {
+      storyViewerOnKey = function (e) {
+        if (e.key === 'ArrowRight') { e.preventDefault(); stepStoriesViewer(1); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); stepStoriesViewer(-1); }
+      };
+      document.addEventListener('keydown', storyViewerOnKey, true);
+    }
+    paintStoryViewer();
+  }
+  function openStoriesGroup(uid) {
+    var groups = storyGroups();
+    for (var i = 0; i < groups.length; i++) {
+      if (groups[i].uid === uid && groups[i].stories[0]) {
+        openStoriesViewer(groups[i].stories[0].id);
+        return;
+      }
+    }
+  }
+  function reportStory(id) {
+    if (!requireVerified('report')) return;
+    var story = findStory(id);
+    if (!story || !fbDb) return;
+    fbDb.collection('reports').add({
+      siteId: SITE_ID,
+      storyId: id,
+      postId: 'story:' + id,
+      targetUid: story.authorUid || '',
+      reporterUid: liveUid(),
+      reason: 'abuse',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(function () {
+      composeErr('Reported. Thanks.');
+    }).catch(function (e) {
+      composeErr((e && e.message) ? e.message : 'Could not report.');
+    });
+  }
+  function deleteOwnStory(id) {
+    var story = findStory(id);
+    if (!story) return;
+    var uid = liveUid();
+    if (!uid || story.authorUid !== uid) return;
+    if (!fbDb) return;
+    var chain = Promise.resolve();
+    if (story.mediaUrl && fbStorage) {
+      chain = fbStorage.refFromURL(story.mediaUrl).delete().catch(function (e) {
+        console.warn('story storage delete', e);
+      });
+    }
+    chain.then(function () {
+      return fbDb.collection('stories').doc(id).delete();
+    }).then(function () {
+      closeStoriesViewer();
+      composeErr('Story removed.');
+    }).catch(function (e) {
+      composeErr((e && e.message) ? e.message : 'Could not delete story.');
+    });
+  }
+  function ensureStoriesViewer() {
+    var el = document.getElementById('stories-viewer');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'stories-viewer';
+    el.className = 'stories-viewer';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-label', 'Story');
+    el.hidden = true;
+    document.body.appendChild(el);
+    el.addEventListener('click', function (e) {
+      var act = e.target.closest ? e.target.closest('[data-story-ui]') : null;
+      if (!act) return;
+      var which = act.getAttribute('data-story-ui');
+      var story = storyViewerList[storyViewerIdx];
+      if (which === 'close') closeStoriesViewer();
+      else if (which === 'next') stepStoriesViewer(1);
+      else if (which === 'prev') stepStoriesViewer(-1);
+      else if (which === 'report' && story) reportStory(story.id);
+      else if (which === 'delete' && story) deleteOwnStory(story.id);
+    });
+    return el;
+  }
+  function renderStoriesTray() {
+    if (!storiesOn()) {
+      var stale = document.getElementById('stories-tray');
+      if (stale) stale.hidden = true;
+      return;
+    }
+    var el = ensureStoriesTray();
+    var groups = storyGroups();
+    var signedIn = isLiveUser();
+    var html = '';
+    if (signedIn) {
+      var me = liveUid();
+      var mine = groups.filter(function (g) { return g.uid === me; })[0];
+      html +=
+        '<button type="button" class="stories-item is-add"' +
+          (mine ? ' data-story-uid="' + escapeHtml(me) + '"' : ' data-story-add="1"') +
+          ' aria-label="' + (mine ? 'Your story' : 'Add story') + '">' +
+          '<span class="stories-ring"><span class="stories-avatar" style="background:' +
+            colorFor((currentUser && currentUser.handle) || 'me') + '">' +
+            escapeHtml(initials((currentUser && currentUser.name) || 'Me')) +
+          '</span><span class="stories-add-badge" data-story-add="1">+</span></span>' +
+          '<span class="stories-label">' + (mine ? 'Your story' : 'Add story') + '</span>' +
+        '</button>';
+    }
+    groups.forEach(function (g) {
+      var first = g.stories[0];
+      if (!first) return;
+      if (signedIn && g.uid === liveUid()) return;
+      var unseen = groupHasUnseen(g.stories);
+      html +=
+        '<button type="button" class="stories-item' + (unseen ? '' : ' is-seen') + '" data-story-uid="' +
+          escapeHtml(g.uid) + '" role="listitem">' +
+          '<span class="stories-ring"><span class="stories-avatar" style="background:' + colorFor(first.handle) + '">' +
+            escapeHtml(initials(first.name)) + '</span></span>' +
+          '<span class="stories-label">' + escapeHtml(first.name) + '</span>' +
+        '</button>';
+    });
+    el.innerHTML = html;
+    var emptyGuest = !signedIn && !groups.length;
+    el.hidden = emptyGuest;
+  }
+  function syncStoriesTray() {
+    if (!storiesOn()) {
+      var el = document.getElementById('stories-tray');
+      if (el) el.hidden = true;
+      return;
+    }
+    renderStoriesTray();
+  }
+  function wireStoriesOnce() {
+    if (storiesWired) return;
+    storiesWired = true;
+    document.addEventListener('click', function (e) {
+      var add = e.target.closest ? e.target.closest('[data-story-add]') : null;
+      if (add) {
+        e.preventDefault();
+        openStoriesComposer();
+        return;
+      }
+      var item = e.target.closest ? e.target.closest('[data-story-uid]') : null;
+      if (item) {
+        e.preventDefault();
+        openStoriesGroup(item.getAttribute('data-story-uid'));
+      }
+    });
+  }
+  function listenStories() {
+    if (storiesUnsub) { storiesUnsub(); storiesUnsub = null; }
+    liveStories = [];
+    if (!storiesOn() || !fbDb) {
+      renderStoriesTray();
+      return;
+    }
+    storiesUnsub = fbDb.collection('stories')
+      .where('siteId', '==', SITE_ID)
+      .onSnapshot(function (snap) {
+        var now = Date.now();
+        liveStories = snap.docs.map(mapStory).filter(function (s) {
+          return s.expiresAtMs > now && (!s.siteId || s.siteId === SITE_ID);
+        });
+        renderStoriesTray();
+      }, function (err) {
+        console.warn('stories', err);
+        liveStories = [];
+        renderStoriesTray();
+      });
+  }
+  function initStories() {
+    if (!storiesOn()) return;
+    wireStoriesOnce();
+    ensureStoriesTray();
+    ensureStoriesViewer();
+    renderStoriesTray();
+    listenStories();
+    if (storiesLocalHost()) {
+      window.__storiesDebug = {
+        openCreate: function () { openStoriesComposer(true); },
+        openViewer: openStoriesViewer,
+        showAddTray: function () {
+          var el = ensureStoriesTray();
+          el.hidden = false;
+          el.innerHTML =
+            '<button type="button" class="stories-item is-add" data-story-add="1" aria-label="Add story">' +
+              '<span class="stories-ring"><span class="stories-avatar" style="background:' + colorFor('gpchat') + '">GP</span>' +
+              '<span class="stories-add-badge">+</span></span>' +
+              '<span class="stories-label">Add story</span></button>';
+        },
+        setDemo: function (list) {
+          liveStories = (list || []).map(function (s, i) {
+            return {
+              id: s.id || ('demo-' + i),
+              siteId: SITE_ID,
+              authorUid: s.authorUid || ('demo-' + i),
+              name: s.name || 'gpchat',
+              handle: s.handle || 'gpchat',
+              type: s.type || 'text',
+              text: s.text || '',
+              mediaUrl: s.mediaUrl || '',
+              mediaContentType: s.mediaContentType || '',
+              ms: s.ms || Date.now(),
+              expiresAtMs: Date.now() + STORIES_TTL_MS,
+              likeCount: 0,
+              likedBy: {}
+            };
+          });
+          renderStoriesTray();
+        }
+      };
+    }
+  }
+
   function boot(data) {
     site = data || {};
     SITE_ID = site.siteId || SITE_ID;
@@ -3895,6 +4637,7 @@
     renderSidebarAuth();
     listenLivePosts();
     renderFeed();
+    initStories();
 
     window.addEventListener('hashchange', applyRoute);
     try { deepPostId = new URLSearchParams(location.search).get('p') || ''; } catch (e) { deepPostId = ''; }
