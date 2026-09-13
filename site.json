@@ -168,6 +168,11 @@
       "snippet": "Tire temps, a stall on the grid, P1 lights that take forever."
     }
   ],
+  "stories": {
+    "enabled": true,
+    "maxSeconds": 15,
+    "maxBytes": 8000000
+  },
   "sessionSeeds": [
     {
       "id": "madrid-grid",
