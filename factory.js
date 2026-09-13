@@ -1829,12 +1829,13 @@
     var head = String(card.headline || '');
     var snip = String(card.snippet || '');
     var blob = head + ' ' + snip;
-    if (/^FP2$/i.test(tag) && !/1:33\.662/.test(head)) return true;
+    if (/^FP2$/i.test(tag)) return true;
+    if (/1:33\.662/.test(head) || /Antonelli tops FP2/i.test(head)) return true;
     if (/1:22\.559/.test(head) && /Lec|Ant/i.test(head)) return true;
     if (/Russell/i.test(head) && /1:22/.test(head) && !/pole|P2/i.test(head)) return true;
     if (/FP2/i.test(snip) && /Russell/i.test(head + snip) && !/pole/i.test(head)) return true;
-    if (/^Grid$/i.test(tag)) return true;
-    if (/^Quali$/i.test(tag)) return true;
+    if (/^Grid$/i.test(tag) && /PU|Monza|Gasly/i.test(blob)) return true;
+    if (/^Quali$/i.test(tag) && /Monza|Gasly|yellow-flag lottery/i.test(blob)) return true;
     if (/Gasly P1/i.test(head) || /Gasly pole/i.test(head)) return true;
     if (/Race Sun 7:00/i.test(blob) && !/57 laps/i.test(blob)) return true;
     if (/back(\s+of\s+the)?\s+(the\s+)?grid|back row|→ back/i.test(blob) && /PU/i.test(blob)) return true;
