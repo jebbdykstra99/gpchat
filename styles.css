@@ -1031,6 +1031,12 @@ body.legal-page {
 .stories-item.is-add .stories-ring {
   background: var(--border);
 }
+.stories-item.is-add.has-story .stories-ring {
+  background: linear-gradient(135deg, var(--accent), var(--teal));
+}
+.stories-item.is-add.has-story.is-seen .stories-ring {
+  background: var(--silver);
+}
 .stories-avatar {
   width: 52px;
   height: 52px;
@@ -1043,6 +1049,18 @@ body.legal-page {
   align-items: center;
   justify-content: center;
   border: 2px solid var(--surface);
+  overflow: hidden;
+  position: relative;
+}
+.stories-avatar-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+  background: #1a2a30;
 }
 .stories-add-badge {
   position: absolute;
@@ -1057,6 +1075,7 @@ body.legal-page {
   font-weight: 700;
   line-height: 16px;
   border: 2px solid var(--surface);
+  z-index: 1;
 }
 .stories-label {
   display: block;
