@@ -3931,11 +3931,103 @@
       text: d.text || '',
       mediaUrl: d.mediaUrl || '',
       mediaContentType: d.mediaContentType || '',
+      posterUrl: d.posterUrl || d.thumbUrl || '',
       ms: created,
       expiresAtMs: exp,
       likeCount: d.likeCount || 0,
       likedBy: d.likes || {}
     };
+  }
+  function latestStory(stories) {
+    return (stories && stories.length) ? stories[stories.length - 1] : null;
+  }
+  function storyIsVideo(story) {
+    if (!story) return false;
+    if (story.type === 'video') return true;
+    return (story.mediaContentType || '').indexOf('video/') === 0;
+  }
+  function storyIsImage(story) {
+    if (!story) return false;
+    if (story.type === 'image') return true;
+    return (story.mediaContentType || '').indexOf('image/') === 0;
+  }
+  function storyPosterUrl(story) {
+    if (!story) return '';
+    return story.posterUrl || story.thumbUrl || '';
+  }
+  function storyTrayAvatarHtml(story, fallbackName, fallbackHandle) {
+    var name = (story && story.name) || fallbackName || 'Me';
+    var handle = (story && story.handle) || fallbackHandle || 'me';
+    var label = escapeHtml(initials(name));
+    var bg = colorFor(handle);
+    var url = story && story.mediaUrl;
+    var poster = storyPosterUrl(story);
+    var mediaSrc = poster || url;
+    if (mediaSrc && (storyIsImage(story) || storyIsVideo(story) || poster)) {
+      var inner;
+      if (storyIsVideo(story) && !poster) {
+        inner = '<video class="stories-avatar-media" src="' + escapeHtml(url) +
+          '" muted playsinline preload="metadata" aria-hidden="true"></video>';
+      } else {
+        inner = '<img class="stories-avatar-media" src="' + escapeHtml(mediaSrc) +
+          '" alt="" aria-hidden="true">';
+      }
+      return '<span class="stories-avatar is-media" style="background:' + bg + '">' +
+        label + inner + '</span>';
+    }
+    return '<span class="stories-avatar" style="background:' + bg + '">' + label + '</span>';
+  }
+  function primeStoryTrayThumbs(root) {
+    if (!root) return;
+    root.querySelectorAll('img.stories-avatar-media').forEach(function (img) {
+      img.addEventListener('error', function () { img.remove(); });
+    });
+    root.querySelectorAll('video.stories-avatar-media').forEach(function (v) {
+      var paint = function () {
+        try {
+          if (v.readyState < 1) return;
+          var t = 0.05;
+          if (isFinite(v.duration) && v.duration > 0.25) t = Math.min(0.15, v.duration * 0.08);
+          if (Math.abs((v.currentTime || 0) - t) > 0.02) v.currentTime = t;
+        } catch (e) {}
+      };
+      var swapPoster = function () {
+        paint();
+        var data = '';
+        try {
+          if (!v.videoWidth) return;
+          var c = document.createElement('canvas');
+          c.width = 96;
+          c.height = 96;
+          var ctx = c.getContext('2d');
+          if (!ctx) return;
+          var side = Math.min(v.videoWidth, v.videoHeight);
+          var sx = (v.videoWidth - side) / 2;
+          var sy = (v.videoHeight - side) / 2;
+          ctx.drawImage(v, sx, sy, side, side, 0, 0, 96, 96);
+          data = c.toDataURL('image/jpeg', 0.72);
+        } catch (e2) { data = ''; }
+        if (data && data.length > 40 && v.parentNode) {
+          var img = document.createElement('img');
+          img.className = 'stories-avatar-media';
+          img.alt = '';
+          img.setAttribute('aria-hidden', 'true');
+          img.src = data;
+          v.parentNode.replaceChild(img, v);
+        }
+      };
+      v.muted = true;
+      v.playsInline = true;
+      v.addEventListener('loadedmetadata', paint);
+      v.addEventListener('loadeddata', swapPoster);
+      v.addEventListener('seeked', function onSeek() {
+        v.removeEventListener('seeked', onSeek);
+        swapPoster();
+      });
+      v.addEventListener('error', function () { v.remove(); });
+      if (v.readyState >= 2) swapPoster();
+      else if (v.readyState >= 1) paint();
+    });
   }
   function storyGroups() {
     var now = Date.now();
@@ -4461,35 +4553,38 @@
     var el = ensureStoriesTray();
     var groups = storyGroups();
     var signedIn = isLiveUser();
+    var me = liveUid() || '';
     var html = '';
     if (signedIn) {
-      var me = liveUid();
       var mine = groups.filter(function (g) { return g.uid === me; })[0];
+      var myLatest = mine ? latestStory(mine.stories) : null;
+      var hasMine = !!myLatest;
+      var mineSeen = hasMine && !groupHasUnseen(mine.stories);
+      var addCls = 'stories-item is-add' + (hasMine ? ' has-story' : '') + (mineSeen ? ' is-seen' : '');
       html +=
-        '<button type="button" class="stories-item is-add"' +
-          (mine ? ' data-story-uid="' + escapeHtml(me) + '"' : ' data-story-add="1"') +
-          ' aria-label="' + (mine ? 'Your story' : 'Add story') + '">' +
-          '<span class="stories-ring"><span class="stories-avatar" style="background:' +
-            colorFor((currentUser && currentUser.handle) || 'me') + '">' +
-            escapeHtml(initials((currentUser && currentUser.name) || 'Me')) +
-          '</span><span class="stories-add-badge" data-story-add="1">+</span></span>' +
-          '<span class="stories-label">' + (mine ? 'Your story' : 'Add story') + '</span>' +
+        '<button type="button" class="' + addCls + '"' +
+          (hasMine ? ' data-story-uid="' + escapeHtml(me) + '"' : ' data-story-add="1"') +
+          ' aria-label="' + (hasMine ? 'Your story' : 'Add story') + '">' +
+          '<span class="stories-ring">' +
+            storyTrayAvatarHtml(myLatest, (currentUser && currentUser.name) || 'Me', (currentUser && currentUser.handle) || 'me') +
+            '<span class="stories-add-badge" data-story-add="1">+</span></span>' +
+          '<span class="stories-label">' + (hasMine ? 'Your story' : 'Add story') + '</span>' +
         '</button>';
     }
     groups.forEach(function (g) {
-      var first = g.stories[0];
-      if (!first) return;
-      if (signedIn && g.uid === liveUid()) return;
+      var latest = latestStory(g.stories);
+      if (!latest) return;
+      if (signedIn && g.uid === me) return;
       var unseen = groupHasUnseen(g.stories);
       html +=
         '<button type="button" class="stories-item' + (unseen ? '' : ' is-seen') + '" data-story-uid="' +
           escapeHtml(g.uid) + '" role="listitem">' +
-          '<span class="stories-ring"><span class="stories-avatar" style="background:' + colorFor(first.handle) + '">' +
-            escapeHtml(initials(first.name)) + '</span></span>' +
-          '<span class="stories-label">' + escapeHtml(first.name) + '</span>' +
+          '<span class="stories-ring">' + storyTrayAvatarHtml(latest) + '</span>' +
+          '<span class="stories-label">' + escapeHtml(latest.name) + '</span>' +
         '</button>';
     });
     el.innerHTML = html;
+    primeStoryTrayThumbs(el);
     var emptyGuest = !signedIn && !groups.length;
     el.hidden = emptyGuest;
   }
@@ -4571,6 +4666,7 @@
               text: s.text || '',
               mediaUrl: s.mediaUrl || '',
               mediaContentType: s.mediaContentType || '',
+              posterUrl: s.posterUrl || s.thumbUrl || '',
               ms: s.ms || Date.now(),
               expiresAtMs: Date.now() + STORIES_TTL_MS,
               likeCount: 0,
