@@ -175,14 +175,24 @@
   },
   "sessionSeeds": [
     {
-      "id": "madrid-grid",
-      "name": "Lights Out",
-      "handle": "lightsout",
-      "text": "Norris snuck pole by eleven thousandths — who are you sitting with for lights out?",
+      "id": "madrid-race-post",
+      "name": "Race+Post",
+      "handle": "racepost",
+      "text": "Result's on the rail — what are we arguing about first?",
       "hours": 0,
       "likes": 11,
       "replies": 3,
       "session": true
+    },
+    {
+      "id": "madrid-grid",
+      "name": "Lights Out",
+      "handle": "lightsout",
+      "text": "Norris snuck pole by eleven thousandths — who are you sitting with for lights out?",
+      "hours": 1,
+      "likes": 11,
+      "replies": 3,
+      "session": false
     },
     {
       "id": "madrid-fp2",
@@ -593,50 +603,50 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Grid",
-    "meta": "Grid",
-    "footer": "Quali grid + F1.com Spain timetable · Jolpica R14/Madring. Not a news ingest. Not official FIA. Not live timing.",
+    "kicker": "Race+Post",
+    "meta": "Race+Post",
+    "footer": "Race result + WDC · provisional FACT. Not a news ingest. Not official FIA. Not live timing.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
       "title": "Spanish GP Madrid · Madring",
-      "state": "Grid",
-      "next": "Race Sun 7:00 AM MT"
+      "state": "Race+Post",
+      "next": "Azerbaijan GP · Sep 24–26"
     },
     "outbound": [
       {
-        "tag": "Grid",
-        "topic": "grid",
-        "headline": "Norris pole / front-row NOR–ANT",
-        "snippet": "Spanish GP Madrid · Madring. Not a timing feed.",
-        "meta": "Grid",
-        "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
-      },
-      {
-        "tag": "Race",
+        "tag": "Result",
         "topic": "race",
-        "headline": "Race Sun 7:00 AM MT · 57 laps",
+        "headline": "Antonelli wins Spanish GP — VER +4.351s · provisional",
         "snippet": "Spanish GP Madrid · Madring. Not a timing feed.",
-        "meta": "F1.com Spain timetable · Jolpica R14",
+        "meta": "Race+Post",
         "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
       },
       {
-        "tag": "Grid",
-        "topic": "grid-back",
-        "headline": "Sainz +3 → P20 · Stroll back-grid",
-        "snippet": "Spanish GP Madrid · Madring. Not a timing feed.",
-        "meta": "Grid",
-        "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
+        "tag": "WDC",
+        "topic": "wdc",
+        "headline": "WDC: ANT 292 · RUS 211 · HAM 191",
+        "snippet": "Spanish GP Madrid · Madring. Provisional standings.",
+        "meta": "Race+Post",
+        "url": "https://en.wikipedia.org/wiki/2026_Formula_One_World_Championship"
+      },
+      {
+        "tag": "Next",
+        "topic": "next",
+        "headline": "Next: Azerbaijan GP · Sep 24–26",
+        "snippet": "Calendar next. Not a timing feed.",
+        "meta": "Race+Post",
+        "url": "https://en.wikipedia.org/wiki/2026_Azerbaijan_Grand_Prix"
       }
     ],
     "porch": {
       "topic": "porch",
-      "prompt": "Who are you sitting with for lights out?",
+      "prompt": "What are we arguing about first?",
       "dwellMs": 9000,
       "options": [
-        "Norris",
-        "Antonelli"
+        "The win",
+        "WDC"
       ]
     }
   }
