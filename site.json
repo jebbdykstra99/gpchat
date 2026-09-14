@@ -605,7 +605,7 @@
     "title": "Room Brief",
     "kicker": "Race+Post",
     "meta": "Race+Post",
-    "footer": "Race result + WDC · provisional FACT. Not a news ingest. Not official FIA. Not live timing.",
+    "footer": "Race result + WDC · Final (FIA Doc 73). Not a news ingest. Not live timing. Subject to routine technical checks.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
@@ -618,9 +618,9 @@
       {
         "tag": "Result",
         "topic": "race",
-        "headline": "Antonelli wins Spanish GP — VER +4.351s · provisional",
+        "headline": "Antonelli wins Spanish GP — VER +4.351s",
         "snippet": "Spanish GP Madrid · Madring. Not a timing feed.",
-        "meta": "Race+Post",
+        "meta": "Race+Post · Final",
         "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
       },
       {
