@@ -175,106 +175,86 @@
   },
   "sessionSeeds": [
     {
-      "id": "madrid-race-post",
-      "name": "Race+Post",
-      "handle": "racepost",
-      "text": "Result's on the rail — what are we arguing about first?",
-      "hours": 0,
-      "likes": 11,
-      "replies": 3,
-      "session": true
-    },
-    {
-      "id": "madrid-grid",
-      "name": "Lights Out",
-      "handle": "lightsout",
-      "text": "Norris snuck pole by eleven thousandths — who are you sitting with for lights out?",
-      "hours": 1,
-      "likes": 11,
-      "replies": 3,
-      "session": false
-    },
-    {
-      "id": "madrid-fp2",
-      "name": "Pace Note",
-      "handle": "pacenote",
-      "text": "FP2’s in the books — who looked like they figured Madring out?",
-      "hours": 4,
-      "likes": 11,
-      "replies": 3,
-      "session": false
-    },
-    {
-      "id": "madrid-seat",
+      "id": "baku-seat",
       "name": "Grid Seat",
       "handle": "gridseat",
-      "text": "Who are you sitting with this week in Madrid — driver, team, or both?",
+      "text": "Who are you sitting with this week in Baku — driver, team, or both?",
       "hours": 1,
       "likes": 12,
       "replies": 3,
       "session": true
     },
     {
-      "id": "madrid-lap1",
+      "id": "baku-walls",
       "name": "Lap One",
       "handle": "lapone",
-      "text": "First Spanish GP in Madrid — what do you want to see on lap 1?",
+      "text": "Baku’s walls, not blank maps — what do you want to see on lap 1?",
       "hours": 2,
       "likes": 9,
       "replies": 2,
       "session": true
     },
     {
-      "id": "madrid-gap",
+      "id": "baku-gap",
       "name": "Gap Watch",
       "handle": "gapwatch",
-      "text": "After Monza: Antonelli’s still out front. Who’s your pick to close the gap here?",
+      "text": "After Madrid: Antonelli’s still out front. Who’s your pick to close the gap in Baku?",
       "hours": 3,
       "likes": 14,
       "replies": 4,
+      "session": true
+    },
+    {
+      "id": "baku-race",
+      "name": "Lights Out",
+      "handle": "lightsout",
+      "text": "Lights out Saturday 5:00 AM MT — who’s walking away happy?",
+      "hours": 0,
+      "likes": 11,
+      "replies": 3,
       "session": true
     }
   ],
   "seedNote": "sample — not mixed into the live feed. sessionSeeds pin at the top of the live room.",
   "seed": [
     {
-      "id": "madrid-fp2",
-      "name": "Pace Note",
-      "handle": "pacenote",
-      "text": "FP2’s in the books — who looked like they figured Madring out?",
-      "hours": 0,
-      "likes": 11,
-      "replies": 3,
-      "session": true
-    },
-    {
-      "id": "madrid-seat",
+      "id": "baku-seat",
       "name": "Grid Seat",
       "handle": "gridseat",
-      "text": "Who are you sitting with this week in Madrid — driver, team, or both?",
+      "text": "Who are you sitting with this week in Baku — driver, team, or both?",
       "hours": 1,
       "likes": 12,
       "replies": 3,
       "session": true
     },
     {
-      "id": "madrid-lap1",
+      "id": "baku-walls",
       "name": "Lap One",
       "handle": "lapone",
-      "text": "First Spanish GP in Madrid — what do you want to see on lap 1?",
+      "text": "Baku’s walls, not blank maps — what do you want to see on lap 1?",
       "hours": 2,
       "likes": 9,
       "replies": 2,
       "session": true
     },
     {
-      "id": "madrid-gap",
+      "id": "baku-gap",
       "name": "Gap Watch",
       "handle": "gapwatch",
-      "text": "After Monza: Antonelli’s still out front. Who’s your pick to close the gap here?",
+      "text": "After Madrid: Antonelli’s still out front. Who’s your pick to close the gap in Baku?",
       "hours": 3,
       "likes": 14,
       "replies": 4,
+      "session": true
+    },
+    {
+      "id": "baku-race",
+      "name": "Lights Out",
+      "handle": "lightsout",
+      "text": "Lights out Saturday 5:00 AM MT — who’s walking away happy?",
+      "hours": 0,
+      "likes": 11,
+      "replies": 3,
       "session": true
     },
     {
@@ -603,51 +583,50 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Azerbaijan week",
-    "meta": "Next up",
-    "footer": "Azerbaijan GP preview · WDC after Spain Final. Not a news ingest. Not live timing. Sources: F1.com calendar + post-Spain standings.",
+    "kicker": "Race+Post",
+    "meta": "Race+Post",
+    "footer": "Race result + WDC · Final (FIA Doc 73). Not a news ingest. Not live timing. Subject to routine technical checks.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
-      "title": "Azerbaijan GP · Baku",
-      "state": "Next up",
-      "next": "Sep 24–26 · race Sat Sep 26"
+      "title": "Spanish GP Madrid · Madring",
+      "state": "Race+Post",
+      "next": "Azerbaijan GP · Sep 24–26"
     },
     "outbound": [
       {
-        "tag": "Next",
-        "topic": "next",
-        "headline": "Next: Azerbaijan GP · Sep 24–26",
-        "snippet": "Baku City Circuit. Walls, not blank maps.",
-        "meta": "Calendar",
-        "url": "https://www.formula1.com/en/racing/2026/azerbaijan"
-      },
-      {
-        "tag": "Race",
+        "tag": "Result",
         "topic": "race",
-        "headline": "Race: Sat Sep 26 · 15:00 Baku (11:00 UTC) · 5:00 AM MT",
-        "snippet": "Lights out Saturday. Source: F1 2026 calendar.",
-        "meta": "Schedule",
-        "url": "https://www.formula1.com/en/racing/2026/azerbaijan"
+        "headline": "Antonelli wins Spanish GP — VER +4.351s",
+        "snippet": "Spanish GP Madrid · Madring. Not a timing feed.",
+        "meta": "Race+Post · Final",
+        "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
       },
       {
         "tag": "WDC",
         "topic": "wdc",
         "headline": "WDC: ANT 292 · RUS 211 · HAM 191",
-        "snippet": "Standings after Spanish GP Final.",
-        "meta": "Post-Spain",
-        "url": "https://www.formula1.com/en/latest/article/formula-1-standings.3xkP5kY5V7"
+        "snippet": "Spanish GP Madrid · Madring. Provisional standings.",
+        "meta": "Race+Post",
+        "url": "https://en.wikipedia.org/wiki/2026_Formula_One_World_Championship"
+      },
+      {
+        "tag": "Next",
+        "topic": "next",
+        "headline": "Next: Azerbaijan GP · Sep 24–26",
+        "snippet": "Calendar next. Not a timing feed.",
+        "meta": "Race+Post",
+        "url": "https://en.wikipedia.org/wiki/2026_Azerbaijan_Grand_Prix"
       }
     ],
     "porch": {
       "topic": "porch",
-      "prompt": "Who are you sitting with in Baku?",
+      "prompt": "What are we arguing about first?",
       "dwellMs": 9000,
       "options": [
-        "Driver",
-        "Team",
-        "Both"
+        "The win",
+        "WDC"
       ]
     }
   }
