@@ -603,50 +603,51 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Race+Post",
-    "meta": "Race+Post",
-    "footer": "Race result + WDC · Final (FIA Doc 73). Not a news ingest. Not live timing. Subject to routine technical checks.",
+    "kicker": "Azerbaijan week",
+    "meta": "Next up",
+    "footer": "Azerbaijan GP preview · WDC after Spain Final. Not a news ingest. Not live timing. Sources: F1.com calendar + post-Spain standings.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
-      "title": "Spanish GP Madrid · Madring",
-      "state": "Race+Post",
-      "next": "Azerbaijan GP · Sep 24–26"
+      "title": "Azerbaijan GP · Baku",
+      "state": "Next up",
+      "next": "Sep 24–26 · race Sat Sep 26"
     },
     "outbound": [
       {
-        "tag": "Result",
+        "tag": "Next",
+        "topic": "next",
+        "headline": "Next: Azerbaijan GP · Sep 24–26",
+        "snippet": "Baku City Circuit. Walls, not blank maps.",
+        "meta": "Calendar",
+        "url": "https://www.formula1.com/en/racing/2026/azerbaijan"
+      },
+      {
+        "tag": "Race",
         "topic": "race",
-        "headline": "Antonelli wins Spanish GP — VER +4.351s",
-        "snippet": "Spanish GP Madrid · Madring. Not a timing feed.",
-        "meta": "Race+Post · Final",
-        "url": "https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix"
+        "headline": "Race: Sat Sep 26 · 15:00 Baku (11:00 UTC) · 5:00 AM MT",
+        "snippet": "Lights out Saturday. Source: F1 2026 calendar.",
+        "meta": "Schedule",
+        "url": "https://www.formula1.com/en/racing/2026/azerbaijan"
       },
       {
         "tag": "WDC",
         "topic": "wdc",
         "headline": "WDC: ANT 292 · RUS 211 · HAM 191",
-        "snippet": "Spanish GP Madrid · Madring. Provisional standings.",
-        "meta": "Race+Post",
-        "url": "https://en.wikipedia.org/wiki/2026_Formula_One_World_Championship"
-      },
-      {
-        "tag": "Next",
-        "topic": "next",
-        "headline": "Next: Azerbaijan GP · Sep 24–26",
-        "snippet": "Calendar next. Not a timing feed.",
-        "meta": "Race+Post",
-        "url": "https://en.wikipedia.org/wiki/2026_Azerbaijan_Grand_Prix"
+        "snippet": "Standings after Spanish GP Final.",
+        "meta": "Post-Spain",
+        "url": "https://www.formula1.com/en/latest/article/formula-1-standings.3xkP5kY5V7"
       }
     ],
     "porch": {
       "topic": "porch",
-      "prompt": "What are we arguing about first?",
+      "prompt": "Who are you sitting with in Baku?",
       "dwellMs": 9000,
       "options": [
-        "The win",
-        "WDC"
+        "Driver",
+        "Team",
+        "Both"
       ]
     }
   }
