@@ -592,32 +592,32 @@
     "cmo": {
       "title": "Azerbaijan GP · Baku",
       "state": "Pre-day",
-      "next": "Azerbaijan GP · Sep 24–26"
+      "next": "Azerbaijan GP · Sep 24–26 · Race Sat 5:00 AM MT"
     },
     "outbound": [
       {
         "tag": "Next",
         "topic": "next",
-        "headline": "Next: Azerbaijan GP · Sep 24–26",
-        "snippet": "Baku City Circuit. Calendar next. Not a timing feed.",
-        "meta": "Pre-day",
-        "url": "https://en.wikipedia.org/wiki/2026_Azerbaijan_Grand_Prix"
-      },
-      {
-        "tag": "Race",
-        "topic": "race",
-        "headline": "Race: Sat Sep 26 · 5:00 AM MT",
-        "snippet": "Lights out 2026-09-26 11:00Z (Jolpica). Not a timing feed.",
+        "headline": "Next — Azerbaijan GP · Sep 24–26 · Race Sat 5:00 AM MT",
+        "snippet": "Baku City Circuit. Pre-day calendar. Not a timing feed.",
         "meta": "Pre-day",
         "url": "https://en.wikipedia.org/wiki/2026_Azerbaijan_Grand_Prix"
       },
       {
         "tag": "WDC",
         "topic": "wdc",
-        "headline": "WDC: ANT 292 · RUS 211 · HAM 191",
-        "snippet": "After Spanish GP. Provisional standings.",
+        "headline": "WDC — Antonelli 292 · Russell 211 · Hamilton 191",
+        "snippet": "After Round 14 (Jolpica). Provisional. Not a live points feed.",
         "meta": "Pre-day",
         "url": "https://en.wikipedia.org/wiki/2026_Formula_One_World_Championship"
+      },
+      {
+        "tag": "Weekend",
+        "topic": "weekend",
+        "headline": "Weekend clock — FP1 Thu 2:30 AM · Quali Fri 6:00 AM · Race Sat 5:00 AM MT",
+        "snippet": "America/Denver. FP2 Thu 6:00 AM · FP3 Fri 2:30 AM. Subject to change.",
+        "meta": "Pre-day",
+        "url": "https://www.formula1.com/en/racing/2026/azerbaijan"
       }
     ],
     "porch": {
