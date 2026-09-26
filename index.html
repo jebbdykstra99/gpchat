@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=14">
+  <link rel="stylesheet" href="styles.css?v=15">
   <link rel="preload" href="site.json?v=45" as="fetch" crossorigin="anonymous">
 </head>
 <body>
@@ -106,6 +106,22 @@
         </a>
       </li>
     </ul>
+
+    <section class="watchlist" id="watchlist" aria-labelledby="watchlist-heading">
+      <div class="watchlist-head">
+        <div>
+          <div class="watchlist-kicker" id="watchlist-kicker">Grid</div>
+          <h2 id="watchlist-heading">Watchlist</h2>
+        </div>
+        <button type="button" class="watchlist-add-btn" id="watchlist-add" hidden aria-expanded="false" aria-controls="watchlist-picker">Add</button>
+      </div>
+      <ul class="watchlist-list" id="watchlist-list"></ul>
+      <p class="watchlist-note" id="watchlist-note" hidden></p>
+      <div class="watchlist-picker" id="watchlist-picker" hidden>
+        <input type="search" class="watchlist-search" id="watchlist-search" placeholder="Search topics" autocomplete="off" aria-label="Search topics to follow">
+        <ul class="watchlist-catalog" id="watchlist-catalog"></ul>
+      </div>
+    </section>
 
     <div class="sidebar-post-wrap">
       <button class="sidebar-post-btn" id="sidebar-post-btn">Post</button>
@@ -364,7 +380,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-  <script src="factory.js?v=42" data-site="site.json?v=45"></script>
+  <script src="factory.js?v=43" data-site="site.json?v=45"></script>
   <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
 </body>
 </html>
