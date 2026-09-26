@@ -13,6 +13,25 @@
   let TRENDS = [];
   let PLACES = [];
   let TOPICS = [];
+  let NESTS = [];
+  let adminNests = [];
+  let userNests = [];
+  let pendingUserNests = {};
+  let currentNest = null;
+  var paintedNestSlug = null;
+  var memberNestsUnsub = null;
+  var nestAddSlugDirty = false;
+
+  // Path segments that must never be a nest. Existing nest slugs are checked live.
+  var NEST_RESERVED = {
+    '': 1, home: 1, feed: 1, thoughts: 1, following: 1, explore: 1,
+    notifications: 1, chat: 1, profile: 1, news: 1, about: 1, terms: 1,
+    privacy: 1, api: 1, admin: 1, watchlist: 1, stories: 1, hot: 1, new: 1,
+    'index.html': 1, 'terms.html': 1, 'privacy.html': 1, 'factory.js': 1,
+    'styles.css': 1, 'site.json': 1, 'robots.txt': 1, 'favicon.svg': 1,
+    'favicon.ico': 1, 'apple-touch-icon.png': 1, 'og.png': 1, '404.html': 1,
+    'app.js': 1, 'taxonomy.json': 1, cname: 1
+  };
 
   let fbAuth = null;
   let fbDb = null;
@@ -698,6 +717,7 @@
     syncChatChrome();
     syncProfile();
     listenBlocks(user.uid);
+    listenMemberNests(user.uid);
     listenConversations();
     restoreCompose(draft);
     if (shouldLand) landInFeedCompose();
@@ -726,6 +746,7 @@
       live: true,
       imageUrl: d.imageUrl || null,
       poll: d.poll || null,
+      nestSlug: d.nestSlug || '',
       topicIds: collectTopicIds(d)
     };
   }
@@ -784,7 +805,7 @@
 
   function highlightSocial(name) {
     document.querySelectorAll('.nav-social-link').forEach(function (l) { l.classList.remove('active'); });
-    const el = document.querySelector('[data-social="' + name + '"]');
+    const el = document.querySelector('.nav-social-link[data-social="' + name + '"]') || document.querySelector('.nav-social-link[data-nest="' + name + '"]');
     if (el) el.classList.add('active');
   }
 
@@ -802,6 +823,512 @@
     window.scrollTo(0, 0);
   }
 
+  function nestSlugNorm(s) {
+    return String(s || '').replace(/^#/, '').trim().toLowerCase();
+  }
+
+  function slugifyNestLabel(label) {
+    return nestSlugNorm(label)
+      .replace(/['’]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+  }
+
+  function nestSlugFromPathname(pathname) {
+    var parts = String(pathname || '').split('/').filter(Boolean);
+    if (!parts.length || parts.length > 1) return '';
+    var first = parts[0];
+    try { first = decodeURIComponent(first); } catch (e) { /* keep */ }
+    first = nestSlugNorm(first);
+    if (!first || NEST_RESERVED[first]) return '';
+    return first;
+  }
+
+  function findNest(slug) {
+    var key = nestSlugNorm(slug);
+    if (!key) return null;
+    for (var i = 0; i < NESTS.length; i++) {
+      if (nestSlugNorm(NESTS[i].slug) === key) return NESTS[i];
+    }
+    return null;
+  }
+
+  function nestSlugError(slug) {
+    var key = nestSlugNorm(slug);
+    if (!key) return 'Add a slug.';
+    if (key.indexOf('/') !== -1) return 'One level only.';
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key)) return 'Use lowercase letters, numbers, and hyphens.';
+    if (key.length < 2 || key.length > 40) return 'Slug must be 2–40 characters.';
+    if (NEST_RESERVED[key]) return 'That slug is reserved.';
+    if (findNest(key)) return 'That room already exists.';
+    return '';
+  }
+
+  function resolveNestFromPath() {
+    return findNest(nestSlugFromPathname(location.pathname));
+  }
+
+  function nestHasActivity(slug) {
+    var key = nestSlugNorm(slug);
+    if (!key) return false;
+    for (var i = 0; i < livePosts.length; i++) {
+      if (nestSlugNorm(livePosts[i].nestSlug) === key) return true;
+    }
+    return false;
+  }
+
+  function nestNavVisible(nest) {
+    if (!nest || !nest.slug) return false;
+    if (nest.nav === false) return false;
+    if (nestHasActivity(nest.slug)) return true;
+    return nest.nav === true;
+  }
+
+  function visibleNests() {
+    return NESTS.filter(nestNavVisible);
+  }
+
+  function nestPath(slug) {
+    var nest = findNest(slug);
+    return nest ? ('/' + nest.slug) : '/';
+  }
+
+  function currentUrl() {
+    return location.pathname + location.search + location.hash;
+  }
+
+  function setUrl(path, hash) {
+    var next = (path || '/') + (location.search || '') + (hash || '');
+    if (currentUrl() === next) { applyRoute(); return; }
+    history.pushState({ path: path }, '', next);
+    applyRoute();
+  }
+
+  function restoreBouncedPath() {
+    try {
+      var raw = sessionStorage.getItem('subx.restorePath');
+      if (!raw) return;
+      sessionStorage.removeItem('subx.restorePath');
+      if (raw.charAt(0) !== '/' || raw.indexOf('//') !== -1) return;
+      history.replaceState(null, '', raw);
+    } catch (e) { /* private mode */ }
+  }
+
+  function mergeNests() {
+    var built = [];
+    var seen = {};
+    function push(n) {
+      if (!n || !n.slug) return;
+      var key = nestSlugNorm(n.slug);
+      if (!key || seen[key]) return;
+      seen[key] = true;
+      built.push(n);
+    }
+    adminNests.forEach(push);
+    userNests.forEach(push);
+    Object.keys(pendingUserNests).forEach(function (k) { push(pendingUserNests[k]); });
+    NESTS = built;
+    if (currentNest) currentNest = findNest(currentNest.slug) || null;
+    if (currentNest || paintedNestSlug) applyNestChrome();
+    else renderNestNav();
+  }
+
+  function absorbUserNests(list) {
+    userNests = list || [];
+    var have = {};
+    userNests.forEach(function (n) { have[nestSlugNorm(n.slug)] = true; });
+    Object.keys(pendingUserNests).forEach(function (k) {
+      if (have[k]) delete pendingUserNests[k];
+    });
+    mergeNests();
+  }
+
+  function listenMemberNests(uid) {
+    if (memberNestsUnsub) {
+      memberNestsUnsub();
+      memberNestsUnsub = null;
+    }
+    userNests = [];
+    pendingUserNests = {};
+    hideNestAddForm();
+    if (!uid || !fbDb || !SITE_ID) {
+      mergeNests();
+      return;
+    }
+    memberNestsUnsub = fbDb.collection('sites').doc(SITE_ID)
+      .collection('memberNests').doc(uid)
+      .collection('rooms')
+      .onSnapshot(function (snap) {
+        var list = [];
+        snap.forEach(function (d) {
+          var data = d.data() || {};
+          var slug = nestSlugNorm(data.slug || d.id);
+          if (!slug) return;
+          list.push({
+            slug: slug,
+            label: String(data.label || slug).slice(0, 40),
+            parent: null,
+            kind: 'user',
+            blurb: typeof data.blurb === 'string' ? data.blurb : '',
+            nav: data.nav !== false,
+            user: true
+          });
+        });
+        absorbUserNests(list);
+      }, function (err) {
+        console.warn('member nests', err);
+        absorbUserNests([]);
+      });
+  }
+
+  function createMemberNest(label, slug) {
+    var uid = liveUid();
+    if (!uid || !fbDb) return Promise.reject(new Error('Sign in to add a room.'));
+    var nest = {
+      slug: slug,
+      label: label,
+      parent: null,
+      kind: 'user',
+      blurb: '',
+      nav: true,
+      user: true
+    };
+    pendingUserNests[slug] = nest;
+    mergeNests();
+    return fbDb.collection('sites').doc(SITE_ID)
+      .collection('memberNests').doc(uid)
+      .collection('rooms').doc(slug)
+      .set({
+        siteId: SITE_ID,
+        ownerUid: uid,
+        slug: slug,
+        label: label,
+        parent: null,
+        kind: 'user',
+        blurb: '',
+        nav: true,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      }).then(function () {
+        goNest(slug);
+      }).catch(function (e) {
+        delete pendingUserNests[slug];
+        mergeNests();
+        if (nestSlugFromPathname(location.pathname) === slug) go('home');
+        throw e;
+      });
+  }
+
+  function nestRailCards(nest) {
+    if (!nest) return [];
+    var cards = [];
+    var room = (site && site.name) || SITE_ID || 'room';
+    if (nest.blurb) {
+      cards.push({
+        tag: nest.kind || 'Nest',
+        headline: nest.label || nest.slug,
+        snippet: nest.blurb,
+        meta: 'Nest · ' + room,
+        url: ''
+      });
+    }
+    var ranks = nest.rankings || [];
+    for (var r = 0; r < ranks.length; r++) {
+      var pack = ranks[r];
+      if (!pack) continue;
+      var items = pack.items || [];
+      var bits = [];
+      for (var i = 0; i < items.length && bits.length < 3; i++) {
+        var it = items[i];
+        if (!it || !it.name) continue;
+        bits.push((it.rank != null ? it.rank + '. ' : '') + it.name);
+      }
+      cards.push({
+        tag: 'Ranking',
+        headline: pack.title || 'Ranking',
+        snippet: bits.join(' · ') || (pack.title || ''),
+        meta: (nest.label || nest.slug) + (items[0] && items[0].priceHint ? ' · ' + items[0].priceHint : ''),
+        url: (items[0] && items[0].url) || ''
+      });
+    }
+    var reviews = nest.reviews || [];
+    for (var v = 0; v < reviews.length; v++) {
+      var rev = reviews[v];
+      if (!rev) continue;
+      cards.push({
+        tag: 'Review',
+        headline: (rev.stars != null ? String(rev.stars) + '★ ' : '') + (rev.subject || 'Review'),
+        snippet: rev.snippet || '',
+        meta: [nest.label || nest.slug, rev.region].filter(Boolean).join(' · '),
+        url: rev.url || ''
+      });
+    }
+    var pins = nest.railPins || [];
+    for (var p = 0; p < pins.length; p++) {
+      var pin = pins[p];
+      if (!pin || !pin.headline) continue;
+      cards.push({
+        tag: pin.tag || 'Pin',
+        headline: pin.headline,
+        snippet: pin.snippet || '',
+        meta: pin.meta || (nest.label || nest.slug),
+        url: pin.url || ''
+      });
+    }
+    return cards;
+  }
+
+  function applyNestRailChrome(nest) {
+    var kicker = 'Nest · ' + ((site && site.name) || SITE_ID || 'room');
+    var title = nest.label || nest.slug;
+    var footer = nest.blurb || 'Nested room. Not a news ingest.';
+    var rk = document.querySelector('.right-panel-kicker');
+    var rt = document.querySelector('.right-panel-title');
+    var rf = document.querySelector('.right-panel-footer p');
+    var nk = document.querySelector('#page-news .page-kicker');
+    var nh = document.querySelector('#page-news h1');
+    if (rk) rk.textContent = kicker;
+    if (nk) nk.textContent = kicker;
+    if (rt) rt.textContent = title;
+    if (nh) nh.textContent = title;
+    if (rf) rf.textContent = footer;
+  }
+
+  function ensureNestChrome() {
+    var el = document.getElementById('nest-chrome');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'nest-chrome';
+    el.className = 'nest-chrome';
+    el.hidden = true;
+    var tabs = document.querySelector('#page-thoughts .thoughts-tabs');
+    if (tabs && tabs.parentNode) tabs.parentNode.insertBefore(el, tabs);
+    return el;
+  }
+
+  function applyNestChrome() {
+    var nest = currentNest;
+    var title = (site && site.name) || SITE_ID || 'room';
+    var tag = (site && site.tagline) || '';
+    document.title = nest
+      ? ((nest.label || nest.slug) + ' — ' + title)
+      : (tag ? (title + ' — ' + tag) : title);
+    var brandSub = document.querySelector('.brand-sub');
+    if (brandSub) brandSub.textContent = nest ? (nest.label || nest.slug) : tag;
+    var input = document.getElementById('thoughts-compose-input');
+    if (input) {
+      var ph = nest
+        ? ('What about ' + (nest.label || nest.slug) + '?')
+        : (input.getAttribute('data-ph') || (site && site.composePlaceholder) || '');
+      if (ph) input.placeholder = ph;
+    }
+    var bar = ensureNestChrome();
+    if (bar) {
+      if (!nest) {
+        bar.hidden = true;
+        bar.innerHTML = '';
+      } else {
+        bar.hidden = false;
+        bar.innerHTML =
+          '<div class="nest-chrome-kicker">Nest</div>' +
+          '<div class="nest-chrome-label">' + escapeHtml(nest.label || nest.slug) + '</div>' +
+          (nest.blurb ? '<div class="nest-chrome-blurb">' + escapeHtml(nest.blurb) + '</div>' : '') +
+          '<a class="nest-chrome-home" href="#home" data-social="home">Back to home room</a>';
+      }
+    }
+    if (nest) {
+      abortPorchForNest();
+      if (paintedNestSlug !== nest.slug) {
+        paintedNestSlug = nest.slug;
+        applyNestRailChrome(nest);
+        paintRail(nestRailCards(nest));
+      }
+    } else if (paintedNestSlug) {
+      paintedNestSlug = null;
+      applyRailChrome();
+      seedRail();
+      renderTrends(true);
+    }
+    refreshNestSurfaces();
+  }
+
+  function hideNestAddForm() {
+    var form = document.getElementById('nav-nest-form');
+    if (form) form.hidden = true;
+    nestAddSlugDirty = false;
+    var label = document.getElementById('nest-add-label');
+    var slug = document.getElementById('nest-add-slug');
+    var err = document.getElementById('nest-add-err');
+    if (label) label.value = '';
+    if (slug) slug.value = '';
+    if (err) err.textContent = '';
+    var btn = document.getElementById('nest-add-save');
+    if (btn) btn.disabled = false;
+  }
+
+  function ensureNestNav() {
+    var nav = document.querySelector('.sidebar nav');
+    var list = document.getElementById('nav-nests');
+    if (list || !nav) return list;
+    list = document.createElement('ul');
+    list.id = 'nav-nests';
+    list.className = 'nav-nests';
+    list.setAttribute('aria-label', 'Nested rooms');
+    list.innerHTML =
+      '<li class="nav-nests-label"><span>Nests</span>' +
+        '<button type="button" class="nav-nest-add" id="nav-nest-add" aria-label="Add a nested room" title="Add a nested room">+</button></li>' +
+      '<li class="nav-nest-form" id="nav-nest-form" hidden>' +
+        '<label>Label<input type="text" id="nest-add-label" maxlength="40" autocomplete="off" placeholder="Room name"></label>' +
+        '<label>Slug<input type="text" id="nest-add-slug" maxlength="40" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="room-name"></label>' +
+        '<p class="nav-nest-form-err" id="nest-add-err" role="status"></p>' +
+        '<button type="button" class="nav-nest-save" id="nest-add-save">Add room</button>' +
+      '</li>';
+    var items = document.createElement('li');
+    var inner = document.createElement('ul');
+    inner.id = 'nav-nests-items';
+    items.appendChild(inner);
+    list.appendChild(items);
+    var mainUl = nav.querySelector('ul');
+    if (mainUl && mainUl.parentNode) mainUl.after(list);
+    else nav.insertBefore(list, nav.firstChild);
+    wireNestAddForm();
+    return list;
+  }
+
+  function wireNestAddForm() {
+    var label = document.getElementById('nest-add-label');
+    var slug = document.getElementById('nest-add-slug');
+    if (!label || label.dataset.wired) return;
+    label.dataset.wired = '1';
+    label.addEventListener('input', function () {
+      if (nestAddSlugDirty || !slug) return;
+      slug.value = slugifyNestLabel(label.value);
+    });
+    if (slug) {
+      slug.addEventListener('input', function () { nestAddSlugDirty = true; });
+      slug.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); submitNestAdd(); }
+      });
+    }
+  }
+
+  function submitNestAdd() {
+    var labelEl = document.getElementById('nest-add-label');
+    var slugEl = document.getElementById('nest-add-slug');
+    var errEl = document.getElementById('nest-add-err');
+    var label = labelEl ? labelEl.value.trim() : '';
+    var slug = slugifyNestLabel(slugEl ? slugEl.value : '');
+    function show(msg) { if (errEl) errEl.textContent = msg || ''; }
+    if (!isLiveUser()) { openAuth('join'); return; }
+    if (!label || label.length > 40) { show('Add a label (40 characters max).'); return; }
+    var slugErr = nestSlugError(slug);
+    if (slugErr) { show(slugErr); return; }
+    if (!requireVerified('add a room')) {
+      if (siteKilled) show('This room is paused.');
+      else show('Verify your email before you add a room.');
+      return;
+    }
+    if (!fbDb) { show('Rooms are not connected.'); return; }
+    var btn = document.getElementById('nest-add-save');
+    if (btn) btn.disabled = true;
+    show('');
+    createMemberNest(label, slug).then(function () {
+      hideNestAddForm();
+    }).catch(function (e) {
+      if (btn) btn.disabled = false;
+      show((e && e.message) ? e.message : 'Could not add that room.');
+    });
+  }
+
+  function renderNestNav() {
+    ensureNestNav();
+    var items = document.getElementById('nav-nests-items');
+    if (!items) return;
+    var shown = visibleNests();
+    var html = '';
+    for (var i = 0; i < shown.length; i++) {
+      var n = shown[i];
+      var active = currentNest && currentNest.slug === n.slug ? ' active' : '';
+      html += '<li><a class="nav-social-link' + active + '" href="' + escapeHtml(nestPath(n.slug)) + '" data-nest="' + escapeHtml(n.slug) + '">' +
+        escapeHtml(n.label || n.slug) + '</a></li>';
+    }
+    items.innerHTML = html;
+  }
+
+  function refreshNestSurfaces() {
+    renderNestNav();
+    ensureExploreNestTab();
+  }
+
+  function nestExploreCards() {
+    return visibleNests().map(function (n) {
+      return {
+        tag: n.kind || 'Nest',
+        title: n.label || n.slug,
+        snippet: n.blurb || ('/' + n.slug),
+        slug: n.slug
+      };
+    });
+  }
+
+  function fillExploreNests(pane, list) {
+    if (!pane) return;
+    var cards = list || nestExploreCards();
+    if (!cards.length) {
+      pane.innerHTML = '<p class="empty-note">' + (list ? 'No nests matched.' : 'No nests in the nav yet.') + '</p>';
+      return;
+    }
+    pane.innerHTML = cards.map(function (c) {
+      return '<a class="explore-card" href="' + escapeHtml(nestPath(c.slug)) + '" data-nest="' + escapeHtml(c.slug) + '">' +
+        '<div class="explore-card-tag">' + escapeHtml(c.tag) + '</div>' +
+        '<div class="explore-card-title">' + escapeHtml(c.title) + '</div>' +
+        '<div class="explore-card-snippet">' + escapeHtml(c.snippet) + '</div></a>';
+    }).join('');
+  }
+
+  function ensureExploreNestTab() {
+    var tabs = document.querySelector('.explore-tabs');
+    var pane = document.getElementById('explore-pane-nests');
+    var tab = document.querySelector('[data-explore-tab="nests"]');
+    var shown = visibleNests();
+    if (!shown.length) {
+      if (tab) tab.hidden = true;
+      if (pane) {
+        pane.hidden = true;
+        pane.classList.remove('active');
+      }
+      return null;
+    }
+    if (!tab && tabs) {
+      tab = document.createElement('button');
+      tab.className = 'thoughts-tab';
+      tab.setAttribute('data-explore-tab', 'nests');
+      tab.setAttribute('type', 'button');
+      tab.textContent = 'Nests';
+      tabs.appendChild(tab);
+    }
+    if (tab) tab.hidden = false;
+    if (!pane) {
+      pane = document.createElement('div');
+      pane.className = 'explore-pane';
+      pane.id = 'explore-pane-nests';
+      var topics = document.getElementById('explore-pane-topics');
+      if (topics && topics.parentNode) topics.parentNode.appendChild(pane);
+    }
+    if (pane) pane.hidden = false;
+    fillExploreNests(pane);
+    return pane;
+  }
+
+  function postNestSlug(parentId) {
+    if (currentNest) return currentNest.slug;
+    if (parentId) {
+      var p = findPost(parentId);
+      if (p && p.nestSlug) return p.nestSlug;
+    }
+    return '';
+  }
+
   function normalizeRoute(route) {
     let id = String(route || '').replace(/^#/, '').trim();
     if (!id) id = 'home';
@@ -809,11 +1336,25 @@
     return id;
   }
   function routeFromHash() { return normalizeRoute(window.location.hash); }
+  function goNest(slug) {
+    var nest = findNest(slug);
+    if (!nest) { setUrl('/', '#home'); return; }
+    setUrl('/' + nest.slug, '#home');
+  }
+  function goRoom() {
+    if (currentNest) goNest(currentNest.slug);
+    else go('home');
+  }
   function go(route) {
     const id = normalizeRoute(route);
-    const hash = '#' + id;
-    if (location.hash === hash) { applyRoute(); return; }
-    location.hash = hash;
+    if (findNest(id)) { goNest(id); return; }
+    if (id === 'home' || id === 'feed' || id === 'thoughts') {
+      setUrl('/', '#home');
+      return;
+    }
+    var slug = nestSlugFromPathname(location.pathname);
+    var path = findNest(slug) ? ('/' + slug) : '/';
+    setUrl(path, '#' + id);
   }
 
   function selectThoughtsTab(tab) {
@@ -830,13 +1371,16 @@
 
   function applyRoute() {
     closeMobileNav();
+    currentNest = resolveNestFromPath();
+    applyNestChrome();
     const raw = routeFromHash();
+    var roomHighlight = currentNest ? currentNest.slug : 'home';
     var topicMatch = /^topic\/([a-z0-9-]{1,80})$/.exec(raw);
     if (topicMatch) {
       focusedTopicId = topicMatch[1];
       closeSocialOverlays();
       showContentPage('thoughts');
-      highlightSocial('home');
+      highlightSocial(roomHighlight);
       currentTab = 'foryou';
       document.querySelectorAll('[data-thoughts-tab]').forEach(function (t) {
         t.classList.toggle('active', t.dataset.thoughtsTab === 'foryou');
@@ -860,14 +1404,14 @@
     if (raw === 'hot' || raw === 'new') {
       closeSocialOverlays();
       showContentPage('thoughts');
-      highlightSocial('home');
+      highlightSocial(roomHighlight);
       selectThoughtsTab(raw);
       return;
     }
     if (raw === 'home' || raw === 'feed' || raw === 'thoughts') {
       closeSocialOverlays();
       showContentPage('thoughts');
-      highlightSocial('home');
+      highlightSocial(roomHighlight);
       selectThoughtsTab('foryou');
       return;
     }
@@ -883,7 +1427,7 @@
     }
     closeSocialOverlays();
     showContentPage('thoughts');
-    highlightSocial('home');
+    highlightSocial(roomHighlight);
   }
 
   function renderPostMedia(post) {
@@ -962,7 +1506,11 @@
   }
 
   function topLevelPosts() {
-    return livePosts.filter(function (p) { return !p.parentId && !(p.authorUid && blockedUids[p.authorUid]); });
+    return livePosts.filter(function (p) {
+      if (p.parentId || (p.authorUid && blockedUids[p.authorUid])) return false;
+      if (currentNest) return nestSlugNorm(p.nestSlug) === nestSlugNorm(currentNest.slug);
+      return true;
+    });
   }
 
   function repliesFor(parentId) {
@@ -971,7 +1519,8 @@
   }
 
   // Grid taxonomy lives on site.taxonomy (same catalog as taxonomy.json).
-  // nestSlug is metadata only. taxonomyNestsDraft is not a nav source — nests stay HOLD.
+  // Left-nav nests come from site.nests plus this user's Firestore rooms.
+  // taxonomyNestsDraft is not a nav source. Topic nestSlug does not drive the watchlist click.
   function taxonomyCatalog() {
     var tax = site && site.taxonomy;
     if (!tax || typeof tax !== 'object') {
@@ -1218,7 +1767,7 @@
       refreshPorchUi();
       return;
     }
-    var seeds = sessionSeedPosts().filter(function (p) { return postHasTopic(p, focusedTopicId); });
+    var seeds = (currentNest ? [] : sessionSeedPosts()).filter(function (p) { return postHasTopic(p, focusedTopicId); });
     var posts = topLevelPosts().filter(function (p) { return postHasTopic(p, focusedTopicId); });
     var seedIds = {};
     for (var si = 0; si < seeds.length; si++) seedIds[seeds[si].id] = true;
@@ -1252,7 +1801,7 @@
       return;
     }
 
-    var seeds = sessionSeedPosts();
+    var seeds = currentNest ? [] : sessionSeedPosts();
     if (liveError && !seeds.length) {
       el.innerHTML = '<div class="post-empty">Live feed could not load. The error is in the compose line above — this is not an empty room.</div>';
       refreshPorchUi();
@@ -1272,9 +1821,12 @@
     posts = seeds.concat(posts.filter(function (p) { return !seedIds[p.id]; }));
 
     if (!posts.length) {
-      var empty = (site && site.emptyState) || 'This room is empty. Sign in to post. Guest can browse only.';
+      var empty = currentNest
+        ? ('No posts in ' + (currentNest.label || currentNest.slug) + ' yet. This nest is live at /' + currentNest.slug + '. Sign in to post the first take.')
+        : ((site && site.emptyState) || 'This room is empty. Sign in to post. Guest can browse only.');
       el.innerHTML = '<div class="post-empty">' + escapeHtml(empty) + '</div>';
       refreshPorchUi();
+      refreshNestSurfaces();
       return;
     }
 
@@ -1284,6 +1836,7 @@
     }).join('');
     highlightDeepPost();
     refreshPorchUi();
+    refreshNestSurfaces();
   }
 
   var RAIL_MAX = 3;
@@ -1375,7 +1928,8 @@
 
   function paintRail(items) {
     ensureRailCss();
-    var html = (items || []).map(renderTrendCard).join('') + porchCardHtml();
+    var porch = currentNest ? '' : porchCardHtml();
+    var html = (items || []).map(renderTrendCard).join('') + porch;
     var rail = document.getElementById('news-feed');
     var page = document.getElementById('news-page-list');
     if (rail) rail.innerHTML = html;
@@ -2242,11 +2796,24 @@
   }
 
   function commitRail(items) {
+    if (currentNest) return;
     if (porchDwellActive) {
       porchDwellPendingItems = items;
       return;
     }
     paintRail(items);
+  }
+
+  function abortPorchForNest() {
+    if (!porchDwellActive) return;
+    porchDwellActive = false;
+    porchDwellPaused = false;
+    if (porchDwellTimer) {
+      clearTimeout(porchDwellTimer);
+      porchDwellTimer = null;
+    }
+    porchDwellPendingItems = null;
+    setPorchDwellAttr(false);
   }
 
   function schedulePorchDwell() {
@@ -2464,6 +3031,7 @@
       likes: {},
       likeCount: 0,
       replyCount: 0,
+      nestSlug: postNestSlug(null),
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
   }
@@ -3029,6 +3597,7 @@
   }
   function openExplore() {
     closeSocialOverlays();
+    ensureExploreNestTab();
     document.getElementById('explore-overlay').classList.add('active');
     highlightSocial('explore');
   }
@@ -3180,7 +3749,7 @@
     if (normalizeRoute(location.hash) !== 'home') go('home');
     else {
       showContentPage('thoughts');
-      highlightSocial('home');
+      highlightSocial(currentNest ? currentNest.slug : 'home');
     }
     setTimeout(function () {
       var input = document.getElementById('thoughts-compose-input');
@@ -3344,6 +3913,7 @@
     restoreCompose(draft);
   }
   function signOut() {
+    listenMemberNests(null);
     if (fbAuth && fbAuth.currentUser) fbAuth.signOut();
     currentUser = null;
     saveJSON(LS_USER, null);
@@ -3546,6 +4116,7 @@
         likes: {},
         likeCount: 0,
         replyCount: 0,
+        nestSlug: postNestSlug(parentId),
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       };
       if (imageUrl) doc.imageUrl = imageUrl;
@@ -3778,6 +4349,34 @@
 
   function wireEvents() {
     document.addEventListener('click', function (e) {
+      if (e.target.closest('#nav-nest-add')) {
+        e.preventDefault();
+        if (!isLiveUser()) { openAuth('join'); return; }
+        var form = document.getElementById('nav-nest-form');
+        if (!form) return;
+        if (!form.hidden) { hideNestAddForm(); return; }
+        form.hidden = false;
+        nestAddSlugDirty = false;
+        var nestLabel = document.getElementById('nest-add-label');
+        var nestSlugInput = document.getElementById('nest-add-slug');
+        var nestErr = document.getElementById('nest-add-err');
+        if (nestLabel) nestLabel.value = '';
+        if (nestSlugInput) nestSlugInput.value = '';
+        if (nestErr) nestErr.textContent = '';
+        if (nestLabel) nestLabel.focus();
+        return;
+      }
+      if (e.target.closest('#nest-add-save')) {
+        e.preventDefault();
+        submitNestAdd();
+        return;
+      }
+      const nestLink = e.target.closest('[data-nest]');
+      if (nestLink) {
+        e.preventDefault();
+        goNest(nestLink.getAttribute('data-nest'));
+        return;
+      }
       const social = e.target.closest('[data-social]');
       if (social) {
         e.preventDefault();
@@ -3822,7 +4421,7 @@
       }
       if (e.target.closest('[data-topic-clear]')) {
         e.preventDefault();
-        go('home');
+        goRoom();
         return;
       }
       if (e.target.closest('#auth-signin') || e.target.closest('#profile-signin-prompt-btn')) {
@@ -3904,7 +4503,7 @@
         if (t === 'following') go('following');
         else if (t === 'hot') go('hot');
         else if (t === 'new') go('new');
-        else go('home');
+        else goRoom();
         return;
       }
 
@@ -3968,8 +4567,10 @@
         document.querySelectorAll('[data-explore-tab]').forEach(function (t) {
           t.classList.toggle('active', t === etab);
         });
-        document.getElementById('explore-pane-places').classList.toggle('active', etab.dataset.exploreTab === 'places');
-        document.getElementById('explore-pane-topics').classList.toggle('active', etab.dataset.exploreTab === 'topics');
+        var which = etab.dataset.exploreTab;
+        document.querySelectorAll('.explore-pane').forEach(function (p) {
+          p.classList.toggle('active', p.id === 'explore-pane-' + which);
+        });
         return;
       }
 
@@ -3981,6 +4582,8 @@
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
+      var nestForm = document.getElementById('nav-nest-form');
+      if (nestForm && !nestForm.hidden) { e.preventDefault(); hideNestAddForm(); return; }
       if (closeStoriesViewer()) { e.preventDefault(); return; }
       if (closeStoriesComposer()) { e.preventDefault(); return; }
       const picker = document.getElementById('chat-user-picker');
@@ -4004,7 +4607,7 @@
     });
     document.getElementById('sidebar-search-btn').addEventListener('click', function () { go('explore'); });
     document.getElementById('sidebar-post-btn').addEventListener('click', function () {
-      go('home');
+      goRoom();
       setTimeout(function () {
         const input = document.getElementById('thoughts-compose-input');
         if (input) { input.focus(); input.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
@@ -4012,7 +4615,7 @@
     });
 
     ['profile-back', 'notif-back', 'explore-back'].forEach(function (id) {
-      document.getElementById(id).addEventListener('click', function () { go('home'); });
+      document.getElementById(id).addEventListener('click', function () { goRoom(); });
     });
     var markRead = document.getElementById('notif-mark-read');
     if (markRead) markRead.addEventListener('click', function () { /* soon: no live notifs */ });
@@ -4181,6 +4784,9 @@
       }
       document.getElementById('explore-pane-places').innerHTML = cards(filt(PLACES));
       document.getElementById('explore-pane-topics').innerHTML = cards(filt(TOPICS));
+      ensureExploreNestTab();
+      var nestPane = document.getElementById('explore-pane-nests');
+      if (nestPane) fillExploreNests(nestPane, filt(nestExploreCards()));
     });
   }
 
@@ -5025,6 +5631,8 @@
     TRENDS = site.trends || [];
     PLACES = site.places || [];
     TOPICS = site.topics || [];
+    adminNests = Array.isArray(site.nests) ? site.nests : [];
+    mergeNests();
     applyTheme(site.theme);
     applySiteChrome();
     ensureJoinAuthLayout();
@@ -5048,6 +5656,7 @@
       fbAuth.onAuthStateChanged(function (user) {
         if (user) applyFbUser(user);
         else {
+          listenMemberNests(null);
           listenBlocks(null);
           if (currentUser && currentUser.live) {
             currentUser = null;
@@ -5077,7 +5686,9 @@
     renderFeed();
     initStories();
 
+    restoreBouncedPath();
     window.addEventListener('hashchange', applyRoute);
+    window.addEventListener('popstate', applyRoute);
     try { deepPostId = new URLSearchParams(location.search).get('p') || ''; } catch (e) { deepPostId = ''; }
     if (!location.hash || location.hash === '#') {
       history.replaceState(null, '', location.pathname + location.search + '#home');
@@ -5086,7 +5697,7 @@
     if (deepPostId) {
       closeSocialOverlays();
       showContentPage('thoughts');
-      highlightSocial('home');
+      if (!currentNest) highlightSocial('home');
       selectThoughtsTab('foryou');
     }
     syncHamburgerAria();

@@ -28,3 +28,19 @@ Until DNS is pointed, Pages will serve on the github.io URL only if the repo is 
 - Sign-in modal closes (X, Escape, overlay click); auth is stubbed locally. No Firebase project keys.
 - No AskAI. No live timing API. No cross-post to X or Reddit. We are not X.com.
 - **Real F1 APIs are phase 2, not tonight.** Dummy feed is enough for this dress rehearsal.
+
+## Nested rooms
+
+Starter nests are the `nests` array in `site.json` (10 rooms, all `nav: true`). The left nav lists them under **Nests**. One path segment is the room: `/drivers`, `/strategy`, and the rest. Home stays `/`. Posts composed in a nest are saved with `nestSlug`. The feed filters on that field. Hash routes (`#explore`, `#chat`) still overlay the current room.
+
+**+** in that Nests section adds a room for the signed-in user (label + slug). Guests get the sign-in modal. A verified email is required to save, same gate as posting.
+
+User rooms are private to their author and stored in Firestore at:
+
+`sites/{siteId}/memberNests/{uid}/rooms/{slug}`
+
+The left nav merges `site.json` nests with that user’s rooms. Admin slugs win if they collide. Reserved slugs include `home`, `explore`, `following`, `notifications`, `chat`, `profile`, `news`, `about`, `terms`, `privacy`, `api`, `admin`, `watchlist`, `stories`, plus any slug already in the nav.
+
+Static hosting: Cloudflare Pages uses `_redirects` (`/* /index.html 200`). GitHub Pages uses `404.html`, which stashes the path and returns to `/`; `factory.js` restores it with `history.replaceState`. Publish `firebase.indexes.json` (the `nestSlug` composite) and `firestore.rules` by hand in **subx-skins**. Do not deploy them from an agent.
+
+Preview banner, `noindex`, and `robots.txt` Disallow stay. No GTM.
