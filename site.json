@@ -658,7 +658,7 @@
       "watch",
       "baku"
     ],
-    "notes": "Pre-populated followable topics (StockTwits-style). Users keep/unfollow/add on their watchlist. Nest rooms still HOLD."
+    "notes": "Factory followable topics (StockTwits-style). Users keep/unfollow/add on their watchlist."
   },
   "taxonomyNestsDraft": [
     {
@@ -771,5 +771,7 @@
       "reviews": [],
       "railPins": []
     }
-  ]
+  ],
+  "v": 1,
+  "cacheBust": 1
 }
