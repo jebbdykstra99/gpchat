@@ -335,41 +335,41 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Event-day",
-    "meta": "Event-day",
-    "footer": "Calendar + WDC · Event-day. Pole FACT Russell 1:42.526 (F1.com). Not a news ingest. Not live timing. Preview. Nests HOLD.",
+    "kicker": "Race+Post",
+    "meta": "Race+Post",
+    "footer": "Calendar + WDC · Race+Post Azerbaijan. Result FACT (F1.com provisional). Not a news ingest. Not live timing. Preview. Nests HOLD.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
       "title": "Azerbaijan GP · Baku",
-      "state": "Event-day",
-      "next": "Race Sat 5:00 AM MT · 51 laps"
+      "state": "Race+Post",
+      "next": "Bahrain GP in Malaysia · Sepang · Sun Oct 4 · 1:00 AM MT"
     },
     "outbound": [
       {
-        "tag": "Pole",
-        "topic": "pole",
-        "headline": "POLE Russell 1:42.526 · Leclerc 1:43.363 · Piastri 1:43.364",
-        "snippet": "Official Quali (F1.com). Antonelli T1 wall → P16. No Quali points.",
-        "meta": "Event-day",
-        "url": "https://www.formula1.com/en/racing/2026/azerbaijan"
-      },
-      {
-        "tag": "Next",
-        "topic": "next",
-        "headline": "Next — Race Sat 5:00 AM MT · 51 laps",
-        "snippet": "Azerbaijan GP · Baku · R15 non-sprint. Lights out 11:00Z / 5:00 AM Mountain.",
-        "meta": "Event-day",
-        "url": "https://en.wikipedia.org/wiki/2026_Azerbaijan_Grand_Prix"
+        "tag": "Result",
+        "topic": "result",
+        "headline": "Russell win · Verstappen +0.196 · Hadjar P3",
+        "snippet": "FL Russell 1:44.916 (lap 49). F1.com provisional race result. Antonelli P5 from P16.",
+        "meta": "Race+Post",
+        "url": "https://www.formula1.com/en/results/2026/races/1295/azerbaijan/race-result"
       },
       {
         "tag": "WDC",
         "topic": "wdc",
-        "headline": "WDC — Antonelli 292 · Russell 211 · Hamilton 191",
-        "snippet": "After Round 14 (Jolpica). Quali scores 0. Provisional. Not a live points feed.",
-        "meta": "Event-day",
-        "url": "https://en.wikipedia.org/wiki/2026_Formula_One_World_Championship"
+        "headline": "WDC — Antonelli 302 · Russell 236 · Hamilton 199 (gap 66)",
+        "snippet": "After Round 15 Baku (F1.com provisional). Not a live points feed.",
+        "meta": "Race+Post",
+        "url": "https://www.formula1.com/en/results/2026/drivers"
+      },
+      {
+        "tag": "Next",
+        "topic": "next",
+        "headline": "Next — Bahrain GP in Malaysia · Sepang · Race Sun Oct 4 · 1:00 AM MT",
+        "snippet": "Round 16 · lights out 07:00Z / 1:00 AM Mountain. Calendar next. Not a timing feed.",
+        "meta": "Race+Post",
+        "url": "https://en.wikipedia.org/wiki/2026_Bahrain_Grand_Prix"
       }
     ],
     "porch": {
