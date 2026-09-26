@@ -1,0 +1,279 @@
+{
+  "siteId": "gpchat",
+  "domain": "gpchat.com",
+  "taxonomyName": "Grid",
+  "symbolPrefix": "$",
+  "topics": [
+    {
+      "id": "race-weekend",
+      "label": "Race weekend",
+      "kind": "session",
+      "blurb": "Current GP hub",
+      "followDefault": true,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$RW",
+      "nestSlug": "race-weekend"
+    },
+    {
+      "id": "quali",
+      "label": "Qualifying",
+      "kind": "session",
+      "blurb": "Saturday pace",
+      "followDefault": true,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$Q",
+      "nestSlug": "quali"
+    },
+    {
+      "id": "race",
+      "label": "Race day",
+      "kind": "session",
+      "blurb": "Lights out",
+      "followDefault": true,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$RACE",
+      "nestSlug": "race"
+    },
+    {
+      "id": "wdc",
+      "label": "Drivers' Championship",
+      "kind": "theme",
+      "blurb": "WDC standings talk",
+      "followDefault": true,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$WDC",
+      "nestSlug": "wdc"
+    },
+    {
+      "id": "wcc",
+      "label": "Constructors",
+      "kind": "theme",
+      "blurb": "Team championship",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$WCC",
+      "nestSlug": "teams"
+    },
+    {
+      "id": "watch",
+      "label": "Watch (free/legal)",
+      "kind": "theme",
+      "blurb": "Outbound links only",
+      "followDefault": true,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$WATCH",
+      "nestSlug": "watch"
+    },
+    {
+      "id": "paddock",
+      "label": "Paddock",
+      "kind": "theme",
+      "blurb": "News with FACT labels",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$PAD",
+      "nestSlug": "paddock"
+    },
+    {
+      "id": "rookies",
+      "label": "Rookies",
+      "kind": "theme",
+      "blurb": "New grid blood",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$ROOK",
+      "nestSlug": "rookies"
+    },
+    {
+      "id": "antonelli",
+      "label": "Kimi Antonelli",
+      "kind": "driver",
+      "blurb": "Mercedes",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$ANT",
+      "nestSlug": "drivers"
+    },
+    {
+      "id": "norris",
+      "label": "Lando Norris",
+      "kind": "driver",
+      "blurb": "McLaren",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$NOR",
+      "nestSlug": "drivers"
+    },
+    {
+      "id": "verstappen",
+      "label": "Max Verstappen",
+      "kind": "driver",
+      "blurb": "Red Bull",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$VER",
+      "nestSlug": "drivers"
+    },
+    {
+      "id": "hamilton",
+      "label": "Lewis Hamilton",
+      "kind": "driver",
+      "blurb": "Ferrari",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$HAM",
+      "nestSlug": "drivers"
+    },
+    {
+      "id": "russell",
+      "label": "George Russell",
+      "kind": "driver",
+      "blurb": "Mercedes",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$RUS",
+      "nestSlug": "drivers"
+    },
+    {
+      "id": "leclerc",
+      "label": "Charles Leclerc",
+      "kind": "driver",
+      "blurb": "Ferrari",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$LEC",
+      "nestSlug": "drivers"
+    },
+    {
+      "id": "piastri",
+      "label": "Oscar Piastri",
+      "kind": "driver",
+      "blurb": "McLaren",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$PIA",
+      "nestSlug": "drivers"
+    },
+    {
+      "id": "mercedes",
+      "label": "Mercedes",
+      "kind": "team",
+      "blurb": "Constructor",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$MER",
+      "nestSlug": "teams"
+    },
+    {
+      "id": "ferrari",
+      "label": "Ferrari",
+      "kind": "team",
+      "blurb": "Constructor",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$FER",
+      "nestSlug": "teams"
+    },
+    {
+      "id": "mclaren",
+      "label": "McLaren",
+      "kind": "team",
+      "blurb": "Constructor",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$MCL",
+      "nestSlug": "teams"
+    },
+    {
+      "id": "redbull",
+      "label": "Red Bull",
+      "kind": "team",
+      "blurb": "Constructor",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$RBR",
+      "nestSlug": "teams"
+    },
+    {
+      "id": "baku",
+      "label": "Baku / Azerbaijan",
+      "kind": "circuit",
+      "blurb": "Street circuit GP",
+      "followDefault": true,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$BAKU",
+      "nestSlug": "race-weekend"
+    },
+    {
+      "id": "monaco",
+      "label": "Monaco",
+      "kind": "circuit",
+      "blurb": "Street classic",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$MON"
+    },
+    {
+      "id": "spa",
+      "label": "Spa",
+      "kind": "circuit",
+      "blurb": "Ardennes",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$SPA"
+    },
+    {
+      "id": "monza",
+      "label": "Monza",
+      "kind": "circuit",
+      "blurb": "Temple of Speed",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$MNZ"
+    },
+    {
+      "id": "classic",
+      "label": "Classic races",
+      "kind": "theme",
+      "blurb": "Off-weekend depth",
+      "followDefault": false,
+      "adminSeed": true,
+      "status": "active",
+      "symbol": "$CLASSIC",
+      "nestSlug": "classic"
+    }
+  ],
+  "topicCount": 24,
+  "defaultWatchlist": [
+    "race-weekend",
+    "quali",
+    "race",
+    "wdc",
+    "watch",
+    "baku"
+  ],
+  "notes": "adminSeed topics are factory pre-populated. Users may unfollow (remove from their list) or follow more from the full taxonomy. Admins may retire topics (status=retired) or add new ones; user lists stay editable."
+}
