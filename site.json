@@ -337,7 +337,7 @@
     "title": "Room Brief",
     "kicker": "Race+Post",
     "meta": "Race+Post",
-    "footer": "Calendar + WDC · Race+Post Azerbaijan. Result FACT (F1.com provisional). Not a news ingest. Not live timing. Preview. Nests HOLD.",
+    "footer": "Calendar + WDC · Race+Post Azerbaijan. Result FACT (F1.com provisional). Not a news ingest. Not live timing. Preview.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
@@ -770,6 +770,88 @@
       "rankings": [],
       "reviews": [],
       "railPins": []
+    }
+  ],
+  "nests": [
+    {
+      "slug": "race-weekend",
+      "label": "Race weekend",
+      "parent": null,
+      "kind": "session",
+      "blurb": "Current GP hub \u2014 sessions, countdown, weekend chatter; relabel each GP, do not mint new slug.",
+      "nav": true
+    },
+    {
+      "slug": "drivers",
+      "label": "Drivers",
+      "parent": null,
+      "kind": "people",
+      "blurb": "Form, seats, teammate comparisons \u2014 not one room per driver.",
+      "nav": true
+    },
+    {
+      "slug": "teams",
+      "label": "Teams",
+      "parent": null,
+      "kind": "org",
+      "blurb": "Constructors, pit wall, upgrades \u2014 not one room per team.",
+      "nav": true
+    },
+    {
+      "slug": "wdc",
+      "label": "Championship",
+      "parent": null,
+      "kind": "theme",
+      "blurb": "WDC / WCC math between weekends; rail carries standing FACT.",
+      "nav": true
+    },
+    {
+      "slug": "strategy",
+      "label": "Strategy & tyres",
+      "parent": null,
+      "kind": "theme",
+      "blurb": "Undercuts, compounds, deg, pit windows.",
+      "nav": true
+    },
+    {
+      "slug": "watch",
+      "label": "Watch",
+      "parent": null,
+      "kind": "theme",
+      "blurb": "Legal outbound only (Apple TV / F1 TV / local) \u2014 no re-stream.",
+      "nav": true
+    },
+    {
+      "slug": "paddock",
+      "label": "Paddock",
+      "parent": null,
+      "kind": "theme",
+      "blurb": "News & rumor with FACT / STORYLINE / OPINION labels.",
+      "nav": true
+    },
+    {
+      "slug": "tech",
+      "label": "Technical",
+      "parent": null,
+      "kind": "theme",
+      "blurb": "Regs, aero, PU, technical directives.",
+      "nav": true
+    },
+    {
+      "slug": "rookies",
+      "label": "Rookies",
+      "parent": null,
+      "kind": "people",
+      "blurb": "Grid new blood / F2 graduates \u2014 seasonal heat.",
+      "nav": true
+    },
+    {
+      "slug": "classic",
+      "label": "Classic races",
+      "parent": null,
+      "kind": "theme",
+      "blurb": "Off-weekend depth, historic GPs.",
+      "nav": true
     }
   ],
   "v": 1,
