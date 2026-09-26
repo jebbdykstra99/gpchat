@@ -164,6 +164,9 @@
   let currentUser = loadJSON(LS_USER, null);
   let likes = loadJSON(LS_LIKES, {});
   let currentTab = 'foryou';
+  let focusedTopicId = '';
+  let watchlistPickerOpen = false;
+  let watchlistQuery = '';
 
   function initials(name) {
     return String(name || 'M').split(/\s+/).map(function (w) { return w[0]; }).join('').slice(0, 2).toUpperCase() || 'M';
@@ -602,6 +605,7 @@
     syncChatChrome();
     syncTopicFollowButtons();
     syncStoriesTray();
+    renderWatchlist();
   }
 
   function earlyWelcomeOn() {
@@ -721,7 +725,8 @@
       parentId: d.parentId || null,
       live: true,
       imageUrl: d.imageUrl || null,
-      poll: d.poll || null
+      poll: d.poll || null,
+      topicIds: collectTopicIds(d)
     };
   }
 
@@ -812,6 +817,10 @@
   }
 
   function selectThoughtsTab(tab) {
+    if (focusedTopicId) {
+      focusedTopicId = '';
+      renderWatchlist();
+    }
     currentTab = tab;
     document.querySelectorAll('[data-thoughts-tab]').forEach(function (t) {
       t.classList.toggle('active', t.dataset.thoughtsTab === tab);
@@ -822,6 +831,24 @@
   function applyRoute() {
     closeMobileNav();
     const raw = routeFromHash();
+    var topicMatch = /^topic\/([a-z0-9-]{1,80})$/.exec(raw);
+    if (topicMatch) {
+      focusedTopicId = topicMatch[1];
+      closeSocialOverlays();
+      showContentPage('thoughts');
+      highlightSocial('home');
+      currentTab = 'foryou';
+      document.querySelectorAll('[data-thoughts-tab]').forEach(function (t) {
+        t.classList.toggle('active', t.dataset.thoughtsTab === 'foryou');
+      });
+      renderWatchlist();
+      renderFeed();
+      return;
+    }
+    if (focusedTopicId) {
+      focusedTopicId = '';
+      renderWatchlist();
+    }
 
     if (raw === 'following') {
       closeSocialOverlays();
@@ -943,9 +970,281 @@
       .sort(function (a, b) { return (a.ms || 0) - (b.ms || 0); });
   }
 
+  // Grid taxonomy lives on site.taxonomy (same catalog as taxonomy.json).
+  // nestSlug is metadata only. taxonomyNestsDraft is not a nav source — nests stay HOLD.
+  function taxonomyCatalog() {
+    var tax = site && site.taxonomy;
+    if (!tax || typeof tax !== 'object') {
+      return { version: 0, name: 'Grid', symbolPrefix: '$', topics: [], defaultWatchlist: [] };
+    }
+    return tax;
+  }
+  function activeTopics() {
+    var topics = taxonomyCatalog().topics;
+    if (!Array.isArray(topics)) return [];
+    return topics.filter(function (t) {
+      return t && t.status === 'active' && t.id;
+    });
+  }
+  function topicById(id) {
+    if (!id) return null;
+    var topics = activeTopics();
+    for (var i = 0; i < topics.length; i++) {
+      if (topics[i].id === id) return topics[i];
+    }
+    return null;
+  }
+  function defaultWatchlistIds() {
+    var tax = taxonomyCatalog();
+    var ids = Array.isArray(tax.defaultWatchlist) ? tax.defaultWatchlist.slice() : [];
+    if (!ids.length) {
+      activeTopics().forEach(function (t) {
+        if (t.followDefault) ids.push(t.id);
+      });
+    }
+    return sanitizeTopicIds(ids);
+  }
+  function sanitizeTopicIds(ids) {
+    var seen = {};
+    var out = [];
+    (ids || []).forEach(function (id) {
+      var topic = topicById(id);
+      if (!topic || seen[topic.id]) return;
+      seen[topic.id] = true;
+      out.push(topic.id);
+    });
+    return out;
+  }
+  function collectTopicIds(source) {
+    var out = [];
+    var seen = {};
+    function push(v) {
+      if (v == null) return;
+      var id = '';
+      if (typeof v === 'string') id = v.trim();
+      else if (typeof v === 'object' && v.id) id = String(v.id).trim();
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      out.push(id);
+    }
+    if (!source || typeof source !== 'object') return out;
+    if (Array.isArray(source.topicIds)) source.topicIds.forEach(push);
+    if (source.topicId) push(source.topicId);
+    if (Array.isArray(source.topics)) source.topics.forEach(push);
+    if (typeof source.topic === 'string') push(source.topic);
+    return out;
+  }
+  function postHasTopic(post, topicId) {
+    if (!post || !topicId) return false;
+    var ids = Array.isArray(post.topicIds) ? post.topicIds : collectTopicIds(post);
+    for (var i = 0; i < ids.length; i++) if (ids[i] === topicId) return true;
+    return false;
+  }
+  // v1 stores the personal list beside other user prefs (localStorage).
+  // TODO: move to Firestore users/{uid}/watchlist/{siteId} → { topicIds, updatedAt }
+  // once security rules allow that subcollection. Never write the factory taxonomy.
+  function watchlistStoreKey(uid) {
+    return 'subx.watchlist.' + (SITE_ID || 'site') + '.' + String(uid || 'anon');
+  }
+  function savePersonalWatchlist(topicIds) {
+    var uid = liveUid();
+    if (!uid) return;
+    saveJSON(watchlistStoreKey(uid), {
+      topicIds: topicIds.slice(),
+      updatedAt: new Date().toISOString()
+    });
+  }
+  function personalWatchlistIds() {
+    var uid = liveUid();
+    if (!uid) return defaultWatchlistIds();
+    var raw = loadJSON(watchlistStoreKey(uid), null);
+    if (!raw || !Array.isArray(raw.topicIds)) {
+      var seeded = defaultWatchlistIds();
+      savePersonalWatchlist(seeded);
+      return seeded;
+    }
+    return sanitizeTopicIds(raw.topicIds);
+  }
+  function addToWatchlist(id) {
+    if (!isLiveUser() || !topicById(id)) return;
+    var ids = personalWatchlistIds();
+    if (ids.indexOf(id) !== -1) return;
+    ids.push(id);
+    savePersonalWatchlist(ids);
+    renderWatchlist();
+  }
+  function removeFromWatchlist(id) {
+    if (!isLiveUser()) return;
+    var ids = personalWatchlistIds().filter(function (x) { return x !== id; });
+    savePersonalWatchlist(ids);
+    renderWatchlist();
+  }
+  function watchRowHtml(topic) {
+    var focused = focusedTopicId === topic.id;
+    var nest = topic.nestSlug ? ' data-nest-slug="' + escapeHtml(topic.nestSlug) + '"' : '';
+    var remove = isLiveUser()
+      ? '<button type="button" class="watchlist-remove" data-watch-remove="' + escapeHtml(topic.id) +
+        '" aria-label="Unfollow ' + escapeHtml(topic.label) + '" title="Unfollow">&times;</button>'
+      : '';
+    return '<li class="watchlist-row' + (focused ? ' is-focused' : '') + '">' +
+      '<button type="button" class="watchlist-open" data-watch-topic="' + escapeHtml(topic.id) + '"' + nest +
+        ' aria-current="' + (focused ? 'true' : 'false') + '"' +
+        ' title="' + escapeHtml(topic.blurb || topic.label) + '">' +
+        '<span class="watchlist-symbol">' + escapeHtml(topic.symbol || topic.id) + '</span>' +
+        '<span class="watchlist-label">' + escapeHtml(topic.label) + '</span>' +
+      '</button>' + remove + '</li>';
+  }
+  function renderWatchlistCatalog() {
+    var box = document.getElementById('watchlist-catalog');
+    if (!box) return;
+    if (!isLiveUser() || !watchlistPickerOpen) {
+      box.innerHTML = '';
+      return;
+    }
+    var have = {};
+    personalWatchlistIds().forEach(function (id) { have[id] = true; });
+    var q = String(watchlistQuery || '').trim().toLowerCase().replace(/^\$/, '');
+    var rows = activeTopics().filter(function (t) {
+      if (have[t.id]) return false;
+      if (!q) return true;
+      var hay = ((t.symbol || '') + ' ' + t.label + ' ' + t.id + ' ' + (t.blurb || '') + ' ' + (t.kind || '')).toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+    if (!rows.length) {
+      box.innerHTML = '<li class="watchlist-catalog-empty">' +
+        (q ? 'No active topics match.' : 'Every active topic is already on your watchlist.') +
+        '</li>';
+      return;
+    }
+    box.innerHTML = rows.map(function (t) {
+      return '<li class="watchlist-catalog-row">' +
+        '<span class="watchlist-symbol">' + escapeHtml(t.symbol || '') + '</span>' +
+        '<span class="watchlist-catalog-copy"><span class="watchlist-label">' + escapeHtml(t.label) + '</span>' +
+        (t.blurb ? '<span class="watchlist-blurb">' + escapeHtml(t.blurb) + '</span>' : '') +
+        '</span>' +
+        '<button type="button" class="watchlist-follow" data-watch-add="' + escapeHtml(t.id) + '">Follow</button>' +
+      '</li>';
+    }).join('');
+  }
+  function renderWatchlist() {
+    var list = document.getElementById('watchlist-list');
+    if (!list) return;
+    var tax = taxonomyCatalog();
+    var kicker = document.getElementById('watchlist-kicker');
+    if (kicker) kicker.textContent = tax.name || 'Grid';
+    var signedIn = isLiveUser();
+    if (!signedIn) watchlistPickerOpen = false;
+    var ids = signedIn ? personalWatchlistIds() : defaultWatchlistIds();
+    var html = '';
+    ids.forEach(function (id) {
+      var topic = topicById(id);
+      if (topic) html += watchRowHtml(topic);
+    });
+    list.innerHTML = html;
+    var addBtn = document.getElementById('watchlist-add');
+    if (addBtn) {
+      addBtn.hidden = !signedIn;
+      addBtn.textContent = watchlistPickerOpen ? 'Close' : 'Add';
+      addBtn.setAttribute('aria-expanded', watchlistPickerOpen ? 'true' : 'false');
+    }
+    var note = document.getElementById('watchlist-note');
+    if (note) {
+      var taxName = tax.name || 'Grid';
+      if (!signedIn) {
+        note.hidden = false;
+        if (!activeTopics().length) {
+          note.textContent = (taxName || 'Grid') + ' topics are not loaded.';
+        } else {
+          note.innerHTML = '<button type="button" class="watchlist-signin" data-watch-signin>Sign in</button> to personalize. These are the ' + escapeHtml(taxName) + ' defaults.';
+        }
+      } else if (!ids.length) {
+        note.hidden = false;
+        note.textContent = 'Your watchlist is empty. Add a topic from the ' + taxName + ' catalog.';
+      } else {
+        note.hidden = true;
+        note.textContent = '';
+      }
+    }
+    var picker = document.getElementById('watchlist-picker');
+    if (picker) picker.hidden = !signedIn || !watchlistPickerOpen;
+    var search = document.getElementById('watchlist-search');
+    if (search) {
+      var taxLabel = tax.name || 'Grid';
+      search.placeholder = 'Search ' + taxLabel + ' topics';
+      search.setAttribute('aria-label', 'Search ' + taxLabel + ' topics to follow');
+      if (!search.dataset.wired) {
+        search.dataset.wired = '1';
+        search.addEventListener('input', function () {
+          watchlistQuery = search.value || '';
+          renderWatchlistCatalog();
+        });
+      }
+    }
+    renderWatchlistCatalog();
+  }
+  function topicFocusHtml(topic) {
+    var symbol = topic && topic.symbol ? topic.symbol : (focusedTopicId || 'Topic');
+    var label = topic ? topic.label : 'Not on the Grid';
+    var blurb = topic && topic.blurb
+      ? '<div class="topic-focus-blurb">' + escapeHtml(topic.blurb) + '</div>'
+      : '';
+    return '<div class="topic-focus">' +
+      '<div class="topic-focus-copy">' +
+        '<div class="topic-focus-title"><span class="topic-focus-symbol">' + escapeHtml(symbol) + '</span>' +
+        '<span class="topic-focus-label">' + escapeHtml(label) + '</span></div>' +
+        blurb +
+      '</div>' +
+      '<button type="button" class="topic-focus-clear" data-topic-clear>For You</button>' +
+    '</div>';
+  }
+  function renderTopicFeed() {
+    var el = document.getElementById('thoughts-feed');
+    if (!el) return;
+    var topic = topicById(focusedTopicId);
+    var symbol = topic && topic.symbol ? topic.symbol : focusedTopicId;
+    var head = topicFocusHtml(topic);
+    if (!topic) {
+      el.innerHTML = head + '<div class="post-empty"><strong>That topic is not on the Grid.</strong></div>';
+      refreshPorchUi();
+      return;
+    }
+    if (!liveReady && !liveError) {
+      el.innerHTML = head + '<div class="post-empty">Connecting to the live feed…</div>';
+      refreshPorchUi();
+      return;
+    }
+    if (liveError) {
+      el.innerHTML = head + '<div class="post-empty"><strong>Live feed could not load.</strong><p>No tagged posts to show.</p></div>';
+      refreshPorchUi();
+      return;
+    }
+    var seeds = sessionSeedPosts().filter(function (p) { return postHasTopic(p, focusedTopicId); });
+    var posts = topLevelPosts().filter(function (p) { return postHasTopic(p, focusedTopicId); });
+    var seedIds = {};
+    for (var si = 0; si < seeds.length; si++) seedIds[seeds[si].id] = true;
+    posts = seeds.concat(posts.filter(function (p) { return !seedIds[p.id]; }));
+    if (!posts.length) {
+      el.innerHTML = head + '<div class="post-empty"><strong>No posts tagged ' + escapeHtml(symbol) + ' yet.</strong>' +
+        '<p>Nothing in the feed is tagged with this topic.</p></div>';
+      refreshPorchUi();
+      return;
+    }
+    el.innerHTML = head + posts.map(function (p) {
+      var kids = repliesFor(p.id);
+      return renderPost(p, false) + kids.map(function (r) { return renderPost(r, true); }).join('');
+    }).join('');
+    highlightDeepPost();
+    refreshPorchUi();
+  }
+
   function renderFeed() {
     const el = document.getElementById('thoughts-feed');
     if (!el) return;
+
+    if (focusedTopicId) {
+      renderTopicFeed();
+      return;
+    }
 
     if (currentTab === 'following') {
       el.innerHTML = '<div class="post-empty soon-panel"><strong>Following — Soon.</strong> There is no follows graph in this preview. The live room is on For You.</div>';
@@ -3485,6 +3784,47 @@
         go(social.dataset.social);
         return;
       }
+      if (e.target.closest('#watchlist-add')) {
+        e.preventDefault();
+        if (!isLiveUser()) { openAuth('join'); return; }
+        watchlistPickerOpen = !watchlistPickerOpen;
+        renderWatchlist();
+        if (watchlistPickerOpen) {
+          var watchSearch = document.getElementById('watchlist-search');
+          if (watchSearch) watchSearch.focus();
+        }
+        return;
+      }
+      if (e.target.closest('[data-watch-signin]')) {
+        e.preventDefault();
+        openAuth('join');
+        return;
+      }
+      var watchRemove = e.target.closest('[data-watch-remove]');
+      if (watchRemove) {
+        e.preventDefault();
+        if (!isLiveUser()) { openAuth('join'); return; }
+        removeFromWatchlist(watchRemove.getAttribute('data-watch-remove'));
+        return;
+      }
+      var watchAdd = e.target.closest('[data-watch-add]');
+      if (watchAdd) {
+        e.preventDefault();
+        if (!isLiveUser()) { openAuth('join'); return; }
+        addToWatchlist(watchAdd.getAttribute('data-watch-add'));
+        return;
+      }
+      var watchOpen = e.target.closest('[data-watch-topic]');
+      if (watchOpen) {
+        e.preventDefault();
+        go('topic/' + watchOpen.getAttribute('data-watch-topic'));
+        return;
+      }
+      if (e.target.closest('[data-topic-clear]')) {
+        e.preventDefault();
+        go('home');
+        return;
+      }
       if (e.target.closest('#auth-signin') || e.target.closest('#profile-signin-prompt-btn')) {
         openAuth('join');
         return;
@@ -4718,6 +5058,8 @@
             listenConversations();
             syncProfile();
             renderFeed();
+          } else {
+            renderWatchlist();
           }
         }
       });
