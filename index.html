@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=16">
+  <link rel="stylesheet" href="styles.css?v=17">
   <link rel="preload" href="site.json?v=48" as="fetch" crossorigin="anonymous">
 </head>
 <body>
@@ -230,8 +230,11 @@
     <div class="profile-banner" id="profile-banner"></div>
     <div class="profile-header-row">
       <div class="profile-avatar" id="profile-avatar">G</div>
-      <button class="ghost-btn" id="profile-edit-btn" type="button">Edit profile</button>
-      <button class="accent-btn" id="profile-message-btn" type="button" hidden>Message</button>
+      <div class="profile-header-actions">
+        <button class="ghost-btn" id="profile-edit-btn" type="button">Edit profile</button>
+        <button class="accent-btn" id="profile-follow-btn" type="button" hidden>Follow</button>
+        <button class="accent-btn" id="profile-message-btn" type="button" hidden>Message</button>
+      </div>
     </div>
     <div class="profile-id">
       <div class="profile-display-name" id="profile-display-name">Guest</div>
@@ -380,7 +383,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-  <script src="factory.js?v=44" data-site="site.json?v=48"></script>
+  <script src="factory.js?v=46" data-site="site.json?v=48"></script>
   <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1/index.js"></script>
 </body>
 </html>

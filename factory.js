@@ -53,6 +53,16 @@
   let pendingPeer = null;
   let dmSendInFlight = false;
   let viewingProfile = null;
+  let followingUids = {};
+  let followingUnsub = null;
+  let followingReady = false;
+  let followingError = null;
+  let followWriteInFlight = false;
+  let notifItems = [];
+  let notifsUnsub = null;
+  let notifsReady = false;
+  let notifsError = null;
+  let notifTab = 'all';
   const ADMIN_UID = 'o774wL9hUVSi19EkDCgLqQomP8i2';
   const DM_TEXT_MAX = 1000;
 
@@ -596,14 +606,63 @@
     return !!(site && site.dms === true);
   }
 
+  function followingOn() {
+    return !!fbDb;
+  }
+
+  function notifsOn() {
+    return !!fbDb;
+  }
+
+  function followingLive() {
+    return !!(followingOn() && isLiveUser() && followingReady && !followingError);
+  }
+
+  function notifsLive() {
+    return !!(notifsOn() && isLiveUser() && notifsReady && !notifsError);
+  }
+
+  function paintNavSoon(el, live) {
+    if (!el) return;
+    var badge = el.querySelector('.nav-soon');
+    if (live) {
+      el.classList.remove('is-soon');
+      el.removeAttribute('data-soon');
+      if (badge) badge.remove();
+      return;
+    }
+    el.setAttribute('data-soon', '');
+    el.classList.add('is-soon');
+    if (!el.querySelector('.nav-soon')) {
+      badge = document.createElement('span');
+      badge.className = 'nav-soon';
+      badge.textContent = 'Soon';
+      el.appendChild(badge);
+    }
+  }
+
+  function syncFollowingTabSoon() {
+    var followTab = document.querySelector('[data-thoughts-tab="following"]');
+    if (!followTab) return;
+    var tabSoon = followTab.querySelector('.tab-soon');
+    if (followingLive()) {
+      if (tabSoon) tabSoon.remove();
+      return;
+    }
+    if (!tabSoon) {
+      tabSoon = document.createElement('span');
+      tabSoon.className = 'tab-soon';
+      tabSoon.textContent = 'Soon';
+      followTab.appendChild(tabSoon);
+    }
+  }
+
   function hideDummyChrome() {
+    paintNavSoon(document.getElementById('nav-chat'), dmsOn());
+    paintNavSoon(document.getElementById('nav-following'), followingLive());
+    paintNavSoon(document.getElementById('nav-notifications'), notifsLive());
     document.querySelectorAll('[data-soon]').forEach(function (el) {
-      if (dmsOn() && (el.id === 'nav-chat' || el.getAttribute('data-social') === 'chat')) {
-        el.classList.remove('is-soon');
-        var liveBadge = el.querySelector('.nav-soon');
-        if (liveBadge) liveBadge.remove();
-        return;
-      }
+      if (el.id === 'nav-chat' || el.id === 'nav-following' || el.id === 'nav-notifications') return;
       el.classList.add('is-soon');
       if (!el.querySelector('.nav-soon')) {
         var badge = document.createElement('span');
@@ -612,12 +671,16 @@
         el.appendChild(badge);
       }
     });
-    var notifBadge = document.getElementById('notif-badge');
-    if (notifBadge) {
-      notifBadge.textContent = '';
-      notifBadge.classList.remove('visible');
-      notifBadge.hidden = true;
+    syncFollowingTabSoon();
+    if (!notifsLive()) {
+      var notifBadge = document.getElementById('notif-badge');
+      if (notifBadge) {
+        notifBadge.textContent = '';
+        notifBadge.classList.remove('visible');
+        notifBadge.hidden = true;
+      }
     }
+    renderNotifs();
     document.body.classList.toggle('is-live', isLiveUser());
     document.body.classList.toggle('is-guest', !isLiveUser());
     syncEarlyWelcome();
@@ -717,6 +780,8 @@
     syncChatChrome();
     syncProfile();
     listenBlocks(user.uid);
+    listenFollowing(user.uid);
+    listenNotifs(user.uid);
     listenMemberNests(user.uid);
     listenConversations();
     restoreCompose(draft);
@@ -1483,8 +1548,8 @@
         '<div class="post-avatar" style="background:' + bg + '">' + av + '</div>' +
         '<div class="post-body">' +
           '<div class="post-meta">' +
-            '<span class="post-name' + (dmsOn() && post.authorUid ? ' post-name-link' : '') + '"' +
-              (dmsOn() && post.authorUid
+            '<span class="post-name' + (canOpenProfile(post) ? ' post-name-link' : '') + '"' +
+              (canOpenProfile(post)
                 ? ' data-profile-uid="' + escapeHtml(post.authorUid) + '" data-profile-name="' + escapeHtml(post.name) + '" data-profile-handle="' + escapeHtml(post.handle) + '"'
                 : '') +
             '>' + escapeHtml(post.name) + '</span>' +
@@ -1786,6 +1851,69 @@
     refreshPorchUi();
   }
 
+  function canOpenProfile(post) {
+    return !!(post && post.authorUid && (dmsOn() || followingOn()));
+  }
+
+  function followingCount() {
+    var n = 0;
+    var k;
+    for (k in followingUids) if (followingUids[k]) n++;
+    return n;
+  }
+
+  function renderFollowingFeed() {
+    var el = document.getElementById('thoughts-feed');
+    if (!el) return;
+    if (!isLiveUser()) {
+      el.innerHTML = '<div class="post-empty"><strong>Sign in to follow people.</strong><p>Following is people in this room. The watchlist is topics.</p></div>';
+      refreshPorchUi();
+      return;
+    }
+    if (!followingReady && !followingError) {
+      el.innerHTML = '<div class="post-empty">Loading who you follow…</div>';
+      refreshPorchUi();
+      return;
+    }
+    if (followingError) {
+      el.innerHTML = '<div class="post-empty"><strong>Following could not load.</strong><p>' +
+        escapeHtml((followingError && followingError.message) || 'Could not read follows.') + '</p></div>';
+      refreshPorchUi();
+      return;
+    }
+    if (!followingCount()) {
+      el.innerHTML = '<div class="post-empty"><strong>You are not following anyone yet.</strong><p>Open a profile and hit Follow. This is not the topic watchlist.</p></div>';
+      refreshPorchUi();
+      return;
+    }
+    if (!liveReady && !liveError) {
+      el.innerHTML = '<div class="post-empty">Connecting to the live feed…</div>';
+      refreshPorchUi();
+      return;
+    }
+    if (liveError) {
+      el.innerHTML = '<div class="post-empty"><strong>Live feed could not load.</strong><p>Follows are saved, but posts could not be listed.</p></div>';
+      refreshPorchUi();
+      return;
+    }
+    var posts = livePosts.filter(function (p) {
+      if (!p || p.parentId) return false;
+      if (p.authorUid && blockedUids[p.authorUid]) return false;
+      return !!(p.authorUid && followingUids[p.authorUid]);
+    });
+    if (!posts.length) {
+      el.innerHTML = '<div class="post-empty"><strong>No posts from people you follow.</strong><p>When they post in this room, it shows up here.</p></div>';
+      refreshPorchUi();
+      return;
+    }
+    el.innerHTML = posts.map(function (p) {
+      var kids = repliesFor(p.id);
+      return renderPost(p, false) + kids.map(function (r) { return renderPost(r, true); }).join('');
+    }).join('');
+    highlightDeepPost();
+    refreshPorchUi();
+  }
+
   function renderFeed() {
     const el = document.getElementById('thoughts-feed');
     if (!el) return;
@@ -1796,8 +1924,12 @@
     }
 
     if (currentTab === 'following') {
-      el.innerHTML = '<div class="post-empty soon-panel"><strong>Following — Soon.</strong> There is no follows graph in this preview. The live room is on For You.</div>';
-      refreshPorchUi();
+      if (!followingLive()) {
+        el.innerHTML = '<div class="post-empty soon-panel"><strong>Following — Soon.</strong> There is no follows graph in this preview. The live room is on For You.</div>';
+        refreshPorchUi();
+        return;
+      }
+      renderFollowingFeed();
       return;
     }
 
@@ -3078,19 +3210,287 @@
     if (topics) topics.innerHTML = cards(TOPICS);
   }
 
-  function renderNotifs() {
-    const el = document.getElementById('notif-list');
-    if (!el) return;
-    el.innerHTML = '<div class="soon-panel">' +
-      '<strong>Notifications — Soon.</strong>' +
-      '<p>No live alerts in this preview. Dummy copy stays in site.json as sample only and is not shown as real activity.</p>' +
-      '</div>';
-    const badge = document.getElementById('notif-badge');
-    if (badge) {
+  function nameForUid(uid) {
+    if (!uid) return 'Someone';
+    if (uid === liveUid() && currentUser && currentUser.name) return currentUser.name;
+    var i;
+    for (i = 0; i < livePosts.length; i++) {
+      if (livePosts[i].authorUid === uid && livePosts[i].name) return livePosts[i].name;
+    }
+    return 'Someone';
+  }
+
+  function notifWhen(ms) {
+    if (!ms) return '';
+    var delta = Date.now() - ms;
+    if (delta < 60000) return 'now';
+    if (delta < 3600000) return Math.floor(delta / 60000) + 'm';
+    if (delta < 86400000) return Math.floor(delta / 3600000) + 'h';
+    return Math.floor(delta / 86400000) + 'd';
+  }
+
+  function notifLine(n) {
+    var who = nameForUid(n.fromUid);
+    if (n.type === 'reply') return who + ' replied to your post' + (n.text ? (': ' + n.text) : '');
+    if (n.type === 'like') return who + ' liked your post';
+    if (n.type === 'follow') return who + ' followed you';
+    if (n.text) return n.text;
+    return who + ' · ' + (n.type || 'notification');
+  }
+
+  function siteNotifs() {
+    return notifItems.filter(function (n) { return !n.siteId || n.siteId === SITE_ID; });
+  }
+
+  function unreadNotifCount() {
+    var n = 0;
+    var list = siteNotifs();
+    var i;
+    for (i = 0; i < list.length; i++) if (!list[i].read) n++;
+    return n;
+  }
+
+  function syncNotifChrome() {
+    var btn = document.getElementById('notif-mark-read');
+    var badge = document.getElementById('notif-badge');
+    var unread = notifsLive() ? unreadNotifCount() : 0;
+    if (btn) {
+      if (!notifsLive()) {
+        btn.disabled = true;
+        btn.textContent = 'Soon';
+      } else {
+        btn.textContent = 'Mark read';
+        btn.disabled = !unread;
+      }
+    }
+    if (!badge) return;
+    if (unread) {
+      badge.textContent = unread > 9 ? '9+' : String(unread);
+      badge.classList.add('visible');
+      badge.hidden = false;
+    } else {
       badge.textContent = '';
       badge.classList.remove('visible');
       badge.hidden = true;
     }
+  }
+
+  function renderNotifs() {
+    var el = document.getElementById('notif-list');
+    syncNotifChrome();
+    if (!el) return;
+    if (!notifsLive()) {
+      el.innerHTML = '<div class="soon-panel">' +
+        '<strong>Notifications — Soon.</strong>' +
+        '<p>No live alerts in this preview. Dummy copy stays in site.json as sample only and is not shown as real activity.</p>' +
+        '</div>';
+      return;
+    }
+    var list = siteNotifs();
+    if (notifTab === 'mentions') list = list.filter(function (n) { return n.type === 'mention'; });
+    if (!list.length) {
+      el.innerHTML = '<div class="soon-panel"><strong>' +
+        (notifTab === 'mentions' ? 'No mentions.' : 'No notifications yet.') +
+        '</strong><p>When someone replies to your post, it shows up here.</p></div>';
+      return;
+    }
+    el.innerHTML = list.map(function (n) {
+      return '<button type="button" class="notif-item' + (n.read ? '' : ' unread') + '" data-notif-id="' + escapeHtml(n.id) + '"' +
+        (n.postId ? ' data-post-id="' + escapeHtml(n.postId) + '"' : '') + '>' +
+        '<p>' + escapeHtml(notifLine(n)) + '</p>' +
+        '<time>' + escapeHtml(notifWhen(n.ms)) + '</time></button>';
+    }).join('');
+  }
+
+  function mapNotif(doc) {
+    var d = doc.data() || {};
+    var ms = d.createdAt && d.createdAt.toMillis ? d.createdAt.toMillis() : 0;
+    return {
+      id: doc.id,
+      toUid: d.toUid || '',
+      fromUid: d.fromUid || '',
+      type: d.type || '',
+      siteId: d.siteId || '',
+      postId: d.postId || '',
+      text: d.text || '',
+      read: d.read === true,
+      ms: ms
+    };
+  }
+
+  function teardownPeopleSocial() {
+    if (followingUnsub) { followingUnsub(); followingUnsub = null; }
+    followingUids = {};
+    followingReady = false;
+    followingError = null;
+    followWriteInFlight = false;
+    if (notifsUnsub) { notifsUnsub(); notifsUnsub = null; }
+    notifItems = [];
+    notifsReady = false;
+    notifsError = null;
+  }
+
+  function listenFollowing(uid) {
+    if (followingUnsub) { followingUnsub(); followingUnsub = null; }
+    followingUids = {};
+    followingReady = false;
+    followingError = null;
+    if (!followingOn() || !uid) {
+      syncFollowButton();
+      if (currentTab === 'following') renderFeed();
+      return;
+    }
+    followingUnsub = fbDb.collection('users').doc(uid).collection('following')
+      .where('siteId', '==', SITE_ID)
+      .onSnapshot(function (snap) {
+        followingReady = true;
+        followingError = null;
+        followingUids = {};
+        snap.forEach(function (doc) {
+          var d = doc.data() || {};
+          if (d.siteId && d.siteId !== SITE_ID) return;
+          var id = d.targetUid || doc.id;
+          if (id && id !== uid) followingUids[id] = true;
+        });
+        syncFollowButton();
+        hideDummyChrome();
+        if (currentTab === 'following') renderFeed();
+      }, function (err) {
+        followingReady = true;
+        followingError = err || new Error('Could not read follows.');
+        followingUids = {};
+        console.warn('following', err);
+        syncFollowButton();
+        hideDummyChrome();
+        if (currentTab === 'following') renderFeed();
+      });
+  }
+
+  function listenNotifs(uid) {
+    if (notifsUnsub) { notifsUnsub(); notifsUnsub = null; }
+    notifItems = [];
+    notifsReady = false;
+    notifsError = null;
+    if (!notifsOn() || !uid) {
+      renderNotifs();
+      return;
+    }
+    notifsUnsub = fbDb.collection('users').doc(uid).collection('notifications')
+      .orderBy('createdAt', 'desc')
+      .onSnapshot(function (snap) {
+        notifsReady = true;
+        notifsError = null;
+        notifItems = snap.docs.map(mapNotif);
+        hideDummyChrome();
+      }, function (err) {
+        notifsReady = true;
+        notifsError = err || new Error('Could not read notifications.');
+        notifItems = [];
+        console.warn('notifications', err);
+        hideDummyChrome();
+      });
+  }
+
+  function togglePersonFollow() {
+    if (!followingOn()) return;
+    var target = viewingProfile && viewingProfile.uid;
+    if (!target) return;
+    if (!isLiveUser()) { openAuth('join'); return; }
+    if (!requireVerified('follow')) return;
+    var me = liveUid();
+    if (!me || target === me || !fbDb || followWriteInFlight) return;
+    var ref = fbDb.collection('users').doc(me).collection('following').doc(target);
+    var on = !!followingUids[target];
+    followWriteInFlight = true;
+    syncFollowButton();
+    var done = function () {
+      followWriteInFlight = false;
+      syncFollowButton();
+    };
+    var op = on
+      ? ref.delete()
+      : ref.set({
+        targetUid: target,
+        siteId: SITE_ID,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    op.then(done).catch(function (e) {
+      composeErr((e && e.message) ? e.message : 'Could not update follow.');
+      done();
+    });
+  }
+
+  function syncFollowButton() {
+    var btn = document.getElementById('profile-follow-btn');
+    if (!btn) return;
+    var uid = viewingProfile && viewingProfile.uid;
+    var other = !!(uid && uid !== liveUid());
+    var show = other && followingLive();
+    btn.hidden = !show;
+    if (!show) {
+      btn.disabled = false;
+      btn.textContent = 'Follow';
+      btn.classList.remove('is-following');
+      btn.setAttribute('aria-pressed', 'false');
+      return;
+    }
+    if (!isLiveUser()) {
+      btn.disabled = false;
+      btn.textContent = 'Follow';
+      btn.classList.remove('is-following');
+      btn.setAttribute('aria-pressed', 'false');
+      return;
+    }
+    var on = !!followingUids[uid];
+    btn.textContent = on ? 'Following' : 'Follow';
+    btn.classList.toggle('is-following', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.disabled = !!followWriteInFlight;
+  }
+
+  function writeReplyNotif(parentId, text) {
+    var me = liveUid();
+    if (!me || !fbDb || !notifsOn() || notifsError || !isEmailVerified() || !parentId) return;
+    var send = function (authorUid) {
+      if (!authorUid || authorUid === me) return;
+      var payload = {
+        toUid: authorUid,
+        fromUid: me,
+        type: 'reply',
+        siteId: SITE_ID,
+        postId: parentId,
+        read: false,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      var snippet = String(text || '').trim().slice(0, 180);
+      if (snippet) payload.text = snippet;
+      fbDb.collection('users').doc(authorUid).collection('notifications').add(payload).catch(function (e) {
+        console.warn('reply notif', e);
+      });
+    };
+    var parent = findPost(parentId);
+    if (parent && parent.authorUid) { send(parent.authorUid); return; }
+    fbDb.collection('posts').doc(parentId).get().then(function (snap) {
+      var d = snap.exists ? (snap.data() || {}) : {};
+      send(d.authorUid || '');
+    }).catch(function (e) { console.warn('reply notif parent', e); });
+  }
+
+  function markNotifsRead(onlyId) {
+    if (!notifsOn() || !fbDb || !isLiveUser()) return;
+    var uid = liveUid();
+    var batch = fbDb.batch();
+    var n = 0;
+    siteNotifs().forEach(function (item) {
+      if (item.read) return;
+      if (onlyId && item.id !== onlyId) return;
+      batch.update(fbDb.collection('users').doc(uid).collection('notifications').doc(item.id), { read: true });
+      n++;
+    });
+    if (!n) return;
+    batch.commit().catch(function (e) {
+      console.warn('mark notifs', e);
+    });
   }
 
   function dmSiteId() {
@@ -3141,7 +3541,7 @@
       '.chat-user-picker-head button{background:none;border:0;color:inherit;font-size:1.2rem;cursor:pointer;}' +
       '.chat-picker-item{display:flex;gap:0.7rem;align-items:center;padding:0.75rem 1rem;cursor:pointer;border-bottom:1px solid var(--border,#2c2c32);}' +
       '.chat-picker-item:hover{background:rgba(225,6,0,0.08);}' +
-      '#chat-thread-view[hidden],#chat-placeholder[hidden],#chat-user-picker[hidden],#profile-message-btn[hidden]{display:none!important;}';
+      '#chat-thread-view[hidden],#chat-placeholder[hidden],#chat-user-picker[hidden],#profile-message-btn[hidden],#profile-follow-btn[hidden]{display:none!important;}';
     document.head.appendChild(st);
   }
 
@@ -3660,6 +4060,7 @@
         msgBtn.disabled = false;
       }
       paintProfile(viewingProfile.name || 'Member', viewingProfile.handle || 'member', '', viewingProfile.uid);
+      syncFollowButton();
       return;
     }
 
@@ -3671,6 +4072,7 @@
       if (content) content.hidden = true;
       var top = document.getElementById('profile-topbar-name');
       if (top) top.textContent = 'Profile';
+      syncFollowButton();
       return;
     }
     if (prompt) prompt.hidden = true;
@@ -3681,6 +4083,7 @@
       currentUser.bio || "Talking about the city.",
       currentUser.uid
     );
+    syncFollowButton();
   }
 
   function renderSidebarAuth() {
@@ -3914,6 +4317,7 @@
   }
   function signOut() {
     listenMemberNests(null);
+    teardownPeopleSocial();
     if (fbAuth && fbAuth.currentUser) fbAuth.signOut();
     currentUser = null;
     saveJSON(LS_USER, null);
@@ -3922,6 +4326,7 @@
     teardownDms();
     listenConversations();
     syncProfile();
+    renderNotifs();
     renderFeed();
   }
 
@@ -4139,6 +4544,7 @@
       resetComposeExtras();
       syncPostBtn();
       if (parentId) {
+        writeReplyNotif(parentId, text);
         fbDb.collection('posts').doc(parentId).update({
           replyCount: firebase.firestore.FieldValue.increment(1)
         }).catch(function (e) {
@@ -4442,6 +4848,10 @@
       }
       if (e.target.closest('#auth-signout')) { signOut(); return; }
 
+      if (e.target.closest('#profile-follow-btn')) {
+        togglePersonFollow();
+        return;
+      }
       if (e.target.closest('#profile-message-btn')) {
         if (!dmsOn()) return;
         if (!isLiveUser()) { openAuth('join'); return; }
@@ -4449,7 +4859,7 @@
         return;
       }
       const profileWho = e.target.closest('[data-profile-uid]');
-      if (profileWho && dmsOn() && !e.target.closest('[data-act]')) {
+      if (profileWho && (dmsOn() || followingOn()) && !e.target.closest('[data-act]')) {
         e.preventDefault();
         openUserProfile(
           profileWho.getAttribute('data-profile-uid'),
@@ -4562,6 +4972,28 @@
         return;
       }
 
+      const ntab = e.target.closest('[data-notif-tab]');
+      if (ntab) {
+        notifTab = ntab.getAttribute('data-notif-tab') || 'all';
+        document.querySelectorAll('[data-notif-tab]').forEach(function (t) {
+          t.classList.toggle('active', t === ntab);
+        });
+        renderNotifs();
+        return;
+      }
+      const nitem = e.target.closest('[data-notif-id]');
+      if (nitem) {
+        var nid = nitem.getAttribute('data-notif-id');
+        if (nid) markNotifsRead(nid);
+        var pid = nitem.getAttribute('data-post-id');
+        if (pid) {
+          deepPostId = pid;
+          deepPostDone = false;
+          go('home');
+        }
+        return;
+      }
+
       const etab = e.target.closest('[data-explore-tab]');
       if (etab) {
         document.querySelectorAll('[data-explore-tab]').forEach(function (t) {
@@ -4618,7 +5050,7 @@
       document.getElementById(id).addEventListener('click', function () { goRoom(); });
     });
     var markRead = document.getElementById('notif-mark-read');
-    if (markRead) markRead.addEventListener('click', function () { /* soon: no live notifs */ });
+    if (markRead) markRead.addEventListener('click', function () { markNotifsRead(); });
 
     var chatNew = document.getElementById('chat-new-btn');
     if (chatNew) chatNew.addEventListener('click', onChatNew);
@@ -5658,6 +6090,7 @@
         else {
           listenMemberNests(null);
           listenBlocks(null);
+          teardownPeopleSocial();
           if (currentUser && currentUser.live) {
             currentUser = null;
             saveJSON(LS_USER, null);
@@ -5666,6 +6099,7 @@
             teardownDms();
             listenConversations();
             syncProfile();
+            renderNotifs();
             renderFeed();
           } else {
             renderWatchlist();
