@@ -175,43 +175,43 @@
   },
   "sessionSeeds": [
     {
-      "id": "baku-seat",
+      "id": "sepang-seat",
       "name": "Grid Seat",
       "handle": "gridseat",
-      "text": "Who are you sitting with this week in Baku — driver, team, or both?",
+      "text": "Who are you sitting with for Sepang — driver, team, or both?",
       "hours": 1,
       "likes": 12,
       "replies": 3,
       "session": true
     },
     {
-      "id": "baku-walls",
-      "name": "Lap One",
-      "handle": "lapone",
-      "text": "Baku’s walls, not blank maps — what do you want to see on lap 1?",
-      "hours": 2,
-      "likes": 9,
-      "replies": 2,
-      "session": true
-    },
-    {
-      "id": "baku-gap",
+      "id": "sepang-gap",
       "name": "Gap Watch",
       "handle": "gapwatch",
-      "text": "After Madrid: Antonelli’s still out front. Who’s your pick to close the gap in Baku?",
+      "text": "Title board after Baku: Antonelli 302 · Russell 236 · Hamilton 199 (gap 66). Who closes it in Malaysia?",
       "hours": 3,
       "likes": 14,
       "replies": 4,
       "session": true
     },
     {
-      "id": "baku-race",
+      "id": "sepang-lights",
       "name": "Lights Out",
       "handle": "lightsout",
-      "text": "Lights out Saturday 5:00 AM MT — who’s walking away happy?",
+      "text": "Lights out Sun Oct 4 · 1:00 AM MT at Sepang — alarm or breakfast results?",
       "hours": 0,
       "likes": 11,
       "replies": 3,
+      "session": true
+    },
+    {
+      "id": "sepang-watch",
+      "name": "Watch Outbound",
+      "handle": "watchout",
+      "text": "Apple TV outbound is on the rail; Tubi only when listed. Watching the Apple feed for R16?",
+      "hours": 2,
+      "likes": 9,
+      "replies": 2,
       "session": true
     }
   ],
@@ -335,46 +335,46 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Race+Post",
-    "meta": "Race+Post",
-    "footer": "Calendar + WDC · Race+Post Azerbaijan. Result FACT (F1.com provisional). Not a news ingest. Not live timing. Preview.",
+    "kicker": "Off-weekend",
+    "meta": "Off-weekend · Watch restore",
+    "footer": "Watch outbound + next lights. Links not media. Not live timing. Preview.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
-      "title": "Azerbaijan GP · Baku",
-      "state": "Race+Post",
-      "next": "Bahrain GP in Malaysia · Sepang · Sun Oct 4 · 1:00 AM MT"
+      "title": "Bahrain GP in Malaysia · Sepang",
+      "state": "Off-weekend",
+      "next": "Race Sun Oct 4 · 1:00 AM MT"
     },
     "outbound": [
       {
-        "tag": "Result",
-        "topic": "result",
-        "headline": "Russell win · Verstappen +0.196 · Hadjar P3",
-        "snippet": "FL Russell 1:44.916 (lap 49). F1.com provisional race result. Antonelli P5 from P16.",
-        "meta": "Race+Post",
-        "url": "https://www.formula1.com/en/results/2026/races/1295/azerbaijan/race-result"
+        "tag": "Watch",
+        "topic": "watch",
+        "headline": "Watch on Apple TV",
+        "snippet": "US Formula 1 home on Apple TV (2026 rights). Outbound only — we don’t re-stream.",
+        "meta": "Outbound",
+        "url": "https://tv.apple.com/us/channel/formula-1/tvs.sbd.241000"
       },
       {
-        "tag": "WDC",
-        "topic": "wdc",
-        "headline": "WDC — Antonelli 302 · Russell 236 · Hamilton 199 (gap 66)",
-        "snippet": "After Round 15 Baku (F1.com provisional). Not a live points feed.",
-        "meta": "Race+Post",
-        "url": "https://www.formula1.com/en/results/2026/drivers"
+        "tag": "Tubi",
+        "topic": "watch",
+        "headline": "Free on Tubi (when listed)",
+        "snippet": "Apple×Tubi free altcasts for select 2026 races only when listed — don’t invent a Sepang tile.",
+        "meta": "Outbound",
+        "url": "https://tubitv.com/search/formula%201"
       },
       {
         "tag": "Next",
         "topic": "next",
-        "headline": "Next — Bahrain GP in Malaysia · Sepang · Race Sun Oct 4 · 1:00 AM MT",
-        "snippet": "Round 16 · lights out 07:00Z / 1:00 AM Mountain. Calendar next. Not a timing feed.",
-        "meta": "Race+Post",
-        "url": "https://en.wikipedia.org/wiki/2026_Bahrain_Grand_Prix"
+        "headline": "Next — Bahrain GP in Malaysia · Sepang · Sun Oct 4 · 1:00 AM MT",
+        "snippet": "Round 16 · lights 07:00Z / 1:00 AM Mountain. Calendar next. Not a timing feed.",
+        "meta": "Off-weekend",
+        "url": "https://www.formula1.com/en/racing/2026"
       }
     ],
     "porch": {
       "topic": "porch",
-      "prompt": "Who are you sitting with in Baku?",
+      "prompt": "Who are you sitting with for Sepang?",
       "dwellMs": 9000,
       "options": [
         "Driver",
