@@ -47,6 +47,23 @@ service cloud.firestore {
         && request.resource.data.poll.votes.diff(resource.data.poll.votes).affectedKeys().hasOnly([request.auth.uid])
         && request.resource.data.poll.votes[request.auth.uid] is int;
     }
+    function isParticipant() {
+      return signedIn() && request.auth.uid in resource.data.participants;
+    }
+    function isParticipantOnCreate() {
+      return signedIn() && request.auth.uid in request.resource.data.participants;
+    }
+    function twoParticipants(data) {
+      return data.participants is list
+        && data.participants.size() == 2
+        && data.participants[0] is string
+        && data.participants[1] is string
+        && data.participants[0] != data.participants[1];
+    }
+    function blockedEitherWay(a, b) {
+      return exists(/databases/$(database)/documents/users/$(a)/blocks/$(b))
+        || exists(/databases/$(database)/documents/users/$(b)/blocks/$(a));
+    }
 
     match /posts/{postId} {
       allow read: if true;
@@ -78,6 +95,66 @@ service cloud.firestore {
           && request.resource.data.targetUid == targetUid
           && factorySite(request.resource.data);
         allow delete: if signedIn() && request.auth.uid == uid;
+      }
+
+      // People follows (Following tab) — not topic watchlist
+      match /following/{targetUid} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create, update: if emailVerified()
+          && request.auth.uid == uid
+          && targetUid != uid
+          && request.resource.data.targetUid == targetUid
+          && factorySite(request.resource.data);
+        allow delete: if signedIn() && request.auth.uid == uid;
+      }
+
+      // In-app notifications inbox (no push yet)
+      match /notifications/{notifId} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow update: if signedIn() && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        allow delete: if signedIn() && request.auth.uid == uid;
+        allow create: if emailVerified()
+          && request.resource.data.toUid == uid
+          && request.resource.data.fromUid == request.auth.uid
+          && request.resource.data.fromUid != uid
+          && factorySite(request.resource.data)
+          && request.resource.data.type is string
+          && request.resource.data.read == false;
+      }
+    }
+
+    match /conversations/{convId} {
+      allow read: if isParticipant();
+      allow create: if emailVerified()
+        && isParticipantOnCreate()
+        && twoParticipants(request.resource.data)
+        && factorySite(request.resource.data)
+        && notKilled(request.resource.data.siteId)
+        && request.resource.data.participants.hasAll([request.auth.uid])
+        && !blockedEitherWay(request.resource.data.participants[0], request.resource.data.participants[1]);
+      allow update: if emailVerified()
+        && isParticipant()
+        && request.resource.data.siteId == resource.data.siteId
+        && request.resource.data.participants == resource.data.participants
+        && !blockedEitherWay(resource.data.participants[0], resource.data.participants[1]);
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if signedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
+        allow create: if emailVerified()
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
+          && request.resource.data.fromUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() <= 1000
+          && factorySite(request.resource.data)
+          && !blockedEitherWay(
+            get(/databases/$(database)/documents/conversations/$(convId)).data.participants[0],
+            get(/databases/$(database)/documents/conversations/$(convId)).data.participants[1]
+          );
+        allow update, delete: if false;
       }
     }
 
