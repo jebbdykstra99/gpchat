@@ -335,41 +335,41 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Off-weekend",
-    "meta": "Off-weekend · Watch restore",
-    "footer": "Watch outbound + next lights. Links not media. Not live timing. Preview.",
+    "kicker": "Event-day",
+    "meta": "Sepang · Pre-FP3 · R16",
+    "footer": "Event-day Sepang · Pre-FP3. Official F1.com outbound only. Not live timing. Preview. Nests HOLD.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
       "title": "Bahrain GP in Malaysia · Sepang",
-      "state": "Off-weekend",
-      "next": "Race Sun Oct 4 · 1:00 AM MT"
+      "state": "Event-day Sepang / Pre-FP3",
+      "next": "FP3 Fri Oct 2 · 9:30 PM PT"
     },
     "outbound": [
       {
-        "tag": "Watch",
-        "topic": "watch",
-        "headline": "Watch on Apple TV",
-        "snippet": "US Formula 1 home on Apple TV (2026 rights). Outbound only — we don’t re-stream.",
-        "meta": "Outbound",
-        "url": "https://tv.apple.com/us/channel/formula-1/tvs.sbd.241000"
-      },
-      {
-        "tag": "Tubi",
-        "topic": "watch",
-        "headline": "Free on Tubi (when listed)",
-        "snippet": "Apple×Tubi free altcasts for select 2026 races only when listed — don’t invent a Sepang tile.",
-        "meta": "Outbound",
-        "url": "https://tubitv.com/search/formula%201"
+        "tag": "Result",
+        "topic": "practice",
+        "headline": "FP2 — Leclerc 1:37.528 · Hadjar +0.099 · Norris +0.137",
+        "snippet": "FP1: Verstappen 1:37.520 · Russell · Hadjar. F1.com meeting 1308.",
+        "meta": "Result-of-practice",
+        "url": "https://www.formula1.com/en/results/2026/races/1308/bahrain/practice/2"
       },
       {
         "tag": "Next",
         "topic": "next",
-        "headline": "Next — Bahrain GP in Malaysia · Sepang · Sun Oct 4 · 1:00 AM MT",
-        "snippet": "Round 16 · lights 07:00Z / 1:00 AM Mountain. Calendar next. Not a timing feed.",
-        "meta": "Off-weekend",
-        "url": "https://www.formula1.com/en/racing/2026"
+        "headline": "Next — FP3 Fri Oct 2 · 9:30 PM PT",
+        "snippet": "Quali Sat 1:00 AM PT · Race Sun 12:00 AM PT · 56 laps.",
+        "meta": "Next session",
+        "url": "https://www.formula1.com/en/racing/2026/bahrain"
+      },
+      {
+        "tag": "WDC",
+        "topic": "standings",
+        "headline": "WDC — Antonelli 302 · Russell 236 · Hamilton 199 (gap 66)",
+        "snippet": "After Baku. Practice unchanged. Jolpica R15.",
+        "meta": "Standings",
+        "url": "https://www.formula1.com/en/results/2026/drivers"
       }
     ],
     "porch": {
