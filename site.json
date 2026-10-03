@@ -335,46 +335,46 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Event-day",
-    "meta": "Sepang · Pre-FP3 · R16",
-    "footer": "Event-day Sepang · Pre-FP3. Official F1.com outbound only. Not live timing. Preview. Nests HOLD.",
+    "kicker": "Quali done",
+    "meta": "Bahrain GP · Pre-Race · R16",
+    "footer": "Quali done · Pre-Race Bahrain. Official F1.com outbound only. Not live timing. Preview. Nests HOLD.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
-      "title": "Bahrain GP in Malaysia · Sepang",
-      "state": "Event-day Sepang / Pre-FP3",
-      "next": "FP3 Fri Oct 2 · 9:30 PM PT"
+      "title": "Bahrain GP",
+      "state": "Quali done / Pre-Race",
+      "next": "Race Sun Oct 4 · 12:00 AM PT (1:00 AM MT) · 56 laps"
     },
     "outbound": [
       {
         "tag": "Result",
-        "topic": "practice",
-        "headline": "FP2 — Leclerc 1:37.528 · Hadjar +0.099 · Norris +0.137",
-        "snippet": "FP1: Verstappen 1:37.520 · Russell · Hadjar. F1.com meeting 1308.",
-        "meta": "Result-of-practice",
-        "url": "https://www.formula1.com/en/results/2026/races/1308/bahrain/practice/2"
+        "topic": "qualifying",
+        "headline": "POLE Verstappen 1:35.130 · Hamilton +0.298 · Hadjar +0.428 (ANT P4 · RUS P8)",
+        "snippet": "Official Qualifying. F1.com meeting 1308. Jolpica 2026/16/qualifying.",
+        "meta": "Qualifying",
+        "url": "https://www.formula1.com/en/results/2026/races/1308/bahrain/qualifying"
       },
       {
         "tag": "Next",
         "topic": "next",
-        "headline": "Next — FP3 Fri Oct 2 · 9:30 PM PT",
-        "snippet": "Quali Sat 1:00 AM PT · Race Sun 12:00 AM PT · 56 laps.",
-        "meta": "Next session",
+        "headline": "Race Sun Oct 4 · 12:00 AM PT (1:00 AM MT) · 56 laps",
+        "snippet": "Quali done · Pre-Race · Bahrain GP. F1.com meeting 1308.",
+        "meta": "Pre-Race",
         "url": "https://www.formula1.com/en/racing/2026/bahrain"
       },
       {
         "tag": "WDC",
         "topic": "standings",
-        "headline": "WDC — Antonelli 302 · Russell 236 · Hamilton 199 (gap 66)",
-        "snippet": "After Baku. Practice unchanged. Jolpica R15.",
+        "headline": "Antonelli 302 · Russell 236 · Hamilton 199 (gap 66)",
+        "snippet": "Board after Baku. Jolpica 2026/16/qualifying.",
         "meta": "Standings",
         "url": "https://www.formula1.com/en/results/2026/drivers"
       }
     ],
     "porch": {
       "topic": "porch",
-      "prompt": "Who are you sitting with for Sepang?",
+      "prompt": "Who are you sitting with for the Bahrain GP?",
       "dwellMs": 9000,
       "options": [
         "Driver",
