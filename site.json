@@ -335,41 +335,41 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Quali done",
-    "meta": "Bahrain GP · Pre-Race · R16",
-    "footer": "Quali done · Pre-Race Bahrain. Official F1.com outbound only. Not live timing. Preview. Nests HOLD.",
+    "kicker": "Race+Post Sepang",
+    "meta": "Race+Post Sepang",
+    "footer": "Race+Post Sepang. Official F1.com outbound only. Not live timing. Preview. Nests HOLD.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
-      "title": "Bahrain GP",
-      "state": "Quali done / Pre-Race",
-      "next": "Race Sun Oct 4 · 12:00 AM PT (1:00 AM MT) · 56 laps"
+      "title": "Sepang",
+      "state": "Race+Post Sepang",
+      "next": "Singapore GP · Oct 9–11"
     },
     "outbound": [
       {
         "tag": "Result",
-        "topic": "qualifying",
-        "headline": "POLE Verstappen 1:35.130 · Hamilton +0.298 · Hadjar +0.428 (ANT P4 · RUS P8)",
-        "snippet": "Official Qualifying. F1.com meeting 1308. Jolpica 2026/16/qualifying.",
-        "meta": "Qualifying",
-        "url": "https://www.formula1.com/en/results/2026/races/1308/bahrain/qualifying"
-      },
-      {
-        "tag": "Next",
-        "topic": "next",
-        "headline": "Race Sun Oct 4 · 12:00 AM PT (1:00 AM MT) · 56 laps",
-        "snippet": "Quali done · Pre-Race · Bahrain GP. F1.com meeting 1308.",
-        "meta": "Pre-Race",
-        "url": "https://www.formula1.com/en/racing/2026/bahrain"
+        "topic": "result",
+        "headline": "Verstappen 1:47:14.808 · Antonelli +2.307 · Hamilton P3",
+        "snippet": "Official race result. F1.com meeting 1308.",
+        "meta": "Race+Post",
+        "url": "https://www.formula1.com/en/results/2026/races/1308/bahrain/race-result"
       },
       {
         "tag": "WDC",
         "topic": "standings",
-        "headline": "Antonelli 302 · Russell 236 · Hamilton 199 (gap 66)",
-        "snippet": "Board after Baku. Jolpica 2026/16/qualifying.",
-        "meta": "Standings",
+        "headline": "Antonelli 320 · Russell 236 · Hamilton 214 (gap 84)",
+        "snippet": "Official 2026 drivers' standings. F1.com.",
+        "meta": "Race+Post",
         "url": "https://www.formula1.com/en/results/2026/drivers"
+      },
+      {
+        "tag": "Next",
+        "topic": "next",
+        "headline": "Singapore GP · Oct 9–11",
+        "snippet": "Official 2026 calendar. F1.com.",
+        "meta": "Race+Post",
+        "url": "https://www.formula1.com/en/racing/2026"
       }
     ],
     "porch": {
