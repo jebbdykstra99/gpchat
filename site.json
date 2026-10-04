@@ -344,7 +344,7 @@
     "cmo": {
       "title": "Sepang",
       "state": "Race+Post Sepang",
-      "next": "Singapore GP · Oct 9–11"
+      "next": "Singapore GP · FP1 Fri Oct 9, 1:30 AM PT · Sprint Quali Fri Oct 9, 5:30 AM PT · Sprint Sat Oct 10, 2:00 AM PT · Quali Sat Oct 10, 6:00 AM PT · Race Sun Oct 11, 5:00 AM PT"
     },
     "outbound": [
       {
@@ -366,8 +366,8 @@
       {
         "tag": "Next",
         "topic": "next",
-        "headline": "Singapore GP · Oct 9–11",
-        "snippet": "Official 2026 calendar. F1.com.",
+        "headline": "Singapore GP · FP1 Fri Oct 9, 1:30 AM PT · Sprint Quali Fri Oct 9, 5:30 AM PT · Sprint Sat Oct 10, 2:00 AM PT · Quali Sat Oct 10, 6:00 AM PT · Race Sun Oct 11, 5:00 AM PT",
+        "snippet": "Singapore Grand Prix · round 17. Jolpica current/next.",
         "meta": "Race+Post",
         "url": "https://www.formula1.com/en/racing/2026"
       }
