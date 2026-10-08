@@ -175,40 +175,40 @@
   },
   "sessionSeeds": [
     {
-      "id": "sepang-seat",
+      "id": "singapore-seat",
       "name": "Grid Seat",
       "handle": "gridseat",
-      "text": "Who are you sitting with for Sepang — driver, team, or both?",
+      "text": "Who are you sitting with for Singapore — driver, team, or both?",
       "hours": 1,
       "likes": 12,
       "replies": 3,
       "session": true
     },
     {
-      "id": "sepang-gap",
+      "id": "singapore-gap",
       "name": "Gap Watch",
       "handle": "gapwatch",
-      "text": "Title board after Baku: Antonelli 302 · Russell 236 · Hamilton 199 (gap 66). Who closes it in Malaysia?",
+      "text": "Title board after Sepang: Antonelli 320 · Russell 236 · Hamilton 214 (gap 84). Who closes it in Singapore?",
       "hours": 3,
       "likes": 14,
       "replies": 4,
       "session": true
     },
     {
-      "id": "sepang-lights",
+      "id": "singapore-lights",
       "name": "Lights Out",
       "handle": "lightsout",
-      "text": "Lights out Sun Oct 4 · 1:00 AM MT at Sepang — alarm or breakfast results?",
+      "text": "Lights out Sun Oct 11 · 6:00 AM MT at Marina Bay — alarm or breakfast results?",
       "hours": 0,
       "likes": 11,
       "replies": 3,
       "session": true
     },
     {
-      "id": "sepang-watch",
+      "id": "singapore-watch",
       "name": "Watch Outbound",
       "handle": "watchout",
-      "text": "Apple TV outbound is on the rail; Tubi only when listed. Watching the Apple feed for R16?",
+      "text": "Apple TV outbound is on the rail; Tubi only when listed. Watching the Apple feed for Singapore?",
       "hours": 2,
       "likes": 9,
       "replies": 2,
@@ -335,46 +335,46 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Quali done",
-    "meta": "Bahrain GP · Pre-Race · R16",
-    "footer": "Quali done · Pre-Race Bahrain. Official F1.com outbound only. Not live timing. Preview. Nests HOLD.",
+    "kicker": "Singapore Pre-FP1",
+    "meta": "Singapore GP · Marina Bay · Pre-FP1 · R17",
+    "footer": "Singapore GP · Pre-FP1. Sprint weekend at Marina Bay. Official F1.com outbound only. Not live timing. Preview. Nests HOLD.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
-      "title": "Bahrain GP",
-      "state": "Quali done / Pre-Race",
-      "next": "Race Sun Oct 4 · 12:00 AM PT (1:00 AM MT) · 56 laps"
+      "title": "Singapore GP",
+      "state": "Singapore Pre-FP1",
+      "next": "FP1 Fri Oct 9 2:30 AM MT (08:30Z) · Sprint Quali Fri Oct 9 6:30 AM MT (12:30Z) · Sprint Sat Oct 10 3:00 AM MT · Quali Sat Oct 10 7:00 AM MT · Race Sun Oct 11 6:00 AM MT"
     },
     "outbound": [
       {
-        "tag": "Result",
-        "topic": "qualifying",
-        "headline": "POLE Verstappen 1:35.130 · Hamilton +0.298 · Hadjar +0.428 (ANT P4 · RUS P8)",
-        "snippet": "Official Qualifying. F1.com meeting 1308. Jolpica 2026/16/qualifying.",
-        "meta": "Qualifying",
-        "url": "https://www.formula1.com/en/results/2026/races/1308/bahrain/qualifying"
-      },
-      {
         "tag": "Next",
         "topic": "next",
-        "headline": "Race Sun Oct 4 · 12:00 AM PT (1:00 AM MT) · 56 laps",
-        "snippet": "Quali done · Pre-Race · Bahrain GP. F1.com meeting 1308.",
-        "meta": "Pre-Race",
-        "url": "https://www.formula1.com/en/racing/2026/bahrain"
+        "headline": "Singapore GP · FP1 Fri Oct 9 2:30 AM MT (08:30Z) · Sprint Quali Fri Oct 9 6:30 AM MT (12:30Z) · Sprint Sat Oct 10 3:00 AM MT · Quali Sat Oct 10 7:00 AM MT · Race Sun Oct 11 6:00 AM MT",
+        "snippet": "Marina Bay · round 17 · sprint weekend. Jolpica 2026/17.",
+        "meta": "Pre-FP1",
+        "url": "https://www.formula1.com/en/racing/2026"
       },
       {
         "tag": "WDC",
         "topic": "standings",
-        "headline": "Antonelli 302 · Russell 236 · Hamilton 199 (gap 66)",
-        "snippet": "Board after Baku. Jolpica 2026/16/qualifying.",
+        "headline": "Antonelli 320 · Russell 236 · Hamilton 214 (gap 84)",
+        "snippet": "Board after R16. Jolpica current driverStandings.",
         "meta": "Standings",
         "url": "https://www.formula1.com/en/results/2026/drivers"
+      },
+      {
+        "tag": "Result",
+        "topic": "result",
+        "headline": "Verstappen 1:47:14.808 · Antonelli +2.307 · Hamilton +4.919",
+        "snippet": "Sepang R16 podium. F1.com meeting 1308. Jolpica 2026/16/results.",
+        "meta": "R16 result",
+        "url": "https://www.formula1.com/en/results/2026/races/1308/bahrain/race-result"
       }
     ],
     "porch": {
       "topic": "porch",
-      "prompt": "Who are you sitting with for the Bahrain GP?",
+      "prompt": "Who are you sitting with for the Singapore GP?",
       "dwellMs": 9000,
       "options": [
         "Driver",
