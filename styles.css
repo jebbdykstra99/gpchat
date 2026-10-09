@@ -1682,3 +1682,10 @@ body.legal-page {
   .stories-viewer { padding: 0; }
   .stories-viewer-card { height: calc(100vh - 2.15rem); border-radius: 0; }
 }
+
+.post-steward-pill {
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #7ec8c4;
+  border: 1px solid currentColor; border-radius: 999px;
+  padding: 0.05rem 0.45rem; line-height: 1.5;
+}
