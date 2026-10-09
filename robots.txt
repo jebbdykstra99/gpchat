@@ -1,3 +1,4 @@
 User-agent: *
-Disallow: /
-# Preview lock. Accounts are not open.
+Allow: /
+
+Sitemap: https://gpchat.com/sitemap.xml
