@@ -102,13 +102,17 @@
     if (typeof n !== 'string') return false;
     var s = n.trim();
     if (!s || s.length > 50) return false;
-    return !/\b(admin|administrator|moderator|mod team|official|staff|support team)\b/i.test(s);
+    if (/\b(admin|administrator|moderator|mod team|official|staff|support team|steward)\b/i.test(s)) return false;
+    if (/\b(adm1n|4dmin|0fficial|st3ward)\b/i.test(s)) return false;
+    if (/аdmin|аdministrator|οfficial|оfficial/i.test(s)) return false;
+    return true;
   }
   function handleOk(h) {
     return typeof h === 'string'
       && /^[a-z0-9_]{1,15}$/.test(h)
       && !HANDLE_EXACT[h]
-      && !/^(admin|moderator|official|subx|jebb)/.test(h);
+      && !/^(admin|moderator|official|subx|jebb)/.test(h)
+      && !/(adm1n|4dmin|0fficial|st3ward)/.test(h);
   }
   function fourDigits() {
     var s = String(Math.floor(Math.random() * 10000));

@@ -153,12 +153,16 @@ service cloud.firestore {
     }
     function nameOk(n) {
       return n is string && n.size() > 0 && n.size() <= 50
-        && !n.lower().matches('(?s).*\\b(admin|administrator|moderator|mod team|official|staff|support team)\\b.*');
+        && !n.lower().matches('(?s).*\\b(admin|administrator|moderator|mod team|official|staff|support team|steward)\\b.*')
+        // Practical look-alikes only. Leetspeak tokens, plus Cyrillic a/o and Greek omicron
+        // spoofs of admin/official. Rules have no confusable-normalize, so unlisted homoglyphs pass.
+        && !n.lower().matches('(?s).*(\\badm1n\\b|\\b4dmin\\b|\\b0fficial\\b|\\bst3ward\\b|аdmin|аdministrator|οfficial|оfficial).*');
     }
     function handleOk(h) {
       return h is string && h.matches('^[a-z0-9_]{1,15}$')
         && !(h in ['mod', 'mods', 'staff', 'support', 'steward', 'system', 'root', 'team'])
-        && !h.matches('^(admin|moderator|official|subx|jebb).*');
+        && !h.matches('^(admin|moderator|official|subx|jebb).*')
+        && !h.matches('.*(adm1n|4dmin|0fficial|st3ward).*');
     }
     function postKeysOk(d) {
       return d.keys().hasOnly([
@@ -209,7 +213,7 @@ service cloud.firestore {
     }
     function profileOk(d) {
       return isAdmin() || (
-        (!d.keys().hasAny(['displayName']) || (d.displayName is string && d.displayName.size() <= 50))
+        (!d.keys().hasAny(['displayName']) || nameOk(d.displayName))
         && (!d.keys().hasAny(['name']) || nameOk(d.name))
         && (!d.keys().hasAny(['handle']) || handleOk(d.handle))
         && (!d.keys().hasAny(['bio']) || (d.bio is string && d.bio.size() <= 160))

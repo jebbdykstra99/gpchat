@@ -1,5 +1,5 @@
 --- preview-lift/firestore.rules.BASELINE	2026-10-09 00:39:17.853887865 +0000
-+++ preview-lift/firestore.rules.proposed	2026-10-09 00:39:17.853887865 +0000
++++ preview-lift/firestore.rules.proposed	2026-10-09 03:15:15.950002599 +0000
 @@ -20,6 +20,17 @@
          'behindtheblackwall', 'btbw'
        ];
@@ -18,7 +18,7 @@
      function notKilled(sid) {
        return !exists(/databases/$(database)/documents/sites/$(sid))
          || get(/databases/$(database)/documents/sites/$(sid)).data.killed != true;
-@@ -108,6 +119,105 @@
+@@ -108,6 +119,109 @@
          && data.expiresAt <= data.createdAt + duration.value(28, 'h');
      }
  
@@ -56,12 +56,16 @@
 +    }
 +    function nameOk(n) {
 +      return n is string && n.size() > 0 && n.size() <= 50
-+        && !n.lower().matches('(?s).*\\b(admin|administrator|moderator|mod team|official|staff|support team)\\b.*');
++        && !n.lower().matches('(?s).*\\b(admin|administrator|moderator|mod team|official|staff|support team|steward)\\b.*')
++        // Practical look-alikes only. Leetspeak tokens, plus Cyrillic a/o and Greek omicron
++        // spoofs of admin/official. Rules have no confusable-normalize, so unlisted homoglyphs pass.
++        && !n.lower().matches('(?s).*(\\badm1n\\b|\\b4dmin\\b|\\b0fficial\\b|\\bst3ward\\b|аdmin|аdministrator|οfficial|оfficial).*');
 +    }
 +    function handleOk(h) {
 +      return h is string && h.matches('^[a-z0-9_]{1,15}$')
 +        && !(h in ['mod', 'mods', 'staff', 'support', 'steward', 'system', 'root', 'team'])
-+        && !h.matches('^(admin|moderator|official|subx|jebb).*');
++        && !h.matches('^(admin|moderator|official|subx|jebb).*')
++        && !h.matches('.*(adm1n|4dmin|0fficial|st3ward).*');
 +    }
 +    function postKeysOk(d) {
 +      return d.keys().hasOnly([
@@ -112,7 +116,7 @@
 +    }
 +    function profileOk(d) {
 +      return isAdmin() || (
-+        (!d.keys().hasAny(['displayName']) || (d.displayName is string && d.displayName.size() <= 50))
++        (!d.keys().hasAny(['displayName']) || nameOk(d.displayName))
 +        && (!d.keys().hasAny(['name']) || nameOk(d.name))
 +        && (!d.keys().hasAny(['handle']) || handleOk(d.handle))
 +        && (!d.keys().hasAny(['bio']) || (d.bio is string && d.bio.size() <= 160))
@@ -124,7 +128,7 @@
      match /posts/{postId} {
        allow read: if true;
        allow create: if emailVerified()
-@@ -115,9 +225,12 @@
+@@ -115,9 +229,12 @@
          && request.auth.uid == request.resource.data.authorUid
          && factorySite(request.resource.data)
          && hasPostBody(request.resource.data)
@@ -140,7 +144,7 @@
        allow update: if emailVerified() && notKilled(resource.data.siteId) && (
          onlyReplyCountBump()
          || onlyOwnPollVote()
-@@ -127,6 +240,10 @@
+@@ -127,6 +244,10 @@
        );
      }
  
@@ -151,7 +155,7 @@
      match /users/{uid} {
        allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
        allow list: if isAdmin();
-@@ -134,7 +251,8 @@
+@@ -134,7 +255,8 @@
          && request.auth.uid == uid
          && request.resource.data.keys().hasAll(['siteId'])
          && factorySite(request.resource.data)
@@ -161,7 +165,7 @@
  
        match /blocks/{targetUid} {
          allow read: if signedIn() && request.auth.uid == uid;
-@@ -189,6 +307,12 @@
+@@ -189,6 +311,12 @@
            && request.resource.data.fromUid != uid
            && factorySite(request.resource.data)
            && request.resource.data.type is string
@@ -174,7 +178,7 @@
            && request.resource.data.read == false;
        }
      }
-@@ -200,7 +324,10 @@
+@@ -200,7 +328,10 @@
          && request.resource.data.reporterUid == request.auth.uid
          && factorySite(request.resource.data)
          && request.resource.data.postId is string
@@ -186,7 +190,7 @@
        allow update, delete: if isAdmin();
      }
  
-@@ -210,7 +337,70 @@
+@@ -210,7 +341,70 @@
          && request.resource.data.siteId == siteId
          && request.resource.data.killed is bool;
        allow delete: if false;
@@ -257,7 +261,7 @@
  
      match /stories/{storyId} {
        allow read: if factorySite(resource.data);
-@@ -258,6 +448,8 @@
+@@ -258,6 +452,8 @@
            && request.resource.data.text is string
            && request.resource.data.text.size() > 0
            && request.resource.data.text.size() <= 1000

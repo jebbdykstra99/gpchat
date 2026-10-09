@@ -21,3 +21,5 @@ jobs:
         working-directory: preview-lift/rules-tests
       - run: npm run test:step3
         working-directory: preview-lift/rules-tests
+      - run: npm run test:abuse
+        working-directory: preview-lift/rules-tests
