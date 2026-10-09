@@ -66,6 +66,658 @@
   const ADMIN_UID = 'o774wL9hUVSi19EkDCgLqQomP8i2';
   const DM_TEXT_MAX = 1000;
 
+
+  // ===== PREVIEW-LIFT (guards/privacy/steward) =====
+  // Port this block plus the call sites named in the PR. A room joins guardedSite
+  // only after its factory.js carries guardedPostWrite + the DM lastMsgAt batch.
+  var HANDLE_EXACT = { mod: 1, mods: 1, staff: 1, support: 1, steward: 1, system: 1, root: 1, team: 1 };
+  var guardState = { rate: null, unsub: null, lastPostMs: 0, lastMsgMs: 0, sending: false };
+  var guardTick = null;
+  var reportItems = [];
+  var reportsUnsub = null;
+  var reportedMem = {};
+  var previewLiftWired = false;
+
+  function isAdminUser() {
+    return liveUid() === ADMIN_UID;
+  }
+  function siteMinAge() {
+    var n = parseInt(site && site.minAge, 10);
+    if (!isFinite(n) || n < 1) return 13;
+    return n;
+  }
+  function ageGateMessage() {
+    return 'Confirm you are ' + siteMinAge() + ' or older and agree to the preview Terms and Privacy pages.';
+  }
+  function paintAgeLabels() {
+    var n = String(siteMinAge());
+    ['cv-google-age', 'cv-reg-age'].forEach(function (id) {
+      var input = document.getElementById(id);
+      var span = input && input.parentNode && input.parentNode.querySelector('span');
+      if (!span) return;
+      span.innerHTML = span.innerHTML.replace(/I am \d+ or older/g, 'I am ' + n + ' or older');
+    });
+  }
+  function nameOk(n) {
+    if (typeof n !== 'string') return false;
+    var s = n.trim();
+    if (!s || s.length > 50) return false;
+    return !/\b(admin|administrator|moderator|mod team|official|staff|support team)\b/i.test(s);
+  }
+  function handleOk(h) {
+    return typeof h === 'string'
+      && /^[a-z0-9_]{1,15}$/.test(h)
+      && !HANDLE_EXACT[h]
+      && !/^(admin|moderator|official|subx|jebb)/.test(h);
+  }
+  function fourDigits() {
+    var s = String(Math.floor(Math.random() * 10000));
+    while (s.length < 4) s = '0' + s;
+    return s;
+  }
+  function handleFromName(name) {
+    var h = String(name || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15);
+    if (!h) h = 'fan';
+    if (handleOk(h)) return h;
+    var digits = fourDigits();
+    var withDigits = (h + digits).slice(0, 15);
+    if (handleOk(withDigits)) return withDigits;
+    var prefixed = ('f' + digits + h).replace(/[^a-z0-9_]/g, '').slice(0, 15);
+    if (handleOk(prefixed)) return prefixed;
+    return ('fan' + digits).slice(0, 15);
+  }
+  function fanNameStored(uid) {
+    var key = 'subx.fanName.v1.' + String(uid || 'anon');
+    try {
+      var existing = localStorage.getItem(key);
+      if (existing && nameOk(existing)) return existing;
+      var n = 'Fan ' + fourDigits();
+      localStorage.setItem(key, n);
+      return n;
+    } catch (e) {
+      return 'Fan ' + fourDigits();
+    }
+  }
+  function usableDisplayName(user) {
+    var display = String((user && user.displayName) || '').trim();
+    if (!display || display.indexOf('@') !== -1) return '';
+    return display;
+  }
+  function emailPrefixShowing(user) {
+    var email = String((user && user.email) || '');
+    var at = email.indexOf('@');
+    if (at <= 0) return false;
+    var local = email.slice(0, at);
+    var name = usableDisplayName(user);
+    return !!name && name.toLowerCase() === local.toLowerCase();
+  }
+  function memberIdentity(user, typedName) {
+    var typed = String(typedName || '').trim();
+    if (typed) {
+      return { name: typed, handle: handleFromName(typed), minted: false, emailPrefixShowing: false };
+    }
+    var display = usableDisplayName(user);
+    if (display) {
+      return {
+        name: display,
+        handle: handleFromName(display),
+        minted: false,
+        emailPrefixShowing: emailPrefixShowing(user)
+      };
+    }
+    var fan = fanNameStored(user && user.uid);
+    return { name: fan, handle: handleFromName(fan), minted: true, emailPrefixShowing: false };
+  }
+  function authorForWrite(live) {
+    if (currentUser && currentUser.live && currentUser.name && live && currentUser.uid === live.uid) {
+      return { name: currentUser.name, handle: currentUser.handle || handleFromName(currentUser.name) };
+    }
+    return memberIdentity(live);
+  }
+  function ensurePublicProfile(user, typedName, extra) {
+    if (!fbDb || !user) return Promise.resolve();
+    var typed = String(typedName || '').trim();
+    if (typed && !nameOk(typed)) return Promise.reject(new Error('That display name is reserved.'));
+    var idn = memberIdentity(user, typed);
+    var data = { siteId: SITE_ID };
+    var src = extra || {};
+    Object.keys(src).forEach(function (k) {
+      if (k === 'email' || k === 'phone' || k === 'phoneNumber') return;
+      data[k] = src[k];
+    });
+    if (!idn.emailPrefixShowing) data.displayName = idn.name;
+    var chain = Promise.resolve();
+    if (!idn.emailPrefixShowing && user.updateProfile && String(user.displayName || '') !== idn.name) {
+      chain = user.updateProfile({ displayName: idn.name });
+    }
+    return chain.then(function () {
+      return fbDb.collection('users').doc(user.uid).set(data, { merge: true });
+    });
+  }
+  function persistMintedName(user, name) {
+    if (!user || !name) return;
+    ensurePublicProfile(user, name).catch(function (e) { console.warn('fan name', e); });
+  }
+  function ensurePreviewLiftCss() {
+    if (document.getElementById('preview-lift-css')) return;
+    var st = document.createElement('style');
+    st.id = 'preview-lift-css';
+    st.textContent =
+      '.name-prefix-nudge{margin:0.7rem 1rem 0;padding:0.75rem 0.9rem;display:flex;gap:0.6rem;align-items:flex-start;' +
+        'background:var(--surface,#111);color:var(--text,#f4f4f4);border:1px solid var(--border,rgba(255,255,255,0.12));border-radius:10px;font-size:0.86rem;}' +
+      '.name-prefix-nudge[hidden],.name-prompt[hidden]{display:none!important;}' +
+      '.name-prefix-nudge-copy{flex:1;}' +
+      '.name-prefix-nudge-link,.name-prefix-nudge-x{background:transparent;border:1px solid var(--border,rgba(255,255,255,0.18));color:inherit;border-radius:8px;cursor:pointer;}' +
+      '.name-prefix-nudge-link{margin-left:0.35rem;padding:0.15rem 0.5rem;font:inherit;font-weight:600;}' +
+      '.name-prefix-nudge-x{width:1.7rem;height:1.7rem;}' +
+      '.name-prompt{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:1rem;}' +
+      '.name-prompt-card{background:var(--surface,#111);color:var(--text,#f4f4f4);border-radius:12px;padding:1rem;width:min(22rem,100%);}' +
+      '.name-prompt-card input{width:100%;margin:0.5rem 0;padding:0.45rem 0.6rem;border-radius:8px;border:1px solid var(--border,#333);background:transparent;color:inherit;}' +
+      '.name-prompt-err{min-height:1.1rem;color:var(--accent,#e10600);font-size:0.8rem;}' +
+      '.name-prompt-actions{display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.4rem;}' +
+      '.post-menu{position:relative;margin-left:auto;}' +
+      '.post-menu-pop{position:absolute;right:0;top:100%;z-index:5;background:var(--surface,#111);border:1px solid var(--border,#333);border-radius:8px;padding:0.25rem;min-width:8rem;}' +
+      '#nav-reports{cursor:pointer;width:100%;background:none;border:0;font:inherit;text-align:left;}';
+    document.head.appendChild(st);
+  }
+  function showEmailPrefixNudge(uid) {
+    try { if (localStorage.getItem('subx.nameNudge.v1.' + uid) === '1') return; } catch (e) {}
+    ensurePreviewLiftCss();
+    var el = document.getElementById('name-prefix-nudge');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'name-prefix-nudge';
+      el.className = 'name-prefix-nudge';
+      el.setAttribute('role', 'status');
+      el.innerHTML =
+        '<div class="name-prefix-nudge-copy">Pick a display name (your email prefix is showing). <button type="button" class="name-prefix-nudge-link" id="name-prefix-pick">Edit</button></div>' +
+        '<button type="button" class="name-prefix-nudge-x" id="name-prefix-dismiss" aria-label="Dismiss">&times;</button>';
+      var compose = document.getElementById('thoughts-compose-wrap');
+      if (compose && compose.parentNode) compose.parentNode.insertBefore(el, compose);
+      else document.body.appendChild(el);
+    }
+    el.hidden = false;
+  }
+  function dismissEmailPrefixNudge() {
+    var uid = liveUid();
+    if (uid) { try { localStorage.setItem('subx.nameNudge.v1.' + uid, '1'); } catch (e) {} }
+    var el = document.getElementById('name-prefix-nudge');
+    if (el) el.hidden = true;
+  }
+  function openDisplayNamePrompt() {
+    ensurePreviewLiftCss();
+    var el = document.getElementById('name-prompt');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'name-prompt';
+      el.className = 'name-prompt';
+      el.innerHTML =
+        '<div class="name-prompt-card" role="dialog" aria-label="Pick a display name">' +
+          '<p>Pick a display name</p>' +
+          '<input id="name-prompt-input" maxlength="50" autocomplete="nickname" placeholder="Your name">' +
+          '<div class="name-prompt-err" id="name-prompt-err"></div>' +
+          '<div class="name-prompt-actions">' +
+            '<button type="button" id="name-prompt-cancel">Cancel</button>' +
+            '<button type="button" id="name-prompt-save">Save</button>' +
+          '</div></div>';
+      document.body.appendChild(el);
+    }
+    var err = document.getElementById('name-prompt-err');
+    if (err) err.textContent = '';
+    var input = document.getElementById('name-prompt-input');
+    if (input) {
+      input.value = '';
+      try { input.focus(); } catch (e2) {}
+    }
+    el.hidden = false;
+  }
+  function saveDisplayNamePrompt() {
+    var input = document.getElementById('name-prompt-input');
+    var err = document.getElementById('name-prompt-err');
+    var name = String((input && input.value) || '').trim();
+    var user = fbAuth && fbAuth.currentUser;
+    if (!user) { if (err) err.textContent = 'Sign in first.'; return; }
+    if (!nameOk(name)) { if (err) err.textContent = 'That display name is reserved.'; return; }
+    var handle = handleFromName(name);
+    if (!handleOk(handle)) { if (err) err.textContent = 'That handle is reserved.'; return; }
+    ensurePublicProfile(user, name).then(function () {
+      if (currentUser) {
+        currentUser.name = name;
+        currentUser.handle = handle;
+        saveJSON(LS_USER, currentUser);
+      }
+      renderSidebarAuth();
+      syncProfile();
+      dismissEmailPrefixNudge();
+      var el = document.getElementById('name-prompt');
+      if (el) el.hidden = true;
+      composeErr('Display name saved.');
+    }).catch(function (e) {
+      if (err) err.textContent = guardPublicErr(e, 'Could not save that name.');
+    });
+  }
+  function spamFree(t) {
+    return !/(bit\.ly\/|tinyurl\.com|t\.me\/|wa\.me\/|onlyfans\.com|free crypto|crypto giveaway|airdrop claim|dm me on telegram|whatsapp me)/i.test(String(t || ''));
+  }
+  function linkCount(t) {
+    var m = String(t || '').toLowerCase().match(/https?:\/\/|www\./g);
+    return m ? m.length : 0;
+  }
+  function isPermDenied(e) {
+    var code = String((e && e.code) || '');
+    var msg = String((e && e.message) || '');
+    return code === 'permission-denied' || /insufficient permissions/i.test(msg);
+  }
+  function guardPublicErr(e, fallback, kind) {
+    if (isPermDenied(e)) {
+      if (kind === 'dm') return 'Message blocked by room guard (rate limit or content rule).';
+      return 'Post blocked by room guard (rate limit or content rule).';
+    }
+    var msg = (e && e.message) ? e.message : '';
+    if (/insufficient permissions/i.test(msg)) return 'Post blocked by room guard (rate limit or content rule).';
+    return msg || fallback || 'Could not post.';
+  }
+  function tsMillis(ts) {
+    return ts && ts.toMillis ? ts.toMillis() : 0;
+  }
+  function utcMidnightTs(offsetDays) {
+    var d = new Date();
+    var dt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + (offsetDays || 0)));
+    return firebase.firestore.Timestamp.fromDate(dt);
+  }
+  function rateDayEqual(rate, ts) {
+    if (!rate || !rate.day || !rate.day.toMillis || !ts || !ts.toMillis) return false;
+    return rate.day.toMillis() === ts.toMillis();
+  }
+  function utcIntoDay() {
+    return Date.now() % 86400000;
+  }
+  function nearUtcMidnight() {
+    var into = utcIntoDay();
+    var windowMs = 5 * 60 * 1000;
+    return into <= windowMs || (86400000 - into) <= windowMs;
+  }
+  function otherDayOffset() {
+    return utcIntoDay() < 12 * 3600000 ? -1 : 1;
+  }
+  function postCooldownMs() {
+    if (isAdminUser()) return 0;
+    var last = tsMillis(guardState.rate && guardState.rate.lastPostAt);
+    if (guardState.lastPostMs > last) last = guardState.lastPostMs;
+    var left = 20000 - (Date.now() - last);
+    return left > 0 ? left : 0;
+  }
+  function msgCooldownMs() {
+    var last = tsMillis(guardState.rate && guardState.rate.lastMsgAt);
+    if (guardState.lastMsgMs > last) last = guardState.lastMsgMs;
+    var left = 2000 - (Date.now() - last);
+    return left > 0 ? left : 0;
+  }
+  function postsTodayCount() {
+    if (isAdminUser()) return 0;
+    var rate = guardState.rate;
+    if (!rate) return 0;
+    if (!rateDayEqual(rate, utcMidnightTs(0))) return 0;
+    return rate.dayCount || 0;
+  }
+  function armGuardTick() {
+    if (guardTick) return;
+    guardTick = setInterval(function () {
+      if (postCooldownMs() <= 0 && msgCooldownMs() <= 0) {
+        clearInterval(guardTick);
+        guardTick = null;
+      }
+      syncPostBtn();
+      syncChatChrome();
+    }, 250);
+  }
+  function paintPostBtn(btn, text, pollReady) {
+    if (!btn) return;
+    var left = postCooldownMs();
+    if (guardState.sending || left > 0) {
+      btn.disabled = true;
+      btn.textContent = left > 0 ? ('Post · ' + Math.ceil(left / 1000) + 's') : 'Post';
+      if (left > 0) armGuardTick();
+      return;
+    }
+    btn.textContent = 'Post';
+    btn.disabled = !(text || attachedFile || pollReady);
+  }
+  function paintDmSendBtn() {
+    var sendBtn = document.getElementById('chat-send-btn');
+    if (!sendBtn || !dmsOn()) return;
+    var left = msgCooldownMs();
+    if (left > 0 && isLiveUser()) {
+      sendBtn.disabled = true;
+      sendBtn.textContent = Math.ceil(left / 1000) + 's';
+      armGuardTick();
+    }
+  }
+  function notePostCommitted() {
+    guardState.lastPostMs = Date.now();
+    var day = utcMidnightTs(0);
+    var rate = guardState.rate || {};
+    var same = rateDayEqual(rate, day);
+    guardState.rate = {
+      lastPostAt: rate.lastPostAt,
+      lastMsgAt: rate.lastMsgAt,
+      day: day,
+      dayCount: same ? (rate.dayCount || 0) + 1 : 1
+    };
+    guardState.rate.lastPostAt = { toMillis: function () { return guardState.lastPostMs; } };
+    syncPostBtn();
+  }
+  function noteMsgCommitted() {
+    guardState.lastMsgMs = Date.now();
+    syncChatChrome();
+  }
+  function listenRateLimits(uid) {
+    if (guardState.unsub) { guardState.unsub(); guardState.unsub = null; }
+    guardState.rate = null;
+    if (!fbDb || !uid) return;
+    guardState.unsub = fbDb.collection('rateLimits').doc(uid).onSnapshot(function (snap) {
+      guardState.rate = snap.exists ? (snap.data() || {}) : null;
+      syncPostBtn();
+      if (dmsOn()) syncChatChrome();
+    }, function (e) { console.warn('rateLimits', e); });
+  }
+  function postGuardMessage(doc) {
+    if (isAdminUser()) return '';
+    var left = postCooldownMs();
+    if (left > 0) return 'Wait ' + Math.ceil(left / 1000) + 's before posting again.';
+    if (postsTodayCount() >= 50) return 'Daily limit is 50 posts. Try again after UTC midnight.';
+    var text = doc && doc.text ? String(doc.text) : '';
+    if (linkCount(text) > 2) return 'Posts can include at most 2 links.';
+    if (text && !spamFree(text)) return 'That text is blocked by the room spam filter.';
+    if (!nameOk(doc.authorName || '')) return 'That display name is reserved.';
+    if (!handleOk(doc.authorHandle || '')) return 'That handle is reserved. Use letters, numbers, or underscores (max 15).';
+    return '';
+  }
+  function guardedPostWrite(doc) {
+    var msg = postGuardMessage(doc);
+    if (msg) return Promise.reject(new Error(msg));
+    if (guardState.sending) return Promise.reject(new Error('Post already sending.'));
+    guardState.sending = true;
+    function finishOk(ref) {
+      guardState.sending = false;
+      if (doc.authorUid !== ADMIN_UID) notePostCommitted();
+      return ref;
+    }
+    function finishErr(e) {
+      guardState.sending = false;
+      return Promise.reject(e);
+    }
+    if (doc.authorUid === ADMIN_UID) {
+      var aref = fbDb.collection('posts').doc();
+      return aref.set(doc).then(function () { return finishOk(aref); }).catch(finishErr);
+    }
+    function commit(offset) {
+      var batch = fbDb.batch();
+      var ref = fbDb.collection('posts').doc();
+      batch.set(ref, doc);
+      var day = utcMidnightTs(offset);
+      var same = rateDayEqual(guardState.rate, day);
+      batch.set(fbDb.collection('rateLimits').doc(doc.authorUid), {
+        lastPostAt: firebase.firestore.FieldValue.serverTimestamp(),
+        day: day,
+        dayCount: same ? firebase.firestore.FieldValue.increment(1) : 1
+      }, { merge: true });
+      return batch.commit().then(function () { return ref; });
+    }
+    return commit(0).then(finishOk).catch(function (e) {
+      if (isPermDenied(e) && nearUtcMidnight()) {
+        return commit(otherDayOffset()).then(finishOk).catch(finishErr);
+      }
+      return finishErr(e);
+    });
+  }
+  function stewardPillHtml(post) {
+    if (isSessionSeedPost(post)) return '<span class="post-steward-pill">Sample</span>';
+    if (post && post.steward) {
+      return '<span class="post-steward-pill" title="Operated by SubX using AI tools. Not a real person.">AI steward · SubX</span>';
+    }
+    if (post && post.isAdminAuthor) return '<span class="post-steward-pill">Steward</span>';
+    return '';
+  }
+  function postOverflowHtml(post) {
+    if (!post || isSessionSeedPost(post) || !post.live) return '';
+    if (liveUid() !== ADMIN_UID) return '';
+    return '<span class="post-menu"><button class="post-action" data-act="more" type="button" aria-label="More">⋯</button></span>';
+  }
+  function togglePostMenu(btn) {
+    ensurePreviewLiftCss();
+    var existing = document.getElementById('post-menu-pop');
+    if (existing) {
+      var owner = existing.parentNode;
+      existing.remove();
+      if (owner && owner.contains(btn)) return;
+    }
+    if (liveUid() !== ADMIN_UID) return;
+    var pop = document.createElement('div');
+    pop.id = 'post-menu-pop';
+    pop.className = 'post-menu-pop';
+    pop.innerHTML = '<button type="button" class="post-action" data-act="admin-remove">Remove post</button>';
+    if (btn.parentNode) btn.parentNode.appendChild(pop);
+  }
+  function adminRemovePost(id) {
+    if (liveUid() !== ADMIN_UID || !id || !fbDb) return;
+    if (!window.confirm('Remove this post from the room?')) return;
+    fbDb.collection('posts').doc(id).delete().catch(function (e) {
+      composeErr(guardPublicErr(e, 'Could not remove that post.'));
+    });
+  }
+  function alreadyReported(id) {
+    if (reportedMem[id]) return true;
+    try {
+      var raw = sessionStorage.getItem('subx.reported.' + SITE_ID);
+      var map = raw ? JSON.parse(raw) : {};
+      return !!map[id];
+    } catch (e) { return false; }
+  }
+  function markReported(id) {
+    reportedMem[id] = true;
+    try {
+      var key = 'subx.reported.' + SITE_ID;
+      var raw = sessionStorage.getItem(key);
+      var map = raw ? JSON.parse(raw) : {};
+      map[id] = 1;
+      sessionStorage.setItem(key, JSON.stringify(map));
+    } catch (e) {}
+  }
+  function writeReportAlert(post, me) {
+    if (!me || me === ADMIN_UID || !fbDb || !post) return;
+    var snippet = String(post.text || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+    fbDb.collection('users').doc(ADMIN_UID).collection('notifications').add({
+      toUid: ADMIN_UID,
+      fromUid: me,
+      type: 'report',
+      siteId: SITE_ID,
+      postId: post.id,
+      read: false,
+      text: 'Report: ' + snippet,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(function (e) { console.warn('report alert', e); });
+  }
+  function unreadReportCount() {
+    var n = 0;
+    var i;
+    for (i = 0; i < reportItems.length; i++) if (!reportItems[i].status) n++;
+    return n;
+  }
+  function syncReportsEntry() {
+    var nav = document.querySelector('#sidebar nav ul');
+    var link = document.getElementById('nav-reports');
+    var admin = isLiveUser() && liveUid() === ADMIN_UID;
+    if (!admin) {
+      if (link && link.parentNode) link.parentNode.remove();
+      closeReports();
+      return;
+    }
+    ensurePreviewLiftCss();
+    if (!link && nav) {
+      var li = document.createElement('li');
+      li.innerHTML = '<button type="button" class="nav-social-link" id="nav-reports" data-reports="1">Reports <span class="nav-badge" id="reports-badge" hidden></span></button>';
+      nav.appendChild(li);
+      link = document.getElementById('nav-reports');
+    }
+    var badge = document.getElementById('reports-badge');
+    var n = unreadReportCount();
+    if (!badge) return;
+    if (n) {
+      badge.textContent = n > 9 ? '9+' : String(n);
+      badge.classList.add('visible');
+      badge.hidden = false;
+    } else {
+      badge.textContent = '';
+      badge.classList.remove('visible');
+      badge.hidden = true;
+    }
+  }
+  function listenReports() {
+    if (reportsUnsub) { reportsUnsub(); reportsUnsub = null; }
+    reportItems = [];
+    if (!fbDb || liveUid() !== ADMIN_UID) { syncReportsEntry(); return; }
+    reportsUnsub = fbDb.collection('reports').where('siteId', '==', SITE_ID).onSnapshot(function (snap) {
+      reportItems = snap.docs.map(function (doc) {
+        var d = doc.data() || {};
+        var ms = d.createdAt && d.createdAt.toMillis ? d.createdAt.toMillis() : 0;
+        return {
+          id: doc.id,
+          postId: d.postId || '',
+          reporterUid: d.reporterUid || '',
+          reason: d.reason || '',
+          status: d.status || '',
+          ms: ms
+        };
+      });
+      reportItems.sort(function (a, b) { return (b.ms || 0) - (a.ms || 0); });
+      syncReportsEntry();
+      renderReports();
+    }, function (e) { console.warn('reports', e); });
+  }
+  function ensureReportsPanel() {
+    var el = document.getElementById('reports-overlay');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'reports-overlay';
+    el.className = 'notif-overlay';
+    el.innerHTML =
+      '<button class="view-back" id="reports-back" type="button">Back</button>' +
+      '<div class="notif-header"><div class="notif-title">Reports</div></div>' +
+      '<div class="notif-list" id="reports-list"></div>';
+    document.body.appendChild(el);
+    return el;
+  }
+  function openReports() {
+    if (liveUid() !== ADMIN_UID) return;
+    closeSocialOverlays();
+    var el = ensureReportsPanel();
+    el.classList.add('active');
+    renderReports();
+  }
+  function closeReports() {
+    var el = document.getElementById('reports-overlay');
+    if (el) el.classList.remove('active');
+  }
+  function reporterCount(postId) {
+    var n = 0;
+    var i;
+    for (i = 0; i < reportItems.length; i++) {
+      if (reportItems[i].postId === postId && reportItems[i].status !== 'dismissed') n++;
+    }
+    return n;
+  }
+  function renderReports() {
+    var el = document.getElementById('reports-list');
+    if (!el) return;
+    var rows = reportItems.filter(function (r) { return r.status !== 'dismissed'; }).slice(0, 50);
+    if (!rows.length) {
+      el.innerHTML = '<div class="soon-panel"><strong>No open reports.</strong></div>';
+      return;
+    }
+    el.innerHTML = rows.map(function (r) {
+      var post = findPost(r.postId);
+      var snippet = (post && post.text) ? String(post.text).replace(/\s+/g, ' ').trim().slice(0, 180) : '(post unavailable)';
+      var count = reporterCount(r.postId);
+      return '<div class="notif-item">' +
+        '<p>' + escapeHtml(snippet) + '</p>' +
+        '<p>' + count + ' reporter' + (count === 1 ? '' : 's') + '</p>' +
+        '<button type="button" class="post-action" data-report-remove="' + escapeHtml(r.postId) + '">Remove post</button> ' +
+        '<button type="button" class="post-action" data-report-dismiss="' + escapeHtml(r.id) + '">Dismiss</button>' +
+        '</div>';
+    }).join('');
+  }
+  function dismissReport(id) {
+    if (liveUid() !== ADMIN_UID || !id || !fbDb) return;
+    fbDb.collection('reports').doc(id).update({ status: 'dismissed' }).catch(function (e) {
+      composeErr(guardPublicErr(e, 'Could not dismiss that report.'));
+    });
+  }
+  function stopPreviewLift() {
+    if (guardState.unsub) { guardState.unsub(); guardState.unsub = null; }
+    guardState.rate = null;
+    guardState.lastPostMs = 0;
+    guardState.lastMsgMs = 0;
+    guardState.sending = false;
+    if (reportsUnsub) { reportsUnsub(); reportsUnsub = null; }
+    reportItems = [];
+    var nudge = document.getElementById('name-prefix-nudge');
+    if (nudge) nudge.hidden = true;
+    var prompt = document.getElementById('name-prompt');
+    if (prompt) prompt.hidden = true;
+    closeReports();
+    syncReportsEntry();
+  }
+  function wirePreviewLift() {
+    if (previewLiftWired) return;
+    previewLiftWired = true;
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('#name-prefix-dismiss')) { dismissEmailPrefixNudge(); return; }
+      if (e.target.closest('#name-prefix-pick')) { openDisplayNamePrompt(); return; }
+      if (e.target.closest('#name-prompt-cancel')) {
+        var box = document.getElementById('name-prompt');
+        if (box) box.hidden = true;
+        return;
+      }
+      if (e.target.closest('#name-prompt-save')) { saveDisplayNamePrompt(); return; }
+      if (e.target.closest('[data-reports]')) {
+        e.preventDefault();
+        openReports();
+        return;
+      }
+      if (e.target.closest('#reports-back')) { closeReports(); return; }
+      var dismissBtn = e.target.closest('[data-report-dismiss]');
+      if (dismissBtn) {
+        dismissReport(dismissBtn.getAttribute('data-report-dismiss'));
+        return;
+      }
+      var removeBtn = e.target.closest('[data-report-remove]');
+      if (removeBtn) {
+        adminRemovePost(removeBtn.getAttribute('data-report-remove'));
+        return;
+      }
+      var more = e.target.closest('[data-act="more"]');
+      if (more) {
+        e.preventDefault();
+        togglePostMenu(more);
+        return;
+      }
+      var adminRemove = e.target.closest('[data-act="admin-remove"]');
+      if (adminRemove) {
+        var post = adminRemove.closest('[data-post-id]');
+        if (post) adminRemovePost(post.getAttribute('data-post-id'));
+        var pop = document.getElementById('post-menu-pop');
+        if (pop) pop.remove();
+        return;
+      }
+      if (!e.target.closest('#post-menu-pop')) {
+        var openPop = document.getElementById('post-menu-pop');
+        if (openPop) openPop.remove();
+      }
+    });
+  }
+  // ===== END PREVIEW-LIFT (guards/privacy/steward) =====
+
   try {
     firebase.initializeApp({
     apiKey: "AIzaSyD4CgKQTylEy03Lh9Uhe9UVloyrKaK3bdY",
@@ -483,17 +1135,21 @@
     if (!requireVerified('report')) return;
     var post = findPost(id);
     if (!post || !fbDb || isSessionSeedPost(post)) return;
+    if (alreadyReported(id)) { composeErr('You already reported this post.'); return; }
+    var me = liveUid();
     fbDb.collection('reports').add({
       siteId: SITE_ID,
       postId: id,
       targetUid: post.authorUid || '',
-      reporterUid: liveUid(),
+      reporterUid: me,
       reason: 'abuse',
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }).then(function () {
+      markReported(id);
       composeErr('Reported. Thanks.');
+      writeReportAlert(post, me);
     }).catch(function (e) {
-      composeErr((e && e.message) ? e.message : 'Could not report.');
+      composeErr(guardPublicErr(e, 'Could not report.'));
     });
   }
   function blockUser(uid) {
@@ -688,6 +1344,7 @@
     syncTopicFollowButtons();
     syncStoriesTray();
     renderWatchlist();
+    syncReportsEntry();
   }
 
   function earlyWelcomeOn() {
@@ -765,15 +1422,16 @@
     if (!user) return;
     var draft = peekCompose();
     var shouldLand = consumeAuthLand();
-    const raw = user.displayName || (user.email || 'member').split('@')[0];
+    var idn = memberIdentity(user);
     currentUser = {
       uid: user.uid,
-      name: raw,
-      handle: String(raw).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'member',
+      name: idn.name,
+      handle: idn.handle,
       bio: '',
       live: true
     };
     saveJSON(LS_USER, currentUser);
+    if (idn.minted) persistMintedName(user, idn.name);
     closeAuth();
     renderSidebarAuth();
     hideDummyChrome();
@@ -784,8 +1442,11 @@
     listenNotifs(user.uid);
     listenMemberNests(user.uid);
     listenConversations();
+    listenRateLimits(user.uid);
+    listenReports();
     restoreCompose(draft);
     if (shouldLand) landInFeedCompose();
+    if (idn.emailPrefixShowing) showEmailPrefixNudge(user.uid);
     if (!user.emailVerified) {
       composeErr('Verify your email before posting. Check your inbox, then refresh.');
     }
@@ -812,7 +1473,9 @@
       imageUrl: d.imageUrl || null,
       poll: d.poll || null,
       nestSlug: d.nestSlug || '',
-      topicIds: collectTopicIds(d)
+      topicIds: collectTopicIds(d),
+      steward: d.steward === true || d.adminSeed === true,
+      isAdminAuthor: uid === ADMIN_UID
     };
   }
 
@@ -875,7 +1538,7 @@
   }
 
   function closeSocialOverlays() {
-    ['explore-overlay', 'notif-overlay', 'chat-overlay', 'profile-overlay'].forEach(function (id) {
+    ['explore-overlay', 'notif-overlay', 'chat-overlay', 'profile-overlay', 'reports-overlay'].forEach(function (id) {
       const el = document.getElementById(id);
       if (el) el.classList.remove('active', 'thread-open');
     });
@@ -1553,6 +2216,7 @@
                 ? ' data-profile-uid="' + escapeHtml(post.authorUid) + '" data-profile-name="' + escapeHtml(post.name) + '" data-profile-handle="' + escapeHtml(post.handle) + '"'
                 : '') +
             '>' + escapeHtml(post.name) + '</span>' +
+            stewardPillHtml(post) +
             '<span class="post-handle">@' + escapeHtml(post.handle) + '</span>' +
             '<span class="post-time">· ' + (post.hours != null ? post.hours + 'h' : 'now') + '</span>' +
           '</div>' +
@@ -1564,6 +2228,7 @@
             '<button class="post-action" data-act="share" type="button">Share</button>' +
             reportBtn + blockBtn +
             delBtn +
+            postOverflowHtml(post) +
           '</div>' +
         '</div>' +
       '</article>'
@@ -3151,14 +3816,14 @@
 
   function addRoomTextPost(text) {
     var live = fbAuth && fbAuth.currentUser;
-    var disp = (currentUser && currentUser.name) || live.displayName || (live.email || 'member').split('@')[0] || 'Member';
-    var handle = (currentUser && currentUser.handle) || String(disp).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'member';
-    return fbDb.collection('posts').add({
+    if (!live) return Promise.reject(new Error('Sign in to post. Guest can only browse.'));
+    var who = authorForWrite(live);
+    return guardedPostWrite({
       siteId: SITE_ID,
       parentId: null,
       authorUid: live.uid,
-      authorName: disp,
-      authorHandle: handle,
+      authorName: who.name,
+      authorHandle: who.handle,
       text: String(text || '').slice(0, 280),
       likes: {},
       likeCount: 0,
@@ -3188,7 +3853,7 @@
       composeErr('Posted.');
       refreshPorchUi();
     }).catch(function (e) {
-      composeErr((e && e.message) ? e.message : 'Could not post.');
+      composeErr(guardPublicErr(e, 'Could not post.'));
     });
   }
 
@@ -3231,6 +3896,11 @@
 
   function notifLine(n) {
     var who = nameForUid(n.fromUid);
+    if (n.type === 'report') {
+      var room = (site && site.name) || SITE_ID || 'room';
+      var snip = String(n.text || '').replace(/^Report:\s*/, '');
+      return 'Report on ' + room + ': ' + snip;
+    }
     if (n.type === 'reply') return who + ' replied to your post' + (n.text ? (': ' + n.text) : '');
     if (n.type === 'like') return who + ' liked your post';
     if (n.type === 'follow') return who + ' followed you';
@@ -3295,7 +3965,7 @@
       return;
     }
     el.innerHTML = list.map(function (n) {
-      return '<button type="button" class="notif-item' + (n.read ? '' : ' unread') + '" data-notif-id="' + escapeHtml(n.id) + '"' +
+      return '<button type="button" class="notif-item' + (n.read ? '' : ' unread') + '" data-notif-id="' + escapeHtml(n.id) + '" data-notif-type="' + escapeHtml(n.type || '') + '"' +
         (n.postId ? ' data-post-id="' + escapeHtml(n.postId) + '"' : '') + '>' +
         '<p>' + escapeHtml(notifLine(n)) + '</p>' +
         '<time>' + escapeHtml(notifWhen(n.ms)) + '</time></button>';
@@ -3711,6 +4381,7 @@
     if (blocked && threadOpen) chatErr('You blocked this user.');
     if (threadOpen) paintActiveChatName(threadPeerName());
     paintChatPlaceholder();
+    paintDmSendBtn();
   }
 
   function renderThreads() {
@@ -3850,6 +4521,14 @@
       return;
     }
     if (!fbDb) { chatErr('Chat is not connected.'); return; }
+    if (msgCooldownMs() > 0) {
+      chatErr('Wait ' + Math.ceil(msgCooldownMs() / 1000) + 's before another message.');
+      return;
+    }
+    if (!isAdminUser() && !spamFree(text)) {
+      chatErr('That message is blocked by the room spam filter.');
+      return;
+    }
     var peerName = dmDisplayName((pendingPeer && pendingPeer.name) || (conv && convPeerName(conv)) || 'Member');
     var myName = myDisplayName();
     var cid = convIdFor(me, other);
@@ -3859,48 +4538,52 @@
     dmSendInFlight = true;
     if (sendBtn) sendBtn.disabled = true;
     chatErr('');
-    fbDb.runTransaction(function (transaction) {
-      return transaction.get(convRef).then(function (snap) {
-        var names = {};
-        names[me] = myName;
-        names[other] = peerName;
-        var unread = {};
-        unread[me] = 0;
-        unread[other] = 1;
-        if (snap.exists) {
-          var d = snap.data() || {};
-          var existingNames = d.participantNames || {};
-          names[me] = myName || dmDisplayName(existingNames[me]);
-          names[other] = dmDisplayName(existingNames[other]) !== 'Member' ? dmDisplayName(existingNames[other]) : peerName;
-          var prev = d.unreadCounts || {};
-          unread[other] = (typeof prev[other] === 'number' ? prev[other] : 0) + 1;
-          transaction.update(convRef, {
-            lastMessage: text,
-            lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-            lastMessageBy: me,
-            unreadCounts: unread,
-            participantNames: names
-          });
-        } else {
-          transaction.set(convRef, {
-            siteId: dmSiteId(),
-            participants: [me, other],
-            participantNames: names,
-            lastMessage: text,
-            lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-            lastMessageBy: me,
-            unreadCounts: unread,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
-        }
-        transaction.set(msgRef, {
-          fromUid: me,
-          text: text,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          siteId: dmSiteId()
+    convRef.get().then(function (snap) {
+      var names = {};
+      names[me] = myName;
+      names[other] = peerName;
+      var unread = {};
+      unread[me] = 0;
+      unread[other] = 1;
+      var batch = fbDb.batch();
+      if (snap.exists) {
+        var d = snap.data() || {};
+        var existingNames = d.participantNames || {};
+        names[me] = myName || dmDisplayName(existingNames[me]);
+        names[other] = dmDisplayName(existingNames[other]) !== 'Member' ? dmDisplayName(existingNames[other]) : peerName;
+        var prev = d.unreadCounts || {};
+        unread[other] = (typeof prev[other] === 'number' ? prev[other] : 0) + 1;
+        batch.update(convRef, {
+          lastMessage: text,
+          lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+          lastMessageBy: me,
+          unreadCounts: unread,
+          participantNames: names
         });
+      } else {
+        batch.set(convRef, {
+          siteId: dmSiteId(),
+          participants: [me, other],
+          participantNames: names,
+          lastMessage: text,
+          lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+          lastMessageBy: me,
+          unreadCounts: unread,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      batch.set(msgRef, {
+        fromUid: me,
+        text: text,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        siteId: dmSiteId()
       });
+      batch.set(fbDb.collection('rateLimits').doc(me), {
+        lastMsgAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      return batch.commit();
     }).then(function () {
+      noteMsgCommitted();
       if (input) {
         input.value = '';
         input.style.height = 'auto';
@@ -3909,7 +4592,7 @@
       listenMessages(cid);
       chatErr('');
     }).catch(function (e) {
-      chatErr((e && e.message) ? e.message : 'Could not send.');
+      chatErr(guardPublicErr(e, 'Could not send.', 'dm'));
     }).finally(function () {
       dmSendInFlight = false;
       if (sendBtn) sendBtn.disabled = false;
@@ -4316,6 +4999,7 @@
     restoreCompose(draft);
   }
   function signOut() {
+    stopPreviewLift();
     listenMemberNests(null);
     teardownPeopleSocial();
     if (fbAuth && fbAuth.currentUser) fbAuth.signOut();
@@ -4335,7 +5019,7 @@
     const text = (input && input.value || '').trim();
     const pollReady = pollActive && [...document.querySelectorAll('#compose-poll .compose-poll-input')].filter(function (i) { return i.value.trim(); }).length >= 2;
     const btn = document.getElementById('thoughts-post-btn');
-    if (btn) btn.disabled = !(text || attachedFile || pollReady);
+    paintPostBtn(btn, text, pollReady);
   }
 
   var MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -4509,14 +5193,13 @@
     btn.disabled = true;
     const start = attachedFile ? uploadImage(attachedFile, live.uid) : Promise.resolve(null);
     start.then(function (imageUrl) {
-      const disp = (currentUser && currentUser.name) || live.displayName || (live.email || 'member').split('@')[0] || 'Member';
-      const handle = (currentUser && currentUser.handle) || String(disp).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'member';
+      const who = authorForWrite(live);
       const doc = {
         siteId: SITE_ID,
         parentId: parentId,
         authorUid: live.uid,
-        authorName: disp,
-        authorHandle: handle,
+        authorName: who.name,
+        authorHandle: who.handle,
         text: text.slice(0, 280),
         likes: {},
         likeCount: 0,
@@ -4537,7 +5220,7 @@
           };
         }
       }
-      return fbDb.collection('posts').add(doc);
+      return guardedPostWrite(doc);
     }).then(function () {
       input.value = '';
       input.placeholder = input.getAttribute('data-ph') || input.placeholder;
@@ -4552,7 +5235,7 @@
         });
       }
     }).catch(function (e) {
-      composeErr((e && e.message) ? e.message : 'Could not post.');
+      composeErr(guardPublicErr(e, 'Could not post.'));
       console.warn('post', e);
       syncPostBtn();
     });
@@ -4984,6 +5667,11 @@
       const nitem = e.target.closest('[data-notif-id]');
       if (nitem) {
         var nid = nitem.getAttribute('data-notif-id');
+        if (nitem.getAttribute('data-notif-type') === 'report') {
+          if (nid) markNotifsRead(nid);
+          openReports();
+          return;
+        }
         if (nid) markNotifsRead(nid);
         var pid = nitem.getAttribute('data-post-id');
         if (pid) {
@@ -5118,7 +5806,12 @@
       const age = document.getElementById('cv-reg-age');
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
       if (!age || !age.checked) {
-        err.textContent = 'Confirm you are 13 or older and agree to the preview Terms and Privacy pages.';
+        err.textContent = ageGateMessage();
+        err.classList.add('show');
+        return;
+      }
+      if (name && !nameOk(name)) {
+        err.textContent = 'That display name is reserved.';
         err.classList.add('show');
         return;
       }
@@ -5126,16 +5819,9 @@
       err.textContent = '';
       markAuthLand();
       fbAuth.createUserWithEmailAndPassword(email, pw).then(function (cred) {
-        const disp = name || email.split('@')[0];
         cred.user.sendEmailVerification().catch(function () {});
-        return cred.user.updateProfile({ displayName: disp }).then(function () {
-          if (fbDb) {
-            return fbDb.collection('users').doc(cred.user.uid).set({
-              displayName: disp,
-                            siteId: SITE_ID,
-              createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-          }
+        return ensurePublicProfile(cred.user, name, {
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
         }).then(function () {
           composeErr('Account created. Verify your email before posting.');
         });
@@ -5149,7 +5835,7 @@
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
       var age = document.getElementById('cv-google-age');
       if (!age || !age.checked) {
-        err.textContent = 'Confirm you are 13 or older and agree to the preview Terms and Privacy pages.';
+        err.textContent = ageGateMessage();
         err.classList.add('show');
         return;
       }
@@ -5163,13 +5849,10 @@
       function finishGoogle(cred) {
         var u = cred && cred.user;
         if (fbDb && u) {
-          var disp = u.displayName || (u.email || 'member').split('@')[0];
-          return fbDb.collection('users').doc(u.uid).set({
-            displayName: disp,
-            siteId: SITE_ID,
+          return ensurePublicProfile(u, '', {
             provider: 'google',
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
+          });
         }
       }
       function failGoogle(e) {
@@ -5693,8 +6376,9 @@
     wait.then(function () {
       return storyFile ? uploadStoryMedia(storyFile, live.uid, docRef.id) : Promise.resolve('');
     }).then(function (mediaUrl) {
-      var disp = (currentUser && currentUser.name) || live.displayName || (live.email || 'member').split('@')[0] || 'Member';
-      var handle = (currentUser && currentUser.handle) || String(disp).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'member';
+      var who = authorForWrite(live);
+      var disp = who.name;
+      var handle = who.handle;
       var now = firebase.firestore.Timestamp.now();
       var doc = {
         siteId: SITE_ID,
@@ -6068,6 +6752,8 @@
     applyTheme(site.theme);
     applySiteChrome();
     ensureJoinAuthLayout();
+    paintAgeLabels();
+    wirePreviewLift();
     ensureDmCss();
     hideDummyChrome();
     syncChatChrome();
@@ -6076,18 +6762,16 @@
       fbAuth.getRedirectResult().then(function (cred) {
         var u = cred && cred.user;
         if (fbDb && u) {
-          var disp = u.displayName || (u.email || 'member').split('@')[0];
-          return fbDb.collection('users').doc(u.uid).set({
-            displayName: disp,
-            siteId: SITE_ID,
+          return ensurePublicProfile(u, '', {
             provider: 'google',
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
+          });
         }
       }).catch(function () {});
       fbAuth.onAuthStateChanged(function (user) {
         if (user) applyFbUser(user);
         else {
+          stopPreviewLift();
           listenMemberNests(null);
           listenBlocks(null);
           teardownPeopleSocial();
