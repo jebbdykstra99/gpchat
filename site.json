@@ -335,15 +335,15 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Singapore · Sprint weekend",
-    "meta": "Singapore GP · Marina Bay · Pre-FP1 · R17",
-    "footer": "Singapore GP · Pre-FP1. Sprint weekend at Marina Bay. Official F1.com outbound only. Not live timing. Preview. Nests HOLD.",
+    "kicker": "Singapore · Pre-Sprint",
+    "meta": "Singapore GP · Marina Bay · Pre-Sprint · R17",
+    "footer": "Singapore GP · Pre-Sprint. Sprint weekend at Marina Bay. Official F1.com outbound only. Not live timing. Preview. Nests HOLD.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
       "title": "Singapore GP",
-      "state": "Singapore · Sprint weekend",
+      "state": "Singapore · Pre-Sprint",
       "next": "Next: Sprint · Sat 3:00 AM MT"
     },
     "outbound": [
@@ -352,7 +352,7 @@
         "topic": "next",
         "headline": "Next: Sprint · Sat 3:00 AM MT",
         "snippet": "Marina Bay · round 17 · sprint weekend. Jolpica 2026/17.",
-        "meta": "Pre-FP1",
+        "meta": "Pre-Sprint",
         "url": "https://www.formula1.com/en/racing/2026"
       },
       {
@@ -366,7 +366,7 @@
       {
         "tag": "Result",
         "topic": "result",
-        "headline": "Just finished: FP1 — Russell P1 1:32.274, Leclerc +0.198, Norris +0.273",
+        "headline": "Just finished: Sprint Quali — Verstappen pole 1:31.156, Russell +0.120, Leclerc +0.243",
         "snippet": "Sepang R16 podium. F1.com meeting 1308. Jolpica 2026/16/results.",
         "meta": "R16 result",
         "url": "https://www.formula1.com/en/results/2026/races/1308/bahrain/race-result"
