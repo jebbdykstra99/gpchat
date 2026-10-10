@@ -135,7 +135,7 @@
     {
       "tag": "SC",
       "title": "Safety car & VSC",
-      "snippet": "Boards out. Delta is a suggestion. Field bunches. Dummy race control."
+      "snippet": "Boards out. Delta is a suggestion. Field bunches."
     },
     {
       "tag": "Box",
@@ -150,12 +150,12 @@
     {
       "tag": "Points",
       "title": "Championship fight",
-      "snippet": "Dummy points math. Gold trophy talk. Not live standings."
+      "snippet": "Points math and title talk."
     },
     {
       "tag": "2026",
       "title": "2026 grid talk",
-      "snippet": "New regs chatter. No real entry list. Phase 2 is an API."
+      "snippet": "New regs chatter for the 2026 grid."
     },
     {
       "tag": "DRS",
@@ -337,7 +337,7 @@
     "title": "Room Brief",
     "kicker": "Singapore · Pre-Sprint",
     "meta": "Singapore GP · Marina Bay · Pre-Sprint · R17",
-    "footer": "Singapore GP · Pre-Sprint. Sprint weekend at Marina Bay. Official F1.com outbound only. Not live timing. Preview. Nests HOLD.",
+    "footer": "Singapore GP · Pre-Sprint. Sprint weekend at Marina Bay. Official F1.com outbound only. Not live timing. Preview.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
@@ -368,7 +368,7 @@
         "topic": "result",
         "headline": "Singapore Sprint Quali · official",
         "snippet": "Verstappen pole 1:31.156 · Russell +0.120 · Leclerc +0.243",
-        "meta": "R16 result",
+        "meta": "R17 · Sprint Quali",
         "url": "https://www.formula1.com/en/results/2026/races/1296/singapore/sprint-grid"
       }
     ],
@@ -447,7 +447,7 @@
         "id": "watch",
         "label": "Watch (free/legal)",
         "kind": "theme",
-        "blurb": "Outbound links only",
+        "blurb": "Where to watch",
         "followDefault": true,
         "adminSeed": true,
         "status": "active",
@@ -458,7 +458,7 @@
         "id": "paddock",
         "label": "Paddock",
         "kind": "theme",
-        "blurb": "News with FACT labels",
+        "blurb": "Paddock news and rumors",
         "followDefault": false,
         "adminSeed": true,
         "status": "active",
@@ -642,7 +642,7 @@
         "id": "classic",
         "label": "Classic races",
         "kind": "theme",
-        "blurb": "Off-weekend depth",
+        "blurb": "Historic Grands Prix",
         "followDefault": false,
         "adminSeed": true,
         "status": "active",
@@ -666,7 +666,7 @@
       "label": "Race weekend",
       "parent": null,
       "kind": "session",
-      "blurb": "Current GP hub — keep or swap each weekend.",
+      "blurb": "This weekend's Grand Prix.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -677,7 +677,7 @@
       "label": "Qualifying",
       "parent": null,
       "kind": "session",
-      "blurb": "Session chat without drowning Race.",
+      "blurb": "Qualifying chat.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -721,7 +721,7 @@
       "label": "Championship",
       "parent": null,
       "kind": "theme",
-      "blurb": "WDC talk; rail carries FACT.",
+      "blurb": "Championship talk.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -732,7 +732,7 @@
       "label": "Watch",
       "parent": null,
       "kind": "theme",
-      "blurb": "Free/legal outbound only — no stream hosting.",
+      "blurb": "Where to watch, with official links.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -743,7 +743,7 @@
       "label": "Paddock",
       "parent": null,
       "kind": "theme",
-      "blurb": "News/rumor with FACT labels.",
+      "blurb": "Paddock news and rumors.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -765,7 +765,7 @@
       "label": "Classic races",
       "parent": null,
       "kind": "theme",
-      "blurb": "Off-weekend depth.",
+      "blurb": "Historic Grands Prix.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -778,7 +778,7 @@
       "label": "Race weekend",
       "parent": null,
       "kind": "session",
-      "blurb": "Current GP hub \u2014 sessions, countdown, weekend chatter; relabel each GP, do not mint new slug.",
+      "blurb": "This weekend's Grand Prix: session times, countdown and race weekend chat.",
       "nav": true
     },
     {
@@ -786,7 +786,7 @@
       "label": "Drivers",
       "parent": null,
       "kind": "people",
-      "blurb": "Form, seats, teammate comparisons \u2014 not one room per driver.",
+      "blurb": "Driver form, seats and teammate comparisons.",
       "nav": true
     },
     {
@@ -794,7 +794,7 @@
       "label": "Teams",
       "parent": null,
       "kind": "org",
-      "blurb": "Constructors, pit wall, upgrades \u2014 not one room per team.",
+      "blurb": "Constructors, pit wall calls and upgrades.",
       "nav": true
     },
     {
@@ -802,7 +802,7 @@
       "label": "Championship",
       "parent": null,
       "kind": "theme",
-      "blurb": "WDC / WCC math between weekends; rail carries standing FACT.",
+      "blurb": "Drivers' and Constructors' title math between race weekends.",
       "nav": true
     },
     {
@@ -818,7 +818,7 @@
       "label": "Watch",
       "parent": null,
       "kind": "theme",
-      "blurb": "Legal outbound only (Apple TV / F1 TV / local) \u2014 no re-stream.",
+      "blurb": "Where to watch, with links out to official broadcasters. No streams here.",
       "nav": true
     },
     {
@@ -826,7 +826,7 @@
       "label": "Paddock",
       "parent": null,
       "kind": "theme",
-      "blurb": "News & rumor with FACT / STORYLINE / OPINION labels.",
+      "blurb": "Paddock news, rumors and storylines.",
       "nav": true
     },
     {
@@ -842,7 +842,7 @@
       "label": "Rookies",
       "parent": null,
       "kind": "people",
-      "blurb": "Grid new blood / F2 graduates \u2014 seasonal heat.",
+      "blurb": "New faces on the grid and F2 graduates.",
       "nav": true
     },
     {
@@ -850,7 +850,7 @@
       "label": "Classic races",
       "parent": null,
       "kind": "theme",
-      "blurb": "Off-weekend depth, historic GPs.",
+      "blurb": "Classic races and historic Grands Prix for the weeks between races.",
       "nav": true
     }
   ],
