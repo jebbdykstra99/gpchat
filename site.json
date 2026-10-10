@@ -37,13 +37,13 @@
     {
       "tag": "Quali",
       "headline": "Q3 is a yellow-flag lottery tonight",
-      "snippet": "Pole is whoever does not lift for the marshal. Dummy quali chatter — not a timing feed.",
+      "snippet": "Pole is whoever does not lift for the marshal. Bring your quali takes.",
       "meta": "Race weekend"
     },
     {
       "tag": "Safety car",
       "headline": "SC boards out, field bunches",
-      "snippet": "VSC to full SC. Overcut people are grinning. Dummy race-control energy only.",
+      "snippet": "Safety car calls and strategy gambles. Bring your race takes.",
       "meta": "SC / VSC"
     },
     {
@@ -55,13 +55,13 @@
     {
       "tag": "DNF",
       "headline": "Power unit smoke, retirement talk",
-      "snippet": "Championship points leaking onto the grass. Dummy DNF log, no live results.",
+      "snippet": "Points swings and DNFs. Talk title math here.",
       "meta": "Retirement"
     },
     {
       "tag": "Championship",
       "headline": "Constructors is a street fight",
-      "snippet": "Gold trophy talk in the garage. Dummy points math. Not official F1.",
+      "snippet": "Gold trophy talk in the garage. Run your points math here.",
       "meta": "Points fight",
       "gold": true
     },
@@ -74,13 +74,13 @@
     {
       "tag": "Undercut",
       "headline": "Undercut window is three cars wide",
-      "snippet": "Nobody is taking it. Overcut paid last dummy stint. Tire offset math on the couch.",
+      "snippet": "Undercut or overcut? Tire offset math from the couch.",
       "meta": "Strategy"
     },
     {
       "tag": "2026",
-      "headline": "Dummy 2026 grid talk in the paddock",
-      "snippet": "New regs, new faces, no real entry list here. Phase 2 is an API. Tonight is vibes.",
+      "headline": "2026 grid talk in the paddock",
+      "snippet": "New regs, new faces. What are you watching for on the 2026 grid?",
       "meta": "Regs chatter"
     }
   ],
@@ -98,7 +98,7 @@
     {
       "tag": "Circuit",
       "title": "Silverstone",
-      "snippet": "Copse, Maggotts, Becketts. Crowd roar. Dummy British GP weekend chatter."
+      "snippet": "Copse, Maggotts, Becketts. British GP weekend chat."
     },
     {
       "tag": "Circuit",
@@ -108,7 +108,7 @@
     {
       "tag": "Circuit",
       "title": "Suzuka",
-      "snippet": "Figure-eight. 130R. Quali laps that look illegal. Dummy Japanese GP energy."
+      "snippet": "Figure-eight. 130R. Quali laps that look illegal. Japanese GP chat."
     },
     {
       "tag": "Circuit",
@@ -118,12 +118,12 @@
     {
       "tag": "Circuit",
       "title": "Marina Bay",
-      "snippet": "Night race. Walls. Safety car magnet. Paddock/night-race canvas energy."
+      "snippet": "Marina Bay under the lights. Bring your night-race takes."
     },
     {
       "tag": "Circuit",
       "title": "Circuit of the Americas",
-      "snippet": "T1 climb, T12 overtake, dummy COTA weekend. Formation lap up the hill."
+      "snippet": "Austin weekend chat: Turn 1, the hill and your race takes."
     }
   ],
   "topics": [
