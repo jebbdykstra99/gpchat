@@ -293,7 +293,7 @@
     },
     {
       "id": "n3",
-      "text": "@champpoints started following you. Dummy follow.",
+      "text": "@champpoints started following you.",
       "time": "Yesterday",
       "unread": true
     }
@@ -335,24 +335,24 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Singapore · Pre-Sprint",
-    "meta": "Singapore GP · Marina Bay · Pre-Sprint · R17",
-    "footer": "Singapore GP · Pre-Sprint. Sprint weekend at Marina Bay. Official F1.com outbound only. Not live timing. Preview.",
+    "kicker": "Singapore · Pre-Race",
+    "meta": "Singapore GP · Marina Bay · Pre-Race · R17",
+    "footer": "Singapore GP · Pre-Race. Sprint weekend at Marina Bay. Official F1.com outbound only. Not live timing. Preview.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
       "title": "Singapore GP",
-      "state": "Singapore · Pre-Sprint",
-      "next": "Next: Sprint · Sat 3:00 AM MT"
+      "state": "Singapore · Pre-Race",
+      "next": "Next: Race · Sun 6:00 AM MT"
     },
     "outbound": [
       {
         "tag": "Next",
         "topic": "next",
-        "headline": "Next: Sprint · Sat 3:00 AM MT",
+        "headline": "Next: Race · Sun 6:00 AM MT",
         "snippet": "Marina Bay · round 17 · sprint weekend. Jolpica 2026/17.",
-        "meta": "Pre-Sprint",
+        "meta": "Pre-Race",
         "url": "https://www.formula1.com/en/racing/2026"
       },
       {
@@ -366,10 +366,10 @@
       {
         "tag": "Result",
         "topic": "result",
-        "headline": "Singapore Sprint Quali · official",
-        "snippet": "Verstappen pole 1:31.156 · Russell +0.120 · Leclerc +0.243",
-        "meta": "R17 · Sprint Quali",
-        "url": "https://www.formula1.com/en/results/2026/races/1296/singapore/sprint-grid"
+        "headline": "Singapore Sprint · official",
+        "snippet": "Verstappen wins by 2.591s · Hamilton P2 · Leclerc P3",
+        "meta": "R17 · Sprint",
+        "url": "https://www.formula1.com/en/results/2026/races/1296/singapore/sprint-results"
       }
     ],
     "porch": {
