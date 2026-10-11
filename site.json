@@ -37,13 +37,13 @@
     {
       "tag": "Quali",
       "headline": "Q3 is a yellow-flag lottery tonight",
-      "snippet": "Pole is whoever does not lift for the marshal. Dummy quali chatter — not a timing feed.",
+      "snippet": "Pole is whoever does not lift for the marshal. Bring your quali takes.",
       "meta": "Race weekend"
     },
     {
       "tag": "Safety car",
       "headline": "SC boards out, field bunches",
-      "snippet": "VSC to full SC. Overcut people are grinning. Dummy race-control energy only.",
+      "snippet": "Safety car calls and strategy gambles. Bring your race takes.",
       "meta": "SC / VSC"
     },
     {
@@ -55,13 +55,13 @@
     {
       "tag": "DNF",
       "headline": "Power unit smoke, retirement talk",
-      "snippet": "Championship points leaking onto the grass. Dummy DNF log, no live results.",
+      "snippet": "Points swings and DNFs. Talk title math here.",
       "meta": "Retirement"
     },
     {
       "tag": "Championship",
       "headline": "Constructors is a street fight",
-      "snippet": "Gold trophy talk in the garage. Dummy points math. Not official F1.",
+      "snippet": "Gold trophy talk in the garage. Run your points math here.",
       "meta": "Points fight",
       "gold": true
     },
@@ -74,13 +74,13 @@
     {
       "tag": "Undercut",
       "headline": "Undercut window is three cars wide",
-      "snippet": "Nobody is taking it. Overcut paid last dummy stint. Tire offset math on the couch.",
+      "snippet": "Undercut or overcut? Tire offset math from the couch.",
       "meta": "Strategy"
     },
     {
       "tag": "2026",
-      "headline": "Dummy 2026 grid talk in the paddock",
-      "snippet": "New regs, new faces, no real entry list here. Phase 2 is an API. Tonight is vibes.",
+      "headline": "2026 grid talk in the paddock",
+      "snippet": "New regs, new faces. What are you watching for on the 2026 grid?",
       "meta": "Regs chatter"
     }
   ],
@@ -98,7 +98,7 @@
     {
       "tag": "Circuit",
       "title": "Silverstone",
-      "snippet": "Copse, Maggotts, Becketts. Crowd roar. Dummy British GP weekend chatter."
+      "snippet": "Copse, Maggotts, Becketts. British GP weekend chat."
     },
     {
       "tag": "Circuit",
@@ -108,7 +108,7 @@
     {
       "tag": "Circuit",
       "title": "Suzuka",
-      "snippet": "Figure-eight. 130R. Quali laps that look illegal. Dummy Japanese GP energy."
+      "snippet": "Figure-eight. 130R. Quali laps that look illegal. Japanese GP chat."
     },
     {
       "tag": "Circuit",
@@ -118,12 +118,12 @@
     {
       "tag": "Circuit",
       "title": "Marina Bay",
-      "snippet": "Night race. Walls. Safety car magnet. Paddock/night-race canvas energy."
+      "snippet": "Marina Bay under the lights. Bring your night-race takes."
     },
     {
       "tag": "Circuit",
       "title": "Circuit of the Americas",
-      "snippet": "T1 climb, T12 overtake, dummy COTA weekend. Formation lap up the hill."
+      "snippet": "Austin weekend chat: Turn 1, the hill and your race takes."
     }
   ],
   "topics": [
@@ -135,7 +135,7 @@
     {
       "tag": "SC",
       "title": "Safety car & VSC",
-      "snippet": "Boards out. Delta is a suggestion. Field bunches. Dummy race control."
+      "snippet": "Boards out. Delta is a suggestion. Field bunches."
     },
     {
       "tag": "Box",
@@ -150,12 +150,12 @@
     {
       "tag": "Points",
       "title": "Championship fight",
-      "snippet": "Dummy points math. Gold trophy talk. Not live standings."
+      "snippet": "Points math and title talk."
     },
     {
       "tag": "2026",
       "title": "2026 grid talk",
-      "snippet": "New regs chatter. No real entry list. Phase 2 is an API."
+      "snippet": "New regs chatter for the 2026 grid."
     },
     {
       "tag": "DRS",
@@ -293,7 +293,7 @@
     },
     {
       "id": "n3",
-      "text": "@champpoints started following you. Dummy follow.",
+      "text": "@champpoints started following you.",
       "time": "Yesterday",
       "unread": true
     }
@@ -335,24 +335,24 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Singapore Pre-FP1",
-    "meta": "Singapore GP · Marina Bay · Pre-FP1 · R17",
-    "footer": "Singapore GP · Pre-FP1. Sprint weekend at Marina Bay. Official F1.com outbound only. Not live timing. Preview. Nests HOLD.",
+    "kicker": "Singapore · Pre-Race",
+    "meta": "Singapore GP · Marina Bay · Pre-Race · R17",
+    "footer": "Singapore GP · Pre-Race. Sprint weekend at Marina Bay. Official F1.com outbound only. Not live timing. Preview.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
       "title": "Singapore GP",
-      "state": "Singapore Pre-FP1",
-      "next": "FP1 Fri Oct 9 2:30 AM MT (08:30Z) · Sprint Quali Fri Oct 9 6:30 AM MT (12:30Z) · Sprint Sat Oct 10 3:00 AM MT · Quali Sat Oct 10 7:00 AM MT · Race Sun Oct 11 6:00 AM MT"
+      "state": "Singapore · Pre-Race",
+      "next": "Next: Race · Sun 6:00 AM MT"
     },
     "outbound": [
       {
         "tag": "Next",
         "topic": "next",
-        "headline": "Singapore GP · FP1 Fri Oct 9 2:30 AM MT (08:30Z) · Sprint Quali Fri Oct 9 6:30 AM MT (12:30Z) · Sprint Sat Oct 10 3:00 AM MT · Quali Sat Oct 10 7:00 AM MT · Race Sun Oct 11 6:00 AM MT",
+        "headline": "Next: Race · Sun 6:00 AM MT",
         "snippet": "Marina Bay · round 17 · sprint weekend. Jolpica 2026/17.",
-        "meta": "Pre-FP1",
+        "meta": "Pre-Race",
         "url": "https://www.formula1.com/en/racing/2026"
       },
       {
@@ -366,10 +366,10 @@
       {
         "tag": "Result",
         "topic": "result",
-        "headline": "Verstappen 1:47:14.808 · Antonelli +2.307 · Hamilton +4.919",
-        "snippet": "Sepang R16 podium. F1.com meeting 1308. Jolpica 2026/16/results.",
-        "meta": "R16 result",
-        "url": "https://www.formula1.com/en/results/2026/races/1308/bahrain/race-result"
+        "headline": "Singapore Sprint · official",
+        "snippet": "Verstappen wins by 2.591s · Hamilton P2 · Leclerc P3",
+        "meta": "R17 · Sprint",
+        "url": "https://www.formula1.com/en/results/2026/races/1296/singapore/sprint-results"
       }
     ],
     "porch": {
@@ -447,7 +447,7 @@
         "id": "watch",
         "label": "Watch (free/legal)",
         "kind": "theme",
-        "blurb": "Outbound links only",
+        "blurb": "Where to watch",
         "followDefault": true,
         "adminSeed": true,
         "status": "active",
@@ -458,7 +458,7 @@
         "id": "paddock",
         "label": "Paddock",
         "kind": "theme",
-        "blurb": "News with FACT labels",
+        "blurb": "Paddock news and rumors",
         "followDefault": false,
         "adminSeed": true,
         "status": "active",
@@ -642,7 +642,7 @@
         "id": "classic",
         "label": "Classic races",
         "kind": "theme",
-        "blurb": "Off-weekend depth",
+        "blurb": "Historic Grands Prix",
         "followDefault": false,
         "adminSeed": true,
         "status": "active",
@@ -666,7 +666,7 @@
       "label": "Race weekend",
       "parent": null,
       "kind": "session",
-      "blurb": "Current GP hub — keep or swap each weekend.",
+      "blurb": "This weekend's Grand Prix.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -677,7 +677,7 @@
       "label": "Qualifying",
       "parent": null,
       "kind": "session",
-      "blurb": "Session chat without drowning Race.",
+      "blurb": "Qualifying chat.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -721,7 +721,7 @@
       "label": "Championship",
       "parent": null,
       "kind": "theme",
-      "blurb": "WDC talk; rail carries FACT.",
+      "blurb": "Championship talk.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -732,7 +732,7 @@
       "label": "Watch",
       "parent": null,
       "kind": "theme",
-      "blurb": "Free/legal outbound only — no stream hosting.",
+      "blurb": "Where to watch, with official links.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -743,7 +743,7 @@
       "label": "Paddock",
       "parent": null,
       "kind": "theme",
-      "blurb": "News/rumor with FACT labels.",
+      "blurb": "Paddock news and rumors.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -765,7 +765,7 @@
       "label": "Classic races",
       "parent": null,
       "kind": "theme",
-      "blurb": "Off-weekend depth.",
+      "blurb": "Historic Grands Prix.",
       "nav": true,
       "rankings": [],
       "reviews": [],
@@ -778,7 +778,7 @@
       "label": "Race weekend",
       "parent": null,
       "kind": "session",
-      "blurb": "Current GP hub \u2014 sessions, countdown, weekend chatter; relabel each GP, do not mint new slug.",
+      "blurb": "This weekend's Grand Prix: session times, countdown and race weekend chat.",
       "nav": true
     },
     {
@@ -786,7 +786,7 @@
       "label": "Drivers",
       "parent": null,
       "kind": "people",
-      "blurb": "Form, seats, teammate comparisons \u2014 not one room per driver.",
+      "blurb": "Driver form, seats and teammate comparisons.",
       "nav": true
     },
     {
@@ -794,7 +794,7 @@
       "label": "Teams",
       "parent": null,
       "kind": "org",
-      "blurb": "Constructors, pit wall, upgrades \u2014 not one room per team.",
+      "blurb": "Constructors, pit wall calls and upgrades.",
       "nav": true
     },
     {
@@ -802,7 +802,7 @@
       "label": "Championship",
       "parent": null,
       "kind": "theme",
-      "blurb": "WDC / WCC math between weekends; rail carries standing FACT.",
+      "blurb": "Drivers' and Constructors' title math between race weekends.",
       "nav": true
     },
     {
@@ -818,7 +818,7 @@
       "label": "Watch",
       "parent": null,
       "kind": "theme",
-      "blurb": "Legal outbound only (Apple TV / F1 TV / local) \u2014 no re-stream.",
+      "blurb": "Where to watch, with links out to official broadcasters. No streams here.",
       "nav": true
     },
     {
@@ -826,7 +826,7 @@
       "label": "Paddock",
       "parent": null,
       "kind": "theme",
-      "blurb": "News & rumor with FACT / STORYLINE / OPINION labels.",
+      "blurb": "Paddock news, rumors and storylines.",
       "nav": true
     },
     {
@@ -842,7 +842,7 @@
       "label": "Rookies",
       "parent": null,
       "kind": "people",
-      "blurb": "Grid new blood / F2 graduates \u2014 seasonal heat.",
+      "blurb": "New faces on the grid and F2 graduates.",
       "nav": true
     },
     {
@@ -850,7 +850,7 @@
       "label": "Classic races",
       "parent": null,
       "kind": "theme",
-      "blurb": "Off-weekend depth, historic GPs.",
+      "blurb": "Classic races and historic Grands Prix for the weeks between races.",
       "nav": true
     }
   ],
