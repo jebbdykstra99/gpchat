@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Report content or request a takedown</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="styles.css">
+  <!-- subx-factory shared page: identical bytes in every room. Room name and contact come from site.json
+       (name, optional legal.{operator,email,address,phone}). No account, no cookies, no third-party requests. -->
+  <style>
+    .rp-form{display:grid;gap:12px;margin:16px 0 8px;max-width:640px}
+    .rp-form label{display:grid;gap:4px;font-weight:600}
+    .rp-form label span.rp-hint{font-weight:400;opacity:.8;font-size:.92em}
+    .rp-form input[type=text],.rp-form input[type=email],.rp-form select,.rp-form textarea{font:inherit;padding:8px 10px;border:1px solid rgba(127,127,127,.5);border-radius:8px;background:transparent;color:inherit;width:100%;box-sizing:border-box}
+    .rp-form select option{color:#111}
+    .rp-form textarea{min-height:110px;resize:vertical}
+    .rp-check{display:flex!important;gap:8px;align-items:flex-start;font-weight:400!important}
+    .rp-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+    .rp-btn{font:inherit;font-weight:700;padding:9px 16px;border-radius:999px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;text-decoration:none;display:inline-block}
+    .rp-btn.rp-primary{background:#1d9bf0;border-color:#1d9bf0;color:#fff}
+    .rp-err{color:#f4212e;font-weight:600;min-height:1.2em}
+    .rp-out{white-space:pre-wrap;font:13px/1.45 ui-monospace,Menlo,Consolas,monospace;border:1px dashed rgba(127,127,127,.6);border-radius:8px;padding:10px;max-width:640px;overflow-wrap:anywhere}
+    .rp-urgent{border-left:4px solid #f4212e;padding:6px 12px;margin:12px 0}
+    [hidden]{display:none!important}
+  </style>
+</head>
+<body class="legal-page">
+  <article class="legal-doc" id="report-page">
+    <p class="legal-kicker"><a href="./" id="rp-back">&larr; Back to <span class="rp-room">this room</span></a></p>
+    <h1>Report content or request a takedown on <span class="rp-room">this room</span></h1>
+    <p>Use this page to tell us about content that breaks the law or our <a href="terms.html">Terms</a>. You don't need an account. A person at <span class="rp-operator">SubX (operated by Jebb Dykstra)</span> reviews every request; AI stewards don't make these decisions.</p>
+    <p class="rp-urgent"><strong>Someone in danger right now?</strong> Call 911 or your local emergency number first.</p>
+
+    <h2>Send a report</h2>
+    <p>Fill this in and press <strong>Open email</strong>. Your email app opens with the request written out and addressed to us. Nothing is sent until you send it. No email app? Press <strong>Copy request</strong> and email it to <a class="rp-email-link" href="mailto:jebb@techsectorlaw.com"><span class="rp-email">jebb@techsectorlaw.com</span></a>.</p>
+    <form class="rp-form" id="rp-form" novalidate>
+      <label>What are you reporting?
+        <select id="rp-type" name="type">
+          <option value="ncii">An intimate image or video of me was posted without my consent</option>
+          <option value="child">Content that may involve a child</option>
+          <option value="illegal">Illegal content, a threat, or someone's private information (doxxing)</option>
+          <option value="abuse">A post or user: harassment, spam, impersonation, or other Terms violation</option>
+          <option value="copyright">Copyright (DMCA notice)</option>
+          <option value="privacy">Privacy request or delete my account</option>
+        </select>
+      </label>
+      <p id="rp-type-help" class="rp-hint"></p>
+      <label>Link or post ID of each item <span class="rp-hint" id="rp-where-hint">One per line. A post ID or a profile handle (like @name) works too.</span>
+        <textarea id="rp-where" name="where" rows="3" maxlength="1000"></textarea>
+      </label>
+      <label id="rp-details-wrap">What happened? <span class="rp-hint">A short explanation. Please don't include the image itself.</span>
+        <textarea id="rp-details" name="details" maxlength="1500"></textarea>
+      </label>
+      <label>Your full name <span class="rp-hint" id="rp-name-hint">Used as your signature.</span>
+        <input type="text" id="rp-name" name="name" maxlength="120" autocomplete="name">
+      </label>
+      <label>How to reach you <span class="rp-hint">An email address is fine.</span>
+        <input type="email" id="rp-contact" name="contact" maxlength="200" autocomplete="email">
+      </label>
+      <label class="rp-check" id="rp-goodfaith-wrap"><input type="checkbox" id="rp-goodfaith"> <span id="rp-goodfaith-text">I believe in good faith that this was posted without my consent (or without the consent of the person I am authorized to act for).</span></label>
+      <div class="rp-err" id="rp-err" role="alert" aria-live="polite"></div>
+      <div class="rp-actions">
+        <a class="rp-btn rp-primary" id="rp-open" href="mailto:jebb@techsectorlaw.com">Open email</a>
+        <button type="button" class="rp-btn" id="rp-copy">Copy request</button>
+        <span id="rp-copied" class="rp-hint" hidden>Copied. Paste it into an email to <span class="rp-email">jebb@techsectorlaw.com</span>.</span>
+      </div>
+      <div><strong>Subject:</strong> <span id="rp-subject"></span></div>
+      <div class="rp-out" id="rp-preview" aria-label="Request preview"></div>
+    </form>
+
+    <h2>An intimate image or video of me was posted without my consent</h2>
+    <p>This includes real photos and videos and realistic AI-made or edited images. Send us:</p>
+    <ol>
+      <li>your full name as your signature (or the name of the person you're authorized to act for);</li>
+      <li>the link or post ID of each image or video;</li>
+      <li>a short statement that you believe in good faith it was posted without your consent, plus anything that helps us confirm that; and</li>
+      <li>how to reach you (an email address is fine).</li>
+    </ol>
+    <p>Please don't send us a copy of the image. <strong>We remove valid requests within 48 hours,</strong> and we look for and remove known identical copies on our sites. We won't tell the person who posted it who you are.<br>
+    <strong>Send to:</strong> the form on this page or <a class="rp-email-link" href="mailto:jebb@techsectorlaw.com"><span class="rp-email">jebb@techsectorlaw.com</span></a>, subject "NCII removal request — <span class="rp-room">this room</span>."</p>
+
+    <h2>Content that may involve a child</h2>
+    <p>Report it here or with the Report button on the post. Give us the link only. <strong>Don't download, screenshot, or send the image.</strong> We remove it, report it to the National Center for Missing &amp; Exploited Children as federal law requires, and preserve evidence for law enforcement. You can also report directly to NCMEC at <a href="https://report.cybertip.org/" rel="noopener">report.cybertip.org</a> or 1-800-843-5678.</p>
+
+    <h2>Other illegal content, threats, or posting someone's private information</h2>
+    <p>Send the link and a short explanation to <a class="rp-email-link" href="mailto:jebb@techsectorlaw.com"><span class="rp-email">jebb@techsectorlaw.com</span></a>, subject "Illegal content report — <span class="rp-room">this room</span>."</p>
+
+    <h2>Harassment, spam, or impersonation</h2>
+    <p>Signed-in members can tap <strong>Report</strong> on any post, and <strong>Block</strong> to hide someone's posts. You can also use the form above, with or without an account.</p>
+
+    <h2>Copyright</h2>
+    <p>Follow the copyright (DMCA) steps in our <a href="terms.html">Terms of Service</a>. Notices go to the contact listed there.</p>
+    <p>Submitting a request you know is false may violate our Terms and the law.</p>
+
+    <h2>Privacy or account deletion</h2>
+    <p>See our <a href="privacy.html">Privacy Policy</a>, or email <a class="rp-email-link" href="mailto:jebb@techsectorlaw.com"><span class="rp-email">jebb@techsectorlaw.com</span></a>, subject "Privacy request — <span class="rp-room">this room</span>" or "Delete my account — <span class="rp-room">this room</span>."</p>
+
+    <h2>How fast we act</h2>
+    <ul>
+      <li>Intimate images shared without consent: removed within 48 hours of a valid request.</li>
+      <li>Child safety, credible threats, and other illegal content: the same day.</li>
+      <li>Everything else: within 72 hours.</li>
+    </ul>
+
+    <p class="legal-kicker"><strong>Contact:</strong> <span class="rp-operator">SubX (operated by Jebb Dykstra)</span> · <span class="rp-address">3019 Ocean Park Boulevard, #193, Santa Monica, CA 90405, USA</span> · <a class="rp-email-link" href="mailto:jebb@techsectorlaw.com"><span class="rp-email">jebb@techsectorlaw.com</span></a> · <span class="rp-phone">+1-650-539-5005</span>. Tech Sector Law is counsel for Operator and is not the operator of the Service.</p>
+  </article>
+<script>
+(function () {
+  'use strict';
+  var D = {
+    room: (location.hostname || 'this room').replace(/^www\./, ''),
+    operator: 'SubX (operated by Jebb Dykstra)',
+    email: 'jebb@techsectorlaw.com',
+    address: '3019 Ocean Park Boulevard, #193, Santa Monica, CA 90405, USA',
+    phone: '+1-650-539-5005'
+  };
+  var TYPES = {
+    ncii: { subject: 'NCII removal request', help: 'We remove valid requests within 48 hours. Please don\'t attach the image.', name: true, goodfaith: true, details: 'Anything that helps us confirm it was posted without consent' },
+    child: { subject: 'Child safety report', help: 'Give us the link only. Don\'t download, screenshot, or send the image. You can also report to NCMEC at report.cybertip.org or 1-800-843-5678.', name: false, goodfaith: false, details: 'What you saw (no image)' },
+    illegal: { subject: 'Illegal content report', help: 'Threats of imminent harm: call 911 first. We act on illegal content the same day.', name: false, goodfaith: false, details: 'What it is and why it is illegal or dangerous' },
+    abuse: { subject: 'Report a post or user', help: 'We review these within 72 hours. Members can also tap Report on the post.', name: false, goodfaith: false, details: 'What the post or user did' },
+    copyright: { subject: 'Copyright notice', help: 'A DMCA notice needs: your contact info, the work, the infringing post, a good-faith statement, a statement under penalty of perjury that you are authorized, and your signature. See our Terms.', name: true, goodfaith: true, gf: 'I have a good-faith belief this use is not authorized by the owner, its agent, or the law, and under penalty of perjury I am the owner or authorized to act for the owner.', details: 'The copyrighted work and how the post infringes it' },
+    privacy: { subject: 'Privacy request', help: 'For account deletion, include the email you signed up with.', name: false, goodfaith: false, details: 'What you would like us to do (for example: delete my account)' }
+  };
+  var GF_NCII = document.getElementById('rp-goodfaith-text').textContent;
+  var C = Object.assign({}, D);
+  var $ = function (id) { return document.getElementById(id); };
+  function setText(cls, v) { var n = document.querySelectorAll('.' + cls); for (var i = 0; i < n.length; i++) n[i].textContent = v; }
+  function clean(s, max) { return String(s || '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').trim().slice(0, max); }
+  function q(name) { try { return new URLSearchParams(location.search).get(name) || ''; } catch (e) { return ''; } }
+  function applyConfig() {
+    setText('rp-room', C.room); setText('rp-operator', C.operator); setText('rp-email', C.email);
+    setText('rp-address', C.address); setText('rp-phone', C.phone);
+    var links = document.querySelectorAll('.rp-email-link');
+    for (var i = 0; i < links.length; i++) links[i].href = 'mailto:' + C.email;
+    document.title = 'Report content or request a takedown — ' + C.room;
+    $('rp-back').href = './';
+    update();
+  }
+  function build() {
+    var t = $('rp-type').value; var T = TYPES[t] || TYPES.abuse;
+    var subject = T.subject + ' — ' + C.room;
+    if (t === 'privacy' && /delete/i.test($('rp-details').value)) subject = 'Delete my account — ' + C.room;
+    var lines = [];
+    lines.push(T.subject + ' (' + C.room + ', ' + location.host + ')');
+    lines.push('');
+    lines.push('Where (links, post IDs, or handles):');
+    lines.push(clean($('rp-where').value, 1000) || '(not given)');
+    lines.push('');
+    lines.push('Details:');
+    lines.push(clean($('rp-details').value, 1500) || '(not given)');
+    lines.push('');
+    if (T.goodfaith) {
+      lines.push('Good-faith statement: ' + ($('rp-goodfaith').checked ? (T.gf || GF_NCII) : '(not confirmed)'));
+      lines.push('');
+    }
+    lines.push('Name / signature: ' + (clean($('rp-name').value, 120) || '(not given)'));
+    lines.push('Contact: ' + (clean($('rp-contact').value, 200) || '(not given)'));
+    lines.push('');
+    lines.push('Sent from the report page: ' + location.origin + location.pathname);
+    return { type: t, T: T, subject: subject, body: lines.join('\n') };
+  }
+  function validate(r) {
+    if (!clean($('rp-where').value, 1000)) return 'Add the link, post ID, or handle so we can find it.';
+    if (r.T.name && !clean($('rp-name').value, 120)) return 'Add your full name. It serves as your signature.';
+    if (r.T.goodfaith && !$('rp-goodfaith').checked) return 'Please confirm the good-faith statement.';
+    if (r.type !== 'child' && !clean($('rp-contact').value, 200)) return 'Add an email address so we can confirm what we did.';
+    return '';
+  }
+  function update() {
+    var t = $('rp-type').value; var T = TYPES[t] || TYPES.abuse;
+    $('rp-type-help').textContent = T.help;
+    $('rp-goodfaith-wrap').hidden = !T.goodfaith;
+    $('rp-goodfaith-text').textContent = T.gf || GF_NCII;
+    $('rp-name-hint').textContent = T.name ? 'Required. Used as your signature.' : 'Optional.';
+    $('rp-details-wrap').firstChild.nodeValue = (T.details || 'What happened?') + ' ';
+    var r = build();
+    $('rp-subject').textContent = r.subject;
+    $('rp-preview').textContent = r.body;
+    $('rp-open').href = 'mailto:' + C.email + '?subject=' + encodeURIComponent(r.subject) + '&body=' + encodeURIComponent(r.body);
+  }
+  function guard(ev) {
+    var r = build(); var err = validate(r);
+    $('rp-err').textContent = err;
+    if (err) { if (ev) ev.preventDefault(); return false; }
+    return true;
+  }
+  $('rp-form').addEventListener('input', function () { $('rp-err').textContent = ''; $('rp-copied').hidden = true; update(); });
+  $('rp-form').addEventListener('change', update);
+  $('rp-form').addEventListener('submit', function (e) { e.preventDefault(); });
+  $('rp-open').addEventListener('click', guard);
+  $('rp-copy').addEventListener('click', function () {
+    if (!guard()) return;
+    var r = build(); var txt = 'To: ' + C.email + '\nSubject: ' + r.subject + '\n\n' + r.body;
+    var done = function () { $('rp-copied').hidden = false; };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, function () { fallback(txt); done(); });
+    else { fallback(txt); done(); }
+  });
+  function fallback(txt) {
+    var ta = document.createElement('textarea'); ta.value = txt; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} ta.remove();
+  }
+  // Prefill from in-app links: report.html?type=abuse&post=<id>&user=<handle>
+  var pt = q('type'); if (TYPES[pt]) $('rp-type').value = pt;
+  var pre = [];
+  var pp = clean(q('post'), 64).replace(/[^A-Za-z0-9_-]/g, ''); if (pp) pre.push('Post ID: ' + pp);
+  var pu = clean(q('user'), 40).replace(/[^A-Za-z0-9_.@-]/g, ''); if (pu) pre.push('User: ' + (pu.charAt(0) === '@' ? pu : '@' + pu));
+  if (pre.length) $('rp-where').value = pre.join('\n');
+  applyConfig();
+  fetch('site.json', { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (s) {
+    if (!s) return;
+    if (typeof s.name === 'string' && s.name.trim()) C.room = clean(s.name, 60);
+    var L = (s.legal && typeof s.legal === 'object') ? s.legal : {};
+    ['operator', 'email', 'address', 'phone'].forEach(function (k) { if (typeof L[k] === 'string' && L[k].trim()) C[k] = clean(L[k], 200); });
+    if (!/^[^\s@<>"]+@[^\s@<>"]+\.[A-Za-z]{2,}$/.test(C.email)) C.email = D.email;
+    applyConfig();
+  }).catch(function () {});
+})();
+</script>
+</body>
+</html>
