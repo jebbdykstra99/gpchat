@@ -168,8 +168,10 @@
       "snippet": "Tire temps, a stall on the grid, P1 lights that take forever."
     }
   ],
+  "imageUploads": false,
+  "minAge": 18,
   "stories": {
-    "enabled": true,
+    "enabled": false,
     "maxSeconds": 15,
     "maxBytes": 8000000
   },
