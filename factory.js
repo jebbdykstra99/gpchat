@@ -397,6 +397,17 @@
       armGuardTick();
     }
   }
+  // 2026-10-12 burst cap (mirrors rules: max 5 posts+replies per 10-minute window).
+  var BURST_MS = 10 * 60 * 1000, BURST_MAX = 5;
+  function burstInWindow(rate) {
+    var bs = rate && rate.burstStart && rate.burstStart.toMillis ? rate.burstStart.toMillis() : 0;
+    return bs > 0 && Date.now() < bs + BURST_MS;
+  }
+  function burstLeftMs() {
+    var rate = guardState.rate;
+    if (!burstInWindow(rate) || (rate.burstCount || 0) < BURST_MAX) return 0;
+    return rate.burstStart.toMillis() + BURST_MS - Date.now();
+  }
   function notePostCommitted() {
     guardState.lastPostMs = Date.now();
     var day = utcMidnightTs(0);
@@ -406,7 +417,9 @@
       lastPostAt: rate.lastPostAt,
       lastMsgAt: rate.lastMsgAt,
       day: day,
-      dayCount: same ? (rate.dayCount || 0) + 1 : 1
+      dayCount: same ? (rate.dayCount || 0) + 1 : 1,
+      burstStart: burstInWindow(rate) ? rate.burstStart : (function (ms) { return { toMillis: function () { return ms; } }; })(guardState.lastPostMs),
+      burstCount: burstInWindow(rate) ? (rate.burstCount || 0) + 1 : 1
     };
     guardState.rate.lastPostAt = { toMillis: function () { return guardState.lastPostMs; } };
     syncPostBtn();
@@ -430,6 +443,8 @@
     var left = postCooldownMs();
     if (left > 0) return 'Wait ' + Math.ceil(left / 1000) + 's before posting again.';
     if (postsTodayCount() >= 50) return 'Daily limit is 50 posts. Try again after UTC midnight.';
+    var bl = burstLeftMs();
+    if (bl > 0) return 'You posted 5 times in 10 minutes. Try again in ' + Math.ceil(bl / 60000) + ' min.';
     var text = doc && doc.text ? String(doc.text) : '';
     if (linkCount(text) > 2) return 'Posts can include at most 2 links.';
     if (text && !spamFree(text)) return 'That text is blocked by the room spam filter.';
@@ -455,23 +470,29 @@
       var aref = fbDb.collection('posts').doc();
       return aref.set(doc).then(function () { return finishOk(aref); }).catch(finishErr);
     }
-    function commit(offset) {
+    function commit(offset, flipBurst) {
       var batch = fbDb.batch();
       var ref = fbDb.collection('posts').doc();
       batch.set(ref, doc);
       var day = utcMidnightTs(offset);
       var same = rateDayEqual(guardState.rate, day);
-      batch.set(fbDb.collection('rateLimits').doc(doc.authorUid), {
+      var inWin = burstInWindow(guardState.rate);
+      if (flipBurst) inWin = !inWin;   // device clock vs server time at the window edge
+      var rl = {
         lastPostAt: firebase.firestore.FieldValue.serverTimestamp(),
         day: day,
         dayCount: same ? firebase.firestore.FieldValue.increment(1) : 1
-      }, { merge: true });
+      };
+      if (inWin) rl.burstCount = firebase.firestore.FieldValue.increment(1);
+      else { rl.burstStart = firebase.firestore.FieldValue.serverTimestamp(); rl.burstCount = 1; }
+      batch.set(fbDb.collection('rateLimits').doc(doc.authorUid), rl, { merge: true });
       return batch.commit().then(function () { return ref; });
     }
     return commit(0).then(finishOk).catch(function (e) {
       if (isPermDenied(e) && nearUtcMidnight()) {
         return commit(otherDayOffset()).then(finishOk).catch(finishErr);
       }
+      if (isPermDenied(e)) return commit(0, true).then(finishOk).catch(finishErr);
       return finishErr(e);
     });
   }
