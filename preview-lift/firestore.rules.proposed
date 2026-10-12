@@ -1,4 +1,8 @@
 rules_version = '2';
+// RETENTION NOTE (2026-10-12, CLO): pixel `hits` rows carry expireAt = createdAt + 90d and are removed
+// by a Firestore TTL policy on `expireAt` (Admin SDK writes; these client rules don't govern them).
+// TTL deletion is not instant: Firestore typically deletes within ~24 h AFTER expireAt, so a raw row
+// can live ~91 days. Aggregates: up to 13 months (expireAt = periodEnd + 395d) if a rollup is added.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
@@ -365,11 +369,22 @@ service cloud.firestore {
     }
 
     // ===== PREVIEW-LIFT GUARD: per-user write throttle =====
-    // rateLimits/{uid}: { lastPostAt, lastMsgAt, day, dayCount }
+    // rateLimits/{uid}: { lastPostAt, lastMsgAt, day, dayCount, burstStart, burstCount }
     // Gap: 20s between posts/replies, 2s between DMs. Daily cap: 50 posts+replies (UTC day).
+    // Burst cap (2026-10-12): at most 5 posts+replies per 10-minute window (window opens at the
+    // first post after the previous window ends). Steward admin o774wL9h... is exempt (postThrottled
+    // skips the rateLimits check for isAdmin(); Path A drips also run outside rules).
+    // Matches RULES_PASTE_for_Jebb_v2.txt SECTION A2 (sha256 f487a152da17) for this block.
     match /rateLimits/{uid} {
       function rlKeysOk(d) {
-        return d.keys().hasOnly(['lastPostAt', 'lastMsgAt', 'day', 'dayCount']);
+        return d.keys().hasOnly(['lastPostAt', 'lastMsgAt', 'day', 'dayCount', 'burstStart', 'burstCount']);
+      }
+      function burstOk(before, after) {
+        return (before.keys().hasAll(['burstStart', 'burstCount'])
+                && request.time < before.burstStart + duration.value(10, 'm'))
+          ? (after.burstStart == before.burstStart
+              && after.burstCount == before.burstCount + 1 && after.burstCount <= 5)
+          : (after.burstStart == request.time && after.burstCount == 1);
       }
       function postBump(before, after) {
         return after.lastPostAt == request.time
@@ -378,7 +393,8 @@ service cloud.firestore {
           && after.day == request.time.date()
           && ((before.keys().hasAny(['day']) && before.day == request.time.date())
                 ? (after.dayCount == before.dayCount + 1 && after.dayCount <= 50)
-                : after.dayCount == 1);
+                : after.dayCount == 1)
+          && burstOk(before, after);
       }
       function msgBump(before, after) {
         return after.lastMsgAt == request.time
@@ -397,7 +413,7 @@ service cloud.firestore {
       allow update: if signedIn() && request.auth.uid == uid
         && rlKeysOk(request.resource.data)
         && (
-          (changed(resource.data, request.resource.data).hasOnly(['lastPostAt', 'day', 'dayCount'])
+          (changed(resource.data, request.resource.data).hasOnly(['lastPostAt', 'day', 'dayCount', 'burstStart', 'burstCount'])
             && postBump(resource.data, request.resource.data))
           || (changed(resource.data, request.resource.data).hasOnly(['lastMsgAt'])
             && msgBump(resource.data, request.resource.data))

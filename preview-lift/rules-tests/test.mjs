@@ -16,7 +16,9 @@ async function guardedPost(d, uid, data, prev) {
   b.set(ref, data);
   const today = utcDay();
   const sameDay = prev && prev.day && prev.day.isEqual(today);
-  b.set(d.collection('rateLimits').doc(uid), { lastPostAt: FV.serverTimestamp(), day: today, dayCount: sameDay ? FV.increment(1) : 1 }, { merge: true });
+  const inWin = prev && prev.burstStart && Date.now() < prev.burstStart.toMillis() + 600e3;   // patched factory.js burst logic
+  b.set(d.collection('rateLimits').doc(uid), Object.assign({ lastPostAt: FV.serverTimestamp(), day: today, dayCount: sameDay ? FV.increment(1) : 1 },
+    inWin ? { burstCount: FV.increment(1) } : { burstStart: FV.serverTimestamp(), burstCount: 1 }), { merge: true });
   await b.commit(); return ref;
 }
 const results = []; let failN = 0;
@@ -101,6 +103,19 @@ await t('33c admin steward:true post ok', assertSucceeds(db(ADMIN).collection('p
 for (const sid of ['booze', 'buffet', 'boyfriend', 'cia', 'cobra', '311chat', 'airlineschat', 'amachat', 'atmchat', 'behindtheblackwall']) {
   await t('34 allowlist: legacy post on ' + sid + ' ok', assertSucceeds(db('a' + sid).collection('posts').add(base('a' + sid, sid))));
 }
+// ---- 2026-10-12 burst cap: 5 posts+replies per 10-minute window ----
+const bseed = (u, agoMs, n) => seed(async (s) => s.doc('rateLimits/' + u).set({ lastPostAt: TS.fromDate(new Date(Date.now() - 60e3)), day: utcDay(), dayCount: n, burstStart: TS.fromDate(new Date(Date.now() - agoMs)), burstCount: n }));
+const rl = async (u) => { let d; await seed(async (s) => { d = (await s.doc('rateLimits/' + u).get()).data(); }); return d; };
+await bseed('u60', 300e3, 4);
+await t('40 burst: 5th post in window ok', assertSucceeds(guardedPost(db('u60'), 'u60', base('u60'), await rl('u60'))));
+await bseed('u61', 300e3, 5);
+await t('40b burst: 6th post in window denied', assertFails(guardedPost(db('u61'), 'u61', base('u61'), await rl('u61'))));
+await t('40c burst: forged window reset denied', assertFails(guardedPost(db('u61'), 'u61', base('u61'), { day: utcDay() })));
+await bseed('u62', 660e3, 5);
+await t('40d burst: new window after 10 min ok', assertSucceeds(guardedPost(db('u62'), 'u62', base('u62'), await rl('u62'))));
+await t('40e burst: pre-patch client (no burst fields) denied', assertFails((async () => { const d = db('u63'); const b = d.batch(); b.set(d.collection('posts').doc(), base('u63'));
+  b.set(d.collection('rateLimits').doc('u63'), { lastPostAt: FV.serverTimestamp(), day: utcDay(), dayCount: 1 }, { merge: true }); await b.commit(); })()));
+await t('40f burst: admin 7 posts back-to-back ok (exempt)', assertSucceeds((async () => { for (let i = 0; i < 7; i++) await db(ADMIN).collection('posts').add(base(ADMIN, 'gpchat', { authorName: 'Pit Wall', authorHandle: 'pitwall', steward: true, text: 'drip ' + i })); })()));
 await t('34b unknown siteId denied', assertFails(db('u46').collection('posts').add(base('u46', 'notaroom'))));
 console.log(results.join('\n')); console.log(failN ? `\n${failN} FAILED` : '\nALL PASS');
 await env.cleanup(); process.exit(failN ? 1 : 0);

@@ -48,9 +48,10 @@ async function guardedPost(uid, data, prev) {
   b.set(d.collection('posts').doc(), data);
   const today = utcDay();
   const sameDay = prev && prev.day && prev.day.isEqual && prev.day.isEqual(today);
-  b.set(d.collection('rateLimits').doc(uid), {
+  const inWin = prev && prev.burstStart && Date.now() < prev.burstStart.toMillis() + 600e3;   // patched factory.js burst logic
+  b.set(d.collection('rateLimits').doc(uid), Object.assign({
     lastPostAt: FV.serverTimestamp(), day: today, dayCount: sameDay ? FV.increment(1) : 1
-  }, { merge: true });
+  }, inWin ? { burstCount: FV.increment(1) } : { burstStart: FV.serverTimestamp(), burstCount: 1 }), { merge: true });
   await b.commit();
 }
 

@@ -1,6 +1,15 @@
---- preview-lift/firestore.rules.BASELINE	2026-10-09 00:39:17.853887865 +0000
-+++ preview-lift/firestore.rules.proposed	2026-10-09 03:15:15.950002599 +0000
-@@ -20,6 +20,17 @@
+--- preview-lift/firestore.rules.BASELINE
++++ preview-lift/firestore.rules.proposed
+@@ -1,4 +1,8 @@
+ rules_version = '2';
++// RETENTION NOTE (2026-10-12, CLO): pixel `hits` rows carry expireAt = createdAt + 90d and are removed
++// by a Firestore TTL policy on `expireAt` (Admin SDK writes; these client rules don't govern them).
++// TTL deletion is not instant: Firestore typically deletes within ~24 h AFTER expireAt, so a raw row
++// can live ~91 days. Aggregates: up to 13 months (expireAt = periodEnd + 395d) if a rollup is added.
+ service cloud.firestore {
+   match /databases/{database}/documents {
+     function signedIn() {
+@@ -20,6 +24,17 @@
          'behindtheblackwall', 'btbw'
        ];
      }
@@ -18,7 +27,7 @@
      function notKilled(sid) {
        return !exists(/databases/$(database)/documents/sites/$(sid))
          || get(/databases/$(database)/documents/sites/$(sid)).data.killed != true;
-@@ -108,6 +119,109 @@
+@@ -108,6 +123,109 @@
          && data.expiresAt <= data.createdAt + duration.value(28, 'h');
      }
  
@@ -128,7 +137,7 @@
      match /posts/{postId} {
        allow read: if true;
        allow create: if emailVerified()
-@@ -115,9 +229,12 @@
+@@ -115,9 +233,12 @@
          && request.auth.uid == request.resource.data.authorUid
          && factorySite(request.resource.data)
          && hasPostBody(request.resource.data)
@@ -144,7 +153,7 @@
        allow update: if emailVerified() && notKilled(resource.data.siteId) && (
          onlyReplyCountBump()
          || onlyOwnPollVote()
-@@ -127,6 +244,10 @@
+@@ -127,6 +248,10 @@
        );
      }
  
@@ -155,7 +164,7 @@
      match /users/{uid} {
        allow get: if isAdmin() || (signedIn() && request.auth.uid == uid);
        allow list: if isAdmin();
-@@ -134,7 +255,8 @@
+@@ -134,7 +259,8 @@
          && request.auth.uid == uid
          && request.resource.data.keys().hasAll(['siteId'])
          && factorySite(request.resource.data)
@@ -165,7 +174,7 @@
  
        match /blocks/{targetUid} {
          allow read: if signedIn() && request.auth.uid == uid;
-@@ -189,6 +311,12 @@
+@@ -189,6 +315,12 @@
            && request.resource.data.fromUid != uid
            && factorySite(request.resource.data)
            && request.resource.data.type is string
@@ -178,7 +187,7 @@
            && request.resource.data.read == false;
        }
      }
-@@ -200,7 +328,10 @@
+@@ -200,7 +332,10 @@
          && request.resource.data.reporterUid == request.auth.uid
          && factorySite(request.resource.data)
          && request.resource.data.postId is string
@@ -190,7 +199,7 @@
        allow update, delete: if isAdmin();
      }
  
-@@ -210,7 +341,70 @@
+@@ -210,7 +345,82 @@
          && request.resource.data.siteId == siteId
          && request.resource.data.killed is bool;
        allow delete: if false;
@@ -218,11 +227,22 @@
 +    }
 +
 +    // ===== PREVIEW-LIFT GUARD: per-user write throttle =====
-+    // rateLimits/{uid}: { lastPostAt, lastMsgAt, day, dayCount }
++    // rateLimits/{uid}: { lastPostAt, lastMsgAt, day, dayCount, burstStart, burstCount }
 +    // Gap: 20s between posts/replies, 2s between DMs. Daily cap: 50 posts+replies (UTC day).
++    // Burst cap (2026-10-12): at most 5 posts+replies per 10-minute window (window opens at the
++    // first post after the previous window ends). Steward admin o774wL9h... is exempt (postThrottled
++    // skips the rateLimits check for isAdmin(); Path A drips also run outside rules).
++    // Matches RULES_PASTE_for_Jebb_v2.txt SECTION A2 (sha256 f487a152da17) for this block.
 +    match /rateLimits/{uid} {
 +      function rlKeysOk(d) {
-+        return d.keys().hasOnly(['lastPostAt', 'lastMsgAt', 'day', 'dayCount']);
++        return d.keys().hasOnly(['lastPostAt', 'lastMsgAt', 'day', 'dayCount', 'burstStart', 'burstCount']);
++      }
++      function burstOk(before, after) {
++        return (before.keys().hasAll(['burstStart', 'burstCount'])
++                && request.time < before.burstStart + duration.value(10, 'm'))
++          ? (after.burstStart == before.burstStart
++              && after.burstCount == before.burstCount + 1 && after.burstCount <= 5)
++          : (after.burstStart == request.time && after.burstCount == 1);
 +      }
 +      function postBump(before, after) {
 +        return after.lastPostAt == request.time
@@ -231,7 +251,8 @@
 +          && after.day == request.time.date()
 +          && ((before.keys().hasAny(['day']) && before.day == request.time.date())
 +                ? (after.dayCount == before.dayCount + 1 && after.dayCount <= 50)
-+                : after.dayCount == 1);
++                : after.dayCount == 1)
++          && burstOk(before, after);
 +      }
 +      function msgBump(before, after) {
 +        return after.lastMsgAt == request.time
@@ -250,7 +271,7 @@
 +      allow update: if signedIn() && request.auth.uid == uid
 +        && rlKeysOk(request.resource.data)
 +        && (
-+          (changed(resource.data, request.resource.data).hasOnly(['lastPostAt', 'day', 'dayCount'])
++          (changed(resource.data, request.resource.data).hasOnly(['lastPostAt', 'day', 'dayCount', 'burstStart', 'burstCount'])
 +            && postBump(resource.data, request.resource.data))
 +          || (changed(resource.data, request.resource.data).hasOnly(['lastMsgAt'])
 +            && msgBump(resource.data, request.resource.data))
@@ -261,7 +282,7 @@
  
      match /stories/{storyId} {
        allow read: if factorySite(resource.data);
-@@ -258,6 +452,8 @@
+@@ -258,6 +468,8 @@
            && request.resource.data.text is string
            && request.resource.data.text.size() > 0
            && request.resource.data.text.size() <= 1000
