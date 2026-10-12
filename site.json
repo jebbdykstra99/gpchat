@@ -175,48 +175,7 @@
     "maxSeconds": 15,
     "maxBytes": 8000000
   },
-  "sessionSeeds": [
-    {
-      "id": "singapore-seat",
-      "name": "Grid Seat",
-      "handle": "gridseat",
-      "text": "Who are you sitting with for Singapore — driver, team, or both?",
-      "hours": 1,
-      "likes": 12,
-      "replies": 3,
-      "session": true
-    },
-    {
-      "id": "singapore-gap",
-      "name": "Gap Watch",
-      "handle": "gapwatch",
-      "text": "Title board after Sepang: Antonelli 320 · Russell 236 · Hamilton 214 (gap 84). Who closes it in Singapore?",
-      "hours": 3,
-      "likes": 14,
-      "replies": 4,
-      "session": true
-    },
-    {
-      "id": "singapore-lights",
-      "name": "Lights Out",
-      "handle": "lightsout",
-      "text": "Lights out Sun Oct 11 · 6:00 AM MT at Marina Bay — alarm or breakfast results?",
-      "hours": 0,
-      "likes": 11,
-      "replies": 3,
-      "session": true
-    },
-    {
-      "id": "singapore-watch",
-      "name": "Watch Outbound",
-      "handle": "watchout",
-      "text": "Apple TV outbound is on the rail; Tubi only when listed. Watching the Apple feed for Singapore?",
-      "hours": 2,
-      "likes": 9,
-      "replies": 2,
-      "session": true
-    }
-  ],
+  "sessionSeeds": [],
   "seedNote": "STEWARD_REFRESH Fri 2026-09-25 · Jolpica/Apple/Tubi · no second fight · nests HOLD",
   "seed": [
     {
