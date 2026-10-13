@@ -29,7 +29,7 @@
     <p>You retain ownership of content you post (text, images, and other permitted uploads). You grant Operator a worldwide, non-exclusive, royalty-free license to host, store, reproduce, display, and distribute that content solely to operate, improve, and promote the Service. You represent you have the rights to post it and that it does not violate law or third-party rights. Posts may be public. Do not post others’ private data, child sexual abuse material, malware, or content that is illegal, harassing, or infringing.</p>
     <p>Unless the product UI expressly allows otherwise: images only for uploads (reasonable size limits apply); do not upload others’ copyrighted material without permission. You may delete your own posts where the product allows; deletion from our active systems is not a guarantee that cached or shared copies disappear everywhere.</p>
 
-    <h2 id="guidelines">5. Acceptable use</h2>
+    <h2>5. Acceptable use</h2>
     <ul>
       <li>No illegal activity; no exploitation of minors; no scams, phishing, or credential harvesting.</li>
       <li>No attempts to bypass security, scrape at abusive scale, reverse engineer in violation of law, or disrupt the Service.</li>
@@ -67,7 +67,7 @@
     <h2>15. Changes</h2>
     <p>We may update these Terms by posting a new version on this page and updating the effective date. Continued use after the effective date constitutes acceptance of the updated Terms, except where applicable law requires additional consent.</p>
 
-    <h2 id="report">16. Contact</h2>
+    <h2>16. Contact</h2>
     <p>SubX (operated by Jebb Dykstra)<br>
     Tech Sector Law is counsel for Operator and is not the operator of the Service. The mail, email, and phone listed for notices are Operator’s designated legal contact channels.<br>
     Mail: 3019 Ocean Park Boulevard, #193, Santa Monica, CA 90405, USA<br>
@@ -76,9 +76,17 @@
 
     <p><a href="./">Back to gpchat</a> · <a href="privacy.html">Privacy Policy</a></p>
   </article>
-<footer class="legal-footer" role="contentinfo" style="position:fixed;left:0;right:0;bottom:0;z-index:2147483000;display:block;padding:6px 10px;text-align:center;font:12px/1.4 system-ui,-apple-system,Segoe UI,sans-serif;background:rgba(10,14,20,.92);color:#c8d3dc;border-top:1px solid rgba(255,255,255,.12)">
-  <a href="/terms.html" style="color:inherit">Terms</a> · <a href="/privacy.html" style="color:inherit">Privacy</a> · <a href="/terms.html#report" style="color:inherit">Report</a> · <a href="/terms.html#guidelines" style="color:inherit">Guidelines</a>
+<footer class="legal-footer" role="contentinfo" aria-label="Legal">
+  <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a> ·
+  <a href="/report.html">Report</a> · <a href="/guidelines.html">Guidelines</a>
 </footer>
-<style>body{padding-bottom:34px}.legal-footer{display:block!important;visibility:visible!important}</style>
+<style>
+  .legal-footer{position:fixed;left:0;right:0;bottom:0;z-index:2147483000;display:block!important;visibility:visible!important;
+    padding:6px 10px;text-align:center;font:12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;
+    background:rgba(10,14,20,.92);color:#c8d3dc;border-top:1px solid rgba(255,255,255,.12)}
+  .legal-footer a{color:inherit;text-decoration:underline}
+  body{padding-bottom:34px}
+  @media (max-width:900px){.legal-footer{display:block!important;transform:none!important}}
+</style>
 </body>
 </html>
