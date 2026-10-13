@@ -1,6 +1,5 @@
 {
   "siteId": "gpchat",
-  "redditSr": "gpchat",
   "name": "gpchat",
   "tagline": "Nothing but Grand Prix.",
   "composePlaceholder": "Say something. This is a work in progress.",
@@ -855,5 +854,18 @@
     }
   ],
   "v": 1,
-  "cacheBust": 1
+  "cacheBust": 1,
+  "earlyWelcomeCopy": "You're early. This room is live but unfinished. Who do you sit with on the grid — driver, team, or both? Tell the room.",
+  "pixel": false,
+  "redditCrosspost": false,
+  "features": {
+    "watchlist": true,
+    "following": true,
+    "notifs": true,
+    "topicFollow": true,
+    "sessionSeeds": true
+  },
+  "skin": {
+    "avatarInitials": "GP"
+  }
 }

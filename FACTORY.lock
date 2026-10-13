@@ -1,0 +1,13 @@
+{
+  "factory": "jebbdykstra99/subx-factory",
+  "version": "v1.1.0",
+  "room": "gpchat",
+  "siteId": "gpchat",
+  "files": {
+    "factory.js": "7466eefc88f4103dcc159bcea5a788d35dc4b1402ffba14b270f3ede99b610d0",
+    "styles.css": "2810a5367a4487ab06a655543ab57d1d21b3b707c6308938118dbbc769282273"
+  },
+  "keepFiles": [],
+  "exceptions": "see subx-factory EXCEPTIONS.md",
+  "stampedAt": "2026-10-13T13:47:40Z"
+}
