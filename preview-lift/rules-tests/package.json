@@ -1,0 +1,15 @@
+{
+  "name": "subx-rules-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:step1": "cp ../firestore.rules.proposed firestore.rules && firebase emulators:exec --only firestore --project demo-subx-guard 'MODE=step1 RULES=firestore.rules node test.mjs'",
+    "test:step3": "sed \"s/return sid in \\[\\];/return sid in ['gpchat'];/\" ../firestore.rules.proposed > firestore.rules && firebase emulators:exec --only firestore --project demo-subx-guard 'RULES=firestore.rules node test.mjs'",
+    "attack:proposed": "sed \"s/return sid in \\[\\];/return sid in ['gpchat'];/\" ../firestore.rules.proposed > firestore.rules && firebase emulators:exec --only firestore --project demo-subx-atk 'RULES=firestore.rules node attack.mjs'",
+    "attack:baseline": "cp ../firestore.rules.BASELINE firestore.rules && firebase emulators:exec --only firestore --project demo-subx-atk 'RULES=firestore.rules node attack.mjs'",
+    "test:abuse:baseline": "cp ../firestore.rules.BASELINE firestore.rules && firebase emulators:exec --only firestore --project demo-subx-abuse 'RULESET=baseline RULES=firestore.rules node abuse.mjs'",
+    "test:abuse:proposed": "sed \"s/return sid in \\[\\];/return sid in ['gpchat'];/\" ../firestore.rules.proposed > firestore.rules && firebase emulators:exec --only firestore --project demo-subx-abuse 'RULESET=proposed RULES=firestore.rules node abuse.mjs'",
+    "test:abuse": "npm run test:abuse:baseline && npm run test:abuse:proposed"
+  },
+  "devDependencies": { "@firebase/rules-unit-testing": "^3.0.4", "firebase": "^10.14.1", "firebase-tools": "^13.0.0" }
+}
