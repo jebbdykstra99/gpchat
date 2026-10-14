@@ -83,7 +83,7 @@
   }
   function siteMinAge() {
     var n = parseInt(site && site.minAge, 10);
-    if (!isFinite(n) || n < 1) return 13;
+    if (!isFinite(n) || n < 18) return 18;
     return n;
   }
   function ageGateMessage() {
