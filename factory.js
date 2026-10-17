@@ -87,7 +87,7 @@
     return n;
   }
   function ageGateMessage() {
-    return 'Confirm you are ' + siteMinAge() + ' or older and agree to the preview Terms and Privacy pages.';
+    return 'Confirm you are ' + siteMinAge() + ' or older and agree to the Terms of Service and Privacy Policy.';
   }
   function paintAgeLabels() {
     var n = String(siteMinAge());
@@ -1224,10 +1224,12 @@
     if (brandTitle) brandTitle.textContent = title;
     if (brandSub) brandSub.textContent = tag;
     var authTitle = document.getElementById('auth-title');
-    if (authTitle) authTitle.textContent = 'Join ' + title;
+    var closed = site.accountsOpen === false;
+    if (authTitle) authTitle.textContent = (closed ? 'Sign in to ' : 'Join ') + title;
     var authNote = document.querySelector('#cv-auth-overlay .conv-modal-note');
     if (authNote) {
-      authNote.textContent = 'Continue with Google to join ' + title + '. Email is optional. Guest is browse-only.';
+      authNote.textContent = closed ? 'Members sign in here. Guest is browse-only.'
+        : 'Continue with Google to join ' + title + '. Email is optional. Guest is browse-only.';
     }
     var input = document.getElementById('thoughts-compose-input');
     if (input && site.composePlaceholder) {
@@ -5152,7 +5154,7 @@
 
   // Per-room config (one codebase): site.json "imageUploads": false turns off photo/GIF attach + upload.
   function imageUploadsOn() {
-    return !(site && site.imageUploads === false);
+    return !(site && (site.imageUploads === false || site.images === false));
   }
   function applyImageUploadsGate() {
     if (imageUploadsOn()) return;
@@ -5160,9 +5162,10 @@
       var b = document.getElementById(id);
       if (b) { b.hidden = true; b.disabled = true; b.setAttribute('aria-hidden', 'true'); }
     });
-    ['compose-image-input', 'compose-gif-input'].forEach(function (id) {
+    ['compose-btn-image', 'compose-btn-gif', 'compose-image-input', 'compose-gif-input',
+     'compose-image-preview', 'compose-upload-bar'].forEach(function (id) {
       var i = document.getElementById(id);
-      if (i) i.disabled = true;
+      if (i && i.parentNode) i.parentNode.removeChild(i);
     });
   }
   // Per-room config: site.json "minAge" (e.g. 18) adds a date-of-birth check at signup.
@@ -5172,7 +5175,11 @@
     return (n > 0 && n < 120) ? n : 0;
   }
   function withAgeConfirmed(doc) {
-    if (dobMinAge()) doc.ageConfirmed = true;
+    if (dobMinAge()) {
+      doc.ageConfirmed = true;
+      doc.ageAttested18 = true;
+      doc.ageAttestedAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
     return doc;
   }
   function ageFromDob(v, now) {
@@ -5190,8 +5197,12 @@
     if (!min) return '';
     var el = document.getElementById(prefix + '-dob');
     var age = ageFromDob(el && el.value);
+    if (ageBlocked()) return 'Sorry, you must be ' + min + ' or older to join ' + ((site && site.name) || SITE_ID || 'this room') + '.';
     if (age < 0) return 'Enter your date of birth.';
-    if (age < min) return 'You must be ' + min + ' or older to join ' + ((site && site.name) || 'this room') + '.';
+    if (age < min) {
+      try { localStorage.setItem('subx.ageBlock.' + SITE_ID, String(Date.now())); } catch (e) {}
+      return 'Sorry, you must be ' + min + ' or older to join ' + ((site && site.name) || SITE_ID || 'this room') + '.';
+    }
     return '';
   }
   function clearDob(prefix) {
@@ -5206,7 +5217,7 @@
       var label = box && box.closest ? box.closest('label') : null;
       if (label) {
         var span = label.querySelector('span');
-        if (span) span.innerHTML = span.innerHTML.replace(/\b13 or older\b/, min + ' or older');
+        if (span) span.innerHTML = span.innerHTML.replace(/\bI am \d+ or older\b/, 'I am ' + min + ' or older');
       }
       if (document.getElementById(prefix + '-dob') || !label || !label.parentNode) return;
       var wrap = document.createElement('label');
@@ -5216,6 +5227,92 @@
         '<input type="date" id="' + prefix + '-dob" autocomplete="bday" required>';
       label.parentNode.insertBefore(wrap, label);
     });
+  }
+
+  function ageBlocked() {
+    try {
+      var t = parseInt(localStorage.getItem('subx.ageBlock.' + SITE_ID), 10);
+      return isFinite(t) && Date.now() - t < 24 * 3600 * 1000;
+    } catch (e) { return false; }
+  }
+  // site.json "accountsOpen": false hides Join / Register / Google signup. Existing email members can still sign in.
+  function accountsOpen() {
+    return !(site && site.accountsOpen === false);
+  }
+  function applyAccountsGate() {
+    var note = document.getElementById('cv-accounts-closed');
+    if (accountsOpen()) { if (note) note.hidden = true; return; }
+    document.querySelectorAll('[data-accounts="join"]').forEach(function (el) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    var reg = document.getElementById('cv-panel-register');
+    if (reg && reg.parentNode) reg.parentNode.removeChild(reg);
+    ['cv-goto-join', 'cv-google-age', 'cv-google-dob'].forEach(function (id) {
+      var el = document.getElementById(id);
+      var lab = el && el.closest ? el.closest('label') : null;
+      if (lab && lab.parentNode) lab.parentNode.removeChild(lab);
+      else if (el && el.parentNode) el.parentNode.removeChild(el);
+    });
+    var div = document.querySelector('#cv-panel-login .conv-modal-divider');
+    if (div && div.parentNode) div.parentNode.removeChild(div);
+    ['profile-signin-prompt-btn', 'chat-placeholder-new'].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b) b.textContent = 'Sign in';
+    });
+    if (note) note.hidden = false;
+  }
+  // R2 (CLO 10-16 §2): existing accounts attest 18+ at next sign-in. Under 18: suspend + hide; deletion
+  // queued for 30 days. The DOB is never stored. Email notice only if site.json ageAttest.notifyUnder18Email
+  // is true (default false; Jebb decision R2-email).
+  function ageAttestCfg() { return (site && site.ageAttest) || {}; }
+  function runAgeAttestGate(user) {
+    if (!fbDb || !user || ageAttestCfg().enabled === false || isAdminUser()) return Promise.resolve(true);
+    var ref = fbDb.collection('users').doc(user.uid);
+    return ref.get().then(function (snap) {
+      var d = (snap && snap.exists && snap.data()) || {};
+      if (d.suspended === true) { showSuspended(); return false; }
+      if (d.ageAttested18 === true) return true;
+      return promptAgeAttest().then(function (age) {
+        if (age >= 18) {
+          return ref.set({ siteId: SITE_ID, ageAttested18: true, ageConfirmed: true,
+            ageAttestedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }).then(function () { return true; });
+        }
+        try { localStorage.setItem('subx.ageBlock.' + SITE_ID, String(Date.now())); } catch (e) {}
+        var patch = { siteId: SITE_ID, suspended: true, suspendedReason: 'under18', ageAttested18: false,
+          profileHidden: true, deletionQueuedAt: firebase.firestore.FieldValue.serverTimestamp() };
+        if (ageAttestCfg().notifyUnder18Email === true) patch.notifyUnder18Email = true;   // OFF by default
+        return ref.set(patch, { merge: true }).then(function () { showSuspended(); return false; });
+      });
+    }).catch(function (e) { console.warn('age attest', e); return true; });
+  }
+  function promptAgeAttest() {
+    return new Promise(function (resolve) {
+      var el = document.createElement('div');
+      el.className = 'name-prompt age-attest';
+      el.id = 'age-attest';
+      el.innerHTML = '<div class="name-prompt-card" role="dialog" aria-modal="true" aria-label="Confirm your age">' +
+        '<p><strong>' + escapeHtml((site && site.name) || 'This room') + ' is now 18+.</strong> Please confirm your age to keep using your account.</p>' +
+        '<label for="age-attest-dob">Date of birth</label> <input type="date" id="age-attest-dob" autocomplete="bday" required>' +
+        '<label class="conv-modal-check" for="age-attest-ok"><input type="checkbox" id="age-attest-ok"> <span>I am 18 or older and I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>' +
+        '<div class="name-prompt-err" id="age-attest-err"></div>' +
+        '<div class="name-prompt-actions"><button type="button" id="age-attest-go" disabled>Continue</button></div></div>';
+      ensurePreviewLiftCss();
+      document.body.appendChild(el);
+      var dob = document.getElementById('age-attest-dob'), ok = document.getElementById('age-attest-ok');
+      var go = document.getElementById('age-attest-go');
+      function sync() { go.disabled = !(ageFromDob(dob.value) >= 0 && ok.checked); }
+      dob.addEventListener('input', sync); ok.addEventListener('change', sync);
+      go.addEventListener('click', function () {
+        var age = ageFromDob(dob.value);
+        dob.value = '';
+        if (el.parentNode) el.parentNode.removeChild(el);
+        resolve(age);
+      });
+    });
+  }
+  function showSuspended() {
+    composeErr('Sorry, you must be 18 or older to use ' + ((site && site.name) || SITE_ID) + '. Your account is suspended.');
+    try { if (fbAuth) fbAuth.signOut(); } catch (e) {}
   }
 
   function uploadImage(file, uid) {
@@ -5286,6 +5383,7 @@
     composeErr('');
     const btn = document.getElementById('thoughts-post-btn');
     btn.disabled = true;
+    if (!imageUploadsOn()) attachedFile = null;
     const start = attachedFile ? uploadImage(attachedFile, live.uid) : Promise.resolve(null);
     start.then(function (imageUrl) {
       const who = authorForWrite(live);
@@ -5302,7 +5400,7 @@
         nestSlug: postNestSlug(parentId),
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       };
-      if (imageUrl) doc.imageUrl = imageUrl;
+      if (imageUrl && imageUploadsOn()) doc.imageUrl = imageUrl;
       if (pollActive) {
         const opts = [...document.querySelectorAll('#compose-poll .compose-poll-input')].map(function (i) { return i.value.trim(); }).filter(Boolean);
         if (opts.length >= 2) {
@@ -5432,6 +5530,7 @@
       wrap.addEventListener('dragleave', function () { wrap.classList.remove('drag-over'); });
       wrap.addEventListener('drop', function (e) {
         e.preventDefault(); wrap.classList.remove('drag-over');
+        if (!imageUploadsOn()) return;
         var files = e.dataTransfer && e.dataTransfer.files;
         if (!files) return;
         for (var i = 0; i < files.length; i++) {
@@ -5465,6 +5564,7 @@
       return false;
     }
     function onComposePaste(e) {
+      if (!imageUploadsOn()) return;
       if (takeClipboardImage(e)) {
         e.preventDefault();
         e.stopPropagation();
@@ -5902,6 +6002,7 @@
       const pw = document.getElementById('cv-reg-pw').value || '';
       const age = document.getElementById('cv-reg-age');
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
+      if (!accountsOpen()) { err.textContent = 'Accounts are not open yet.'; err.classList.add('show'); return; }
       if (!age || !age.checked) {
         err.textContent = ageGateMessage();
         err.classList.add('show');
@@ -5933,6 +6034,7 @@
     document.getElementById('cv-google-login').addEventListener('click', function () {
       var err = document.getElementById('cv-login-err');
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
+      if (!accountsOpen()) { err.textContent = 'Accounts are not open yet.'; err.classList.add('show'); return; }
       var age = document.getElementById('cv-google-age');
       if (!age || !age.checked) {
         err.textContent = ageGateMessage();
@@ -6872,7 +6974,7 @@
         }
       }).catch(function () {});
       fbAuth.onAuthStateChanged(function (user) {
-        if (user) applyFbUser(user);
+        if (user) runAgeAttestGate(user).then(function (ok) { if (ok) applyFbUser(user); });
         else {
           stopPreviewLift();
           listenMemberNests(null);
@@ -6897,6 +6999,7 @@
 
     listenKillSwitch();
     wireEvents();
+    applyAccountsGate();   // after wiring: removes Join/Register/Google nodes when accountsOpen === false
     document.addEventListener('subx-auth-land', function () { landInFeedCompose(); });
     renderTrends();
     renderExplore();

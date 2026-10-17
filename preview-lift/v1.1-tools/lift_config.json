@@ -1,0 +1,9 @@
+{
+  "_note": "ONE value to edit: provider_street. It fills the Terms DMCA block, the Terms/Privacy contact address, and the DMCA filing sheet field #2. Leave the {{PROVIDER_STREET}} token until Jebb picks the address; validate.py T1 fails on it by design.",
+  "provider_street": "{{PROVIDER_STREET}}",
+  "operator_mode": "sole_prop",
+  "sole_prop_operator": "SubX (operated by Jebb Dykstra)",
+  "sole_prop_dmca_provider": "Jebb Dykstra (SubX)",
+  "rooms": ["gpchat.com"],
+  "no_uploads_rooms": ["gpchat.com"]
+}

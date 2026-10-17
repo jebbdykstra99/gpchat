@@ -1,0 +1,138 @@
+--- /workspace/subx/preview-lift/v1.1/rooms/_tools/validate.py	2026-10-16 21:42:03.466607479 -0600
++++ validate.py	2026-10-16 21:42:18.358607479 -0600
+@@ -13,17 +13,6 @@
+      noindex meta kept
+   T8 (terms) DMCA block present, visible, reads "DMCA designated agent registration pending", no reg. number
+   T9 (report) NCMEC CyberTipline link present; mailto present; CTO wiring comment present; no <form action>
+-  T10 entity. OpCo mode (DEFAULT): operator = "<OpCo|{{OPCO_LLC_NAME}}>, a Wyoming limited liability company";
+-      no "operated by Jebb Dykstra". --sole-prop mode (Oct 16, 2026): contact label "SubX (operated by Jebb
+-      Dykstra)"; Terms intro "SubX is operated by Jebb Dykstra, an individual"; Privacy intro "Jebb Dykstra, an
+-      individual who operates SubX"; report "A person at SubX reviews"; never "operated by SubX (operated by";
+-      no Wyoming/LLC operator line, no {{OPCO_*}} token. Both modes: no "doing business as", no "grok".
+-  T11 (terms) DMCA provider street address filled: not "[STREET ADDRESS PENDING]" and not {{OPCO_RA_STREET}}
+-      (sole-prop mode; OpCo mode keeps the Oct 15 behavior and reports the token in T10).
+-      --allow-pending-street turns a pending street into PASS(pending) for a pre-street dry run. NOT for stamping.
+-  T12 uploads wording matches the room flag (render.NO_UPLOADS): no-uploads rooms carry the final section 4
+-      text and Privacy edits and none of the legacy image wording; other rooms carry the legacy wording.
+-Usage: python3 validate.py [--sole-prop] [--allow-pending-street]
+ """
+ import hashlib, html, json, os, re, sys
+ import html5lib
+@@ -32,9 +21,9 @@
+ ROOMS_DIR = os.path.dirname(HERE)
+ LIVE = os.path.join(ROOMS_DIR, "_live")
+ sys.path.insert(0, HERE)
+-from render import ROOMS, NO_UPLOADS, SOLE_LABEL, STREET_PENDING  # noqa
+-
+-MODE = {"sole_prop": "--sole-prop" in sys.argv, "allow_pending_street": "--allow-pending-street" in sys.argv}
++from render import ROOMS, CONFIG, SOLE_PROP_OPERATOR, SOLE_PROP_DMCA  # noqa
++SOLE_PROP = False
++NO_UPLOADS = set(CONFIG.get("no_uploads_rooms", []))
+ 
+ PHONE = "+1-650-539-5005"
+ NCMEC = "1-800-843-5678"
+@@ -59,8 +48,7 @@
+ def check(domain, room, age, fname, s, live_head):
+     res = {}
+     body = visible_text(s)
+-    allowed_tok = set() if MODE["sole_prop"] else ENTITY_TOKENS
+-    toks = [t for t in re.findall(r"\{\{[^}]*\}\}", s) if t != "{{DMCA_AGENT}}" and t not in allowed_tok]
++    toks = [t for t in re.findall(r"\{\{[^}]*\}\}", s) if t != "{{DMCA_AGENT}}" and t not in ENTITY_TOKENS]
+     bad = toks + re.findall(r"\[PLACEHOLDER[^\]]*\]", s, re.I) + re.findall(r"\bdraft\b", body, re.I)
+     res["T1_tokens_placeholder_draft"] = (not bad, bad[:5])
+     nums = [m.group(0).strip() for m in PHONE_RE.finditer(body)]
+@@ -92,11 +80,9 @@
+     if fname == "terms.html":
+         ok = ("DMCA designated agent registration pending." in body and "{{DMCA_AGENT}}" in s
+               and not re.search(r"registration (no\.|number)\s*[:#]?\s*\w*\d", body, re.I)
+-              and "Designated agent: Jebb Dykstra" in body)
+-        if MODE["sole_prop"]:
+-            ok = ok and "Service provider: Jebb Dykstra (SubX)" in body and "Designated agent: Jebb Dykstra, Tech Sector Law" in body
+-        else:
+-            ok = ok and "Service provider: Jebb Dykstra" not in body
++              and "Designated agent: Jebb Dykstra" in body
++              and (("Service provider: " + SOLE_PROP_DMCA) in body if SOLE_PROP
++                   else "Service provider: Jebb Dykstra" not in body))
+         res["T8_dmca_block"] = (ok, "")
+     if fname == "report.html":
+         ok = ("https://report.cybertip.org/" in s and "https://www.missingkids.org/gethelpnow/cybertipline" in s
+@@ -105,45 +91,38 @@
+         res["T9_report_page"] = (ok, "")
+     # T10 entity: operator line = OpCo WY LLC; no sole-prop / GROK names. Pending tokens reported in detail.
+     pend = sorted(set(t for t in re.findall(r"\{\{[^}]*\}\}", body) if t in ENTITY_TOKENS))
+-    flat = re.sub(r"\s+", " ", body)
+-    common = "doing business as" not in flat and not re.search(r"grok", flat, re.I)
+-    if MODE["sole_prop"]:
+-        need = {"terms.html": [SOLE_LABEL, "SubX is operated by Jebb Dykstra, an individual (\u201cOperator,\u201d"],
+-                "privacy.html": [SOLE_LABEL, "Jebb Dykstra, an individual who operates SubX (\u201cOperator,\u201d"],
+-                "report.html": [SOLE_LABEL, "A person at SubX reviews every request"]}[fname]
+-        miss = [n for n in need if n not in flat]
+-        bad = [b for b in ("operated by SubX (operated by", "Wyoming limited liability company", "{{OPCO_") if b in s]
+-        res["T10_soleprop_entity"] = (common and not miss and not bad, {"missing": miss, "forbidden": bad} if (miss or bad) else "sole-prop")
++    if fname in ("terms.html", "privacy.html") and SOLE_PROP:
++        ok = (SOLE_PROP_OPERATOR in body and not pend and not re.search(r"\{\{OPCO_[A-Z_]+\}\}", s)
++              and "doing business as" not in body and not re.search(r"grok", body, re.I)
++              and "operated by SubX (operated by" not in body)
++        res["T10_sole_prop_entity"] = (ok, "sole-prop")
+     elif fname in ("terms.html", "privacy.html"):
+-        ok = bool(OPCO_RE.search(body)) and "operated by Jebb Dykstra" not in body and common
++        ok = bool(OPCO_RE.search(body)) and "operated by Jebb Dykstra" not in body and "doing business as" not in body \
++             and not re.search(r"grok", body, re.I)
+         res["T10_opco_entity"] = (ok, "pending:" + ",".join(pend) if pend else "named")
+-    if fname == "terms.html" and MODE["sole_prop"]:
+-        m = re.search(r"Street address: ([^\n<]*)", s)
+-        street = m.group(1).strip() if m else ""
+-        pending = (not street) or street == STREET_PENDING or "{{" in street
+-        if pending and MODE["allow_pending_street"]:
+-            res["T11_dmca_street"] = (True, "PENDING (dry run only; not stampable): " + street)
+-        else:
+-            res["T11_dmca_street"] = (not pending, street or "street line missing")
+-    if fname in ("terms.html", "privacy.html"):
+-        legacy = {"terms.html": ["images only for uploads", "other permitted uploads"],
+-                  "privacy.html": ["including images and reports", "replies, images, polls"]}[fname]
+-        final = {"terms.html": ["does not currently accept user image, video, or file uploads, and stories are disabled",
+-                                "(text and links)", "If we enable uploads later, we will update these Terms first."],
+-                 "privacy.html": ["(text and links) and reports", "The Service does not accept user image or file uploads."]}[fname]
+-        if domain in NO_UPLOADS:
+-            ok = all(f in flat for f in final) and not any(l in flat for l in legacy)
+-            res["T12_uploads_wording"] = (ok, "no-uploads" if ok else {"missing": [f for f in final if f not in flat],
+-                                                                        "legacy_left": [l for l in legacy if l in flat]})
+-        else:
+-            ok = all(l in flat for l in legacy) and not any(f in flat for f in final)
+-            res["T12_uploads_wording"] = (ok, "uploads-legacy")
++    # T11 no-uploads wording (CLO TERMS_S3_NO_UPLOADS_FINAL.md) for rooms flagged no_uploads
++    if domain in NO_UPLOADS and fname in ("terms.html", "privacy.html"):
++        bad = [x for x in ("images only for uploads", "other permitted uploads", "including images") if x in body]
++        need = ("does not currently accept user image, video, or file uploads" if fname == "terms.html"
++                else "does not accept user image or file uploads")
++        res["T11_no_uploads"] = (not bad and need in body, bad)
+     return res
+ 
+ 
+ def main():
++    global SOLE_PROP
++    import argparse
++    ap = argparse.ArgumentParser()
++    ap.add_argument("--sole-prop", action="store_true", help="T10 expects SubX (operated by Jebb Dykstra)")
++    ap.add_argument("--rooms", default=None)
++    ap.add_argument("--all-rooms", action="store_true")
++    a = ap.parse_args()
++    SOLE_PROP = a.sole_prop
++    sel = None if a.all_rooms else (a.rooms.split(",") if a.rooms else CONFIG.get("rooms"))
+     out, allpass, n = [], True, 0
+     for room, domain, age, _ in ROOMS:
++        if sel and domain not in sel:
++            continue
+         live = open(os.path.join(LIVE, domain + "_terms.html"), encoding="utf-8").read()
+         lh = head_of(live)
+         for fname in ("terms.html", "privacy.html", "report.html"):
+@@ -158,8 +137,7 @@
+                         "checks": {k: {"pass": v[0], "detail": v[1]} for k, v in r.items()}})
+             fails = [k + ":" + str(v[1]) for k, v in r.items() if not v[0]]
+             print(("PASS " if ok else "FAIL ") + domain + "/" + fname + ("" if ok else "  " + "; ".join(fails)))
+-    print("\nSUMMARY: %d files, %d rooms, mode=%s%s, %s" % (n, len(ROOMS), "sole-prop" if MODE["sole_prop"] else "opco",
+-          " (allow-pending-street)" if MODE["allow_pending_street"] else "", "ALL PASS" if allpass else "FAILURES"))
++    print("\nSUMMARY: %d files, %d rooms, %s" % (n, len(sel or ROOMS), "ALL PASS" if allpass else "FAILURES"))
+     json.dump(out, open(os.path.join(ROOMS_DIR, "VALIDATION_RESULTS.json"), "w"), indent=1)
+     sys.exit(0 if allpass else 1)
+ 

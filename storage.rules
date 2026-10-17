@@ -3,10 +3,12 @@ service firebase.storage {
   match /b/{bucket}/o {
     match /posts/{siteId}/{uid}/{allPaths=**} {
       allow read: if true;
-      allow create, update: if request.auth != null
+      // GPCHAT LIFT U4 (Oct 17, 2026 local): no uploads in gpchat; reads of existing objects unchanged.
+      allow create, update: if siteId != 'gpchat'
+        && request.auth != null
         && request.auth.token.email_verified == true
         && request.auth.uid == uid
-        && siteId in ['samochat', 'bartchat', '415chat', 'gpchat', '27chat', '808chat', 'buffettchat', 'gaichat', 'popechat', 'recruitchat']
+        && siteId in ['samochat', 'bartchat', '415chat', '27chat', '808chat', 'buffettchat', 'gaichat', 'popechat', 'recruitchat']
         && request.resource.contentType.matches('image/.*')
         && request.resource.size < 5 * 1024 * 1024;
       allow delete: if request.auth != null

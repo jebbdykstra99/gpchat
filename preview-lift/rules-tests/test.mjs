@@ -117,5 +117,21 @@ await t('40e burst: pre-patch client (no burst fields) denied', assertFails((asy
   b.set(d.collection('rateLimits').doc('u63'), { lastPostAt: FV.serverTimestamp(), day: utcDay(), dayCount: 1 }, { merge: true }); await b.commit(); })()));
 await t('40f burst: admin 7 posts back-to-back ok (exempt)', assertSucceeds((async () => { for (let i = 0; i < 7; i++) await db(ADMIN).collection('posts').add(base(ADMIN, 'gpchat', { authorName: 'Pit Wall', authorHandle: 'pitwall', steward: true, text: 'drip ' + i })); })()));
 await t('34b unknown siteId denied', assertFails(db('u46').collection('posts').add(base('u46', 'notaroom'))));
+// ---- GPCHAT LIFT (Oct 17, 2026 local): U3 no uploads/stories, R2 suspension
+const IMG = 'https://firebasestorage.googleapis.com/v0/b/subx-skins.firebasestorage.app/o/posts%2Fgpchat%2Fu70%2F1.png';
+await t('50 gpchat post with imageUrl denied', assertFails(guardedPost(db('u70'), 'u70', base('u70', 'gpchat', { imageUrl: IMG }), null)));
+await t('50b gpchat text post still ok', assertSucceeds(guardedPost(db('u71'), 'u71', base('u71'), null)));
+await t('50c 27chat imageUrl post unaffected', assertSucceeds(db('u72').collection('posts').add(base('u72', '27chat', { imageUrl: IMG.replace('gpchat', '27chat') }))));
+const story = (u, site) => ({ siteId: site, authorUid: u, type: 'text', text: 'pit lane', createdAt: TS.now(), expiresAt: TS.fromDate(new Date(Date.now() + 864e5)) });
+await t('51 gpchat story create denied', assertFails(db('u73').collection('stories').add(story('u73', 'gpchat'))));
+await t('51b 27chat same story ok (control)', assertSucceeds(db('u79').collection('stories').add(story('u79', '27chat'))));
+await seed(async (s) => s.doc('users/u74').set({ siteId: 'gpchat', suspended: true, suspendedReason: 'under18' }));
+await t('52 suspended user post denied', assertFails(guardedPost(db('u74'), 'u74', base('u74'), null)));
+await t('52b suspended user cannot clear suspended', assertFails(db('u74').doc('users/u74').set({ siteId: 'gpchat', suspended: false }, { merge: true })));
+await t('52c suspended user cannot set ageAttested18', assertFails(db('u74').doc('users/u74').set({ siteId: 'gpchat', ageAttested18: true }, { merge: true })));
+await t('53 member self-suspends (R2 under 18) ok', assertSucceeds(db('u75').doc('users/u75').set({ siteId: 'gpchat', suspended: true, suspendedReason: 'under18', ageAttested18: false, profileHidden: true, deletionQueuedAt: FV.serverTimestamp() }, { merge: true })));
+await t('53b member attests 18+ ok', assertSucceeds(db('u76').doc('users/u76').set({ siteId: 'gpchat', ageAttested18: true, ageConfirmed: true, ageAttestedAt: FV.serverTimestamp() }, { merge: true })));
+await t('53c DOB never storable', assertFails(db('u77').doc('users/u77').set({ siteId: 'gpchat', dob: '2001-01-01' }, { merge: true })));
+await t('53d attest 18+ and suspended in one write denied', assertFails(db('u78').doc('users/u78').set({ siteId: 'gpchat', suspended: true, ageAttested18: true }, { merge: true })));
 console.log(results.join('\n')); console.log(failN ? `\n${failN} FAILED` : '\nALL PASS');
 await env.cleanup(); process.exit(failN ? 1 : 0);

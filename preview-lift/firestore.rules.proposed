@@ -224,6 +224,28 @@ service cloud.firestore {
         && !d.keys().hasAny(['role', 'admin', 'isAdmin', 'verified', 'steward'])
       );
     }
+    // GPCHAT LIFT (Oct 17, 2026 local): uploads/stories off per room (CLO U3), R2 under-18 suspension.
+    function noUploadsSite(sid) {
+      return sid in ['gpchat'];
+    }
+    function noUploadFields(d) {
+      return !(noUploadsSite(d.siteId) && d.keys().hasAny(['imageUrl', 'images', 'storyUrl']));
+    }
+    function notSuspended() {
+      return isAdmin() || !exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('suspended', false) != true;
+    }
+    // A member may set suspended:true on themself (R2 self-report under 18) but never clear it.
+    function suspendOk(d) {
+      return isAdmin() || (
+        (!d.keys().hasAny(['suspended']) || d.suspended == true)
+        && (resource == null || resource.data.get('suspended', false) != true
+            || request.resource.data.get('suspended', false) == true)
+        && (!d.keys().hasAny(['ageAttested18']) || d.ageAttested18 is bool)
+        && !(d.get('ageAttested18', false) == true && d.get('suspended', false) == true)
+        && !d.keys().hasAny(['dob', 'birthDate', 'dateOfBirth'])
+      );
+    }
     // ===== END PREVIEW-LIFT GUARD helpers =====
 
     match /posts/{postId} {
@@ -235,6 +257,8 @@ service cloud.firestore {
         && hasPostBody(request.resource.data)
         && textOk(request.resource.data)
         && memberPostOk(request.resource.data)                 // PREVIEW-LIFT GUARD
+        && noUploadFields(request.resource.data)               // GPCHAT LIFT U3
+        && notSuspended()                                      // GPCHAT LIFT R2
         && postThrottled(request.resource.data.siteId);        // PREVIEW-LIFT GUARD
       // PREVIEW-LIFT GUARD: admin takedown from the app (was author-only).
       allow delete: if isAdmin() || (signedIn()
@@ -260,7 +284,8 @@ service cloud.firestore {
         && request.resource.data.keys().hasAll(['siteId'])
         && factorySite(request.resource.data)
         && !request.resource.data.keys().hasAny(['email', 'phone', 'phoneNumber'])
-        && profileOk(request.resource.data);                       // PREVIEW-LIFT GUARD
+        && profileOk(request.resource.data)                        // PREVIEW-LIFT GUARD
+        && suspendOk(request.resource.data);                       // GPCHAT LIFT R2
 
       match /blocks/{targetUid} {
         allow read: if signedIn() && request.auth.uid == uid;
@@ -428,6 +453,7 @@ service cloud.firestore {
         && notKilled(request.resource.data.siteId)
         && request.auth.uid == request.resource.data.authorUid
         && factorySite(request.resource.data)
+        && !noUploadsSite(request.resource.data.siteId)      // GPCHAT LIFT U3: stories off
         && hasStoryFields(request.resource.data);
       allow update: if false;
       allow delete: if isAdmin()
