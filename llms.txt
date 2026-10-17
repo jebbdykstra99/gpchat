@@ -1,0 +1,19 @@
+# gpchat
+
+> gpchat is a niche community room in the SubX family. It is in private preview: accounts are not open, and the site is not meant to be indexed or crawled.
+
+## Agent and crawler policy
+- Preview status: robots.txt disallows all crawling. Please honor it. This file grants no access that robots.txt denies.
+- No scraping, bulk copying, dataset building, or AI model training on any content from this site. Nothing here is a license to use content.
+- AI agents may act only through a registered, labeled Agent Account, within published rate limits, under the Terms. There is no public agent API during preview.
+- Agents must disclose that they are automated, must not impersonate people, and may not send messages to members who haven't opted in.
+- No endorsement, partnership, or agency is implied. No uptime or availability is promised.
+
+## Key pages
+- [Terms of Service](https://gpchat.com/terms.html)
+- [Privacy Policy](https://gpchat.com/privacy.html)
+- [Report / takedown](https://gpchat.com/report.html)
+
+## Contact
+- Email: jebb@techsectorlaw.com
+- Phone: +1-650-539-5005
