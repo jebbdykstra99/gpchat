@@ -296,46 +296,46 @@
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
-    "kicker": "Singapore · Pre-Race",
-    "meta": "Singapore GP · Marina Bay · Pre-Race · R17",
-    "footer": "Singapore GP · Pre-Race. Sprint weekend at Marina Bay. Official F1.com outbound only. Not live timing. Preview.",
+    "kicker": "Austin · Pre-Race",
+    "meta": "United States GP · Circuit of the Americas · Pre-Race · R18",
+    "footer": "United States GP · Pre-Race at Circuit of the Americas. Official F1.com outbound only. Not live timing. Preview.",
     "endpoint": "https://api.jolpi.ca/ergast/f1/current/next.json",
     "openf1": "https://api.openf1.org/v1",
     "maxCards": 3,
     "cmo": {
-      "title": "Singapore GP",
-      "state": "Singapore · Pre-Race",
-      "next": "Next: Race · Sun 6:00 AM MT"
+      "title": "United States GP",
+      "state": "Austin · Pre-Race",
+      "next": "Next: FP1 · Fri 11:30 AM MT"
     },
     "outbound": [
       {
         "tag": "Next",
         "topic": "next",
-        "headline": "Next: Race · Sun 6:00 AM MT",
-        "snippet": "Marina Bay · round 17 · sprint weekend. Jolpica 2026/17.",
+        "headline": "Next: FP1 · Fri 11:30 AM MT",
+        "snippet": "COTA · round 18. FP2 Fri 3:00 PM · FP3 Sat 11:30 AM · Quali Sat 3:00 PM · Race Sun 2:00 PM MT. Jolpica 2026/18.",
         "meta": "Pre-Race",
         "url": "https://www.formula1.com/en/racing/2026"
       },
       {
         "tag": "WDC",
         "topic": "standings",
-        "headline": "Antonelli 320 · Russell 236 · Hamilton 214 (gap 84)",
-        "snippet": "Board after R16. Jolpica current driverStandings.",
+        "headline": "Antonelli 340 · Russell 238 · Hamilton 229 (gap 102)",
+        "snippet": "Board after R17. Jolpica current driverStandings.",
         "meta": "Standings",
         "url": "https://www.formula1.com/en/results/2026/drivers"
       },
       {
         "tag": "Result",
         "topic": "result",
-        "headline": "Singapore Sprint · official",
-        "snippet": "Verstappen wins by 2.591s · Hamilton P2 · Leclerc P3",
-        "meta": "R17 · Sprint",
-        "url": "https://www.formula1.com/en/results/2026/races/1296/singapore/sprint-results"
+        "headline": "Singapore GP · official",
+        "snippet": "Verstappen wins by 7.335s · Leclerc P2 · Antonelli P3",
+        "meta": "R17 · Race",
+        "url": "https://www.formula1.com/en/results/2026/races/1296/singapore/race-result"
       }
     ],
     "porch": {
       "topic": "porch",
-      "prompt": "Who are you sitting with for the Singapore GP?",
+      "prompt": "Who are you sitting with for the United States GP?",
       "dwellMs": 9000,
       "options": [
         "Driver",
@@ -822,5 +822,6 @@
   "ageAttest": {
     "enabled": true,
     "notifyUnder18Email": false
-  }
+  },
+  "termsVersion": "1.1"
 }
