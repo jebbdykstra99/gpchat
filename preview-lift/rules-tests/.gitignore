@@ -1,4 +1,0 @@
-node_modules/
-firestore.rules
-package-lock.json
-*.log
