@@ -5132,6 +5132,7 @@
   }
   function setImagePreview(file) {
     if (!file) return;
+    if (!imageUploadsOn()) { composeErr('Photo uploads are off in this room.'); return; }
     if (isVideoFile(file)) {
       composeErr('Images only. No video yet.');
       return;
@@ -5149,7 +5150,76 @@
     });
   }
 
+  // Per-room config (one codebase): site.json "imageUploads": false turns off photo/GIF attach + upload.
+  function imageUploadsOn() {
+    return !(site && site.imageUploads === false);
+  }
+  function applyImageUploadsGate() {
+    if (imageUploadsOn()) return;
+    ['compose-btn-image', 'compose-btn-gif'].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b) { b.hidden = true; b.disabled = true; b.setAttribute('aria-hidden', 'true'); }
+    });
+    ['compose-image-input', 'compose-gif-input'].forEach(function (id) {
+      var i = document.getElementById(id);
+      if (i) i.disabled = true;
+    });
+  }
+  // Per-room config: site.json "minAge" (e.g. 18) adds a date-of-birth check at signup.
+  // The DOB is checked in the browser only and never stored; the users doc gets ageConfirmed: true.
+  function dobMinAge() {
+    var n = parseInt(site && site.minAge, 10);
+    return (n > 0 && n < 120) ? n : 0;
+  }
+  function withAgeConfirmed(doc) {
+    if (dobMinAge()) doc.ageConfirmed = true;
+    return doc;
+  }
+  function ageFromDob(v, now) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
+    if (!m) return -1;
+    var y = +m[1], mo = +m[2], d = +m[3];
+    now = now || new Date();
+    if (y < 1900 || mo < 1 || mo > 12 || d < 1 || d > 31 || new Date(y, mo - 1, d) > now) return -1;
+    var age = now.getFullYear() - y;
+    if (now.getMonth() + 1 < mo || (now.getMonth() + 1 === mo && now.getDate() < d)) age--;
+    return age;
+  }
+  function dobError(prefix) {
+    var min = dobMinAge();
+    if (!min) return '';
+    var el = document.getElementById(prefix + '-dob');
+    var age = ageFromDob(el && el.value);
+    if (age < 0) return 'Enter your date of birth.';
+    if (age < min) return 'You must be ' + min + ' or older to join ' + ((site && site.name) || 'this room') + '.';
+    return '';
+  }
+  function clearDob(prefix) {
+    var el = document.getElementById(prefix + '-dob');
+    if (el) el.value = '';
+  }
+  function applyMinAgeGate() {
+    var min = dobMinAge();
+    if (!min) return;
+    ['cv-reg', 'cv-google'].forEach(function (prefix) {
+      var box = document.getElementById(prefix + '-age');
+      var label = box && box.closest ? box.closest('label') : null;
+      if (label) {
+        var span = label.querySelector('span');
+        if (span) span.innerHTML = span.innerHTML.replace(/\b13 or older\b/, min + ' or older');
+      }
+      if (document.getElementById(prefix + '-dob') || !label || !label.parentNode) return;
+      var wrap = document.createElement('label');
+      wrap.className = 'conv-modal-dob';
+      wrap.setAttribute('for', prefix + '-dob');
+      wrap.innerHTML = '<span>Date of birth (checked here, not stored)</span> ' +
+        '<input type="date" id="' + prefix + '-dob" autocomplete="bday" required>';
+      label.parentNode.insertBefore(wrap, label);
+    });
+  }
+
   function uploadImage(file, uid) {
+    if (!imageUploadsOn()) return Promise.reject(new Error('Photo uploads are off in this room.'));
     if (!fbStorage) return Promise.reject(new Error('Storage not ready'));
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
     const path = 'posts/' + SITE_ID + '/' + uid + '/' + Date.now() + '.' + ext;
@@ -5800,6 +5870,8 @@
     });
     postBtn.addEventListener('click', maybePost);
     wireComposeToolbar();
+    applyImageUploadsGate();
+    applyMinAgeGate();
 
     document.getElementById('cv-modal-close').addEventListener('click', function (e) {
       e.preventDefault();
@@ -5840,14 +5912,17 @@
         err.classList.add('show');
         return;
       }
+      var regDobErr = dobError('cv-reg');
+      if (regDobErr) { err.textContent = regDobErr; err.classList.add('show'); return; }
+      clearDob('cv-reg');
       if (!email || pw.length < 6) { err.textContent = 'Email and a password of at least 6 characters.'; err.classList.add('show'); return; }
       err.textContent = '';
       markAuthLand();
       fbAuth.createUserWithEmailAndPassword(email, pw).then(function (cred) {
         cred.user.sendEmailVerification().catch(function () {});
-        return ensurePublicProfile(cred.user, name, {
+        return ensurePublicProfile(cred.user, name, withAgeConfirmed({
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        }).then(function () {
+        })).then(function () {
           composeErr('Account created. Verify your email before posting.');
         });
       }).catch(function (e) {
@@ -5864,6 +5939,9 @@
         err.classList.add('show');
         return;
       }
+      var gDobErr = dobError('cv-google');
+      if (gDobErr) { err.textContent = gDobErr; err.classList.add('show'); return; }
+      clearDob('cv-google');
       err.textContent = '';
       err.classList.remove('show');
       markAuthLand();
@@ -5874,10 +5952,10 @@
       function finishGoogle(cred) {
         var u = cred && cred.user;
         if (fbDb && u) {
-          return ensurePublicProfile(u, '', {
+          return ensurePublicProfile(u, '', withAgeConfirmed({
             provider: 'google',
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
+          }));
         }
       }
       function failGoogle(e) {
@@ -6787,10 +6865,10 @@
       fbAuth.getRedirectResult().then(function (cred) {
         var u = cred && cred.user;
         if (fbDb && u) {
-          return ensurePublicProfile(u, '', {
+          return ensurePublicProfile(u, '', withAgeConfirmed({
             provider: 'google',
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
+          }));
         }
       }).catch(function () {});
       fbAuth.onAuthStateChanged(function (user) {
