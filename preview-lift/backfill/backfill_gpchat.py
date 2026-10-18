@@ -9,14 +9,21 @@ steward:true (minus HUMAN_POST_IDS) set steward=true.
   python3 backfill_gpchat.py                 # dry run -> backfill_plan.json + backfill_plan.csv
   python3 backfill_gpchat.py --apply ...     # NOT RUN. Needs Jebb's deploy approval, a fresh
                                              # backup (backup_export.sh) and service-account creds.
+  python3 backfill_gpchat.py --undo FILE     # rollback: restores createdAt/steward from the undo file --apply wrote
+
+2026-10-18 (rehearsal): FIRESTORE_EMULATOR_HOST + BACKFILL_PROJECT=demo-... runs the whole thing against the local
+emulator (reads AND writes). A live --apply/--undo additionally needs BACKFILL_LIVE_OK=subx-skins (LIFT_DAY.sh sets it
+after Jebb confirms). BACKFILL_OUT=<dir> moves the plan/undo files (default: next to this script).
 """
 import argparse, csv, datetime as dt, json, os, sys, urllib.request
 
-PROJ = "subx-skins"; KEY = os.environ.get("FB_API_KEY", "")
+PROJ = os.environ.get("BACKFILL_PROJECT", "subx-skins"); KEY = os.environ.get("FB_API_KEY", "")
+EMU = os.environ.get("FIRESTORE_EMULATOR_HOST", "")
 ADMIN = os.environ.get("ADMIN_UID", "o774wL9hUVSi19EkDCgLqQomP8i2")
 HUMAN = set(x for x in os.environ.get("HUMAN_POST_IDS", "").split(",") if x)
-HERE = os.path.dirname(os.path.abspath(__file__))
-FS = "https://firestore.googleapis.com/v1/projects/%s/databases/(default)/documents" % PROJ
+HERE = os.environ.get("BACKFILL_OUT") or os.path.dirname(os.path.abspath(__file__))
+FS = ("http://%s/v1/projects/%s/databases/(default)/documents" % (EMU, PROJ)) if EMU else \
+    "https://firestore.googleapis.com/v1/projects/%s/databases/(default)/documents" % PROJ
 
 
 def ts(s): return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
@@ -25,8 +32,9 @@ def ts(s): return dt.datetime.fromisoformat(s.replace("Z", "+00:00"))
 def fetch():
     q = {"structuredQuery": {"from": [{"collectionId": "posts"}], "where": {"fieldFilter": {
         "field": {"fieldPath": "siteId"}, "op": "EQUAL", "value": {"stringValue": "gpchat"}}}, "limit": 2000}}
-    req = urllib.request.Request(FS + ":runQuery" + ("?key=" + KEY if KEY else ""), json.dumps(q).encode(),
-                                 {"Content-Type": "application/json"})
+    hdr = {"Content-Type": "application/json"}
+    if EMU: hdr["Authorization"] = "Bearer owner"
+    req = urllib.request.Request(FS + ":runQuery" + ("?key=" + KEY if KEY and not EMU else ""), json.dumps(q).encode(), hdr)
     return [x["document"] for x in json.load(urllib.request.urlopen(req)) if "document" in x]
 
 
@@ -51,7 +59,12 @@ def plan(docs):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--apply", action="store_true")
-    ap.add_argument("--i-have-a-backup", default=""); a = ap.parse_args()
+    ap.add_argument("--i-have-a-backup", default=""); ap.add_argument("--undo", default=""); a = ap.parse_args()
+    live = not EMU
+    if (a.apply or a.undo) and live and os.environ.get("BACKFILL_LIVE_OK") != PROJ:
+        sys.exit("refusing a LIVE write: set BACKFILL_LIVE_OK=%s (LIFT_DAY.sh does this after Jebb confirms)" % PROJ)
+    if a.undo:
+        return undo(a.undo)
     docs = fetch(); rows = plan(docs)
     out = {"generated": dt.datetime.now(dt.timezone.utc).isoformat(), "project": PROJ, "site": "gpchat",
            "posts_read": len(docs), "posts_to_change": len(rows),
@@ -68,11 +81,13 @@ def main():
     print({k: v for k, v in out.items() if k != "rows"})
     if not a.apply:
         print("DRY RUN: no writes. Plan in backfill_plan.json / .csv"); return
-    if not a.i_have_a_backup.startswith("gs://"):
-        sys.exit("refusing: pass --i-have-a-backup gs://<export path> from backup_export.sh")
-    import firebase_admin  # noqa  (service-account creds via GOOGLE_APPLICATION_CREDENTIALS)
-    from firebase_admin import firestore
-    firebase_admin.initialize_app(); db = firestore.client(); batch = db.batch(); n = 0
+    if live and not (a.i_have_a_backup.startswith("gs://") or os.path.isfile(a.i_have_a_backup)):
+        sys.exit("refusing: pass --i-have-a-backup <gs:// export path | local snapshot JSON from snapshot_posts.py>")
+    db = admin_db(); batch = db.batch(); n = 0
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    undo_path = os.path.join(HERE, "backfill_undo_%s_%s.json" % (PROJ, stamp))
+    json.dump({"project": PROJ, "backup": a.i_have_a_backup, "rows": rows}, open(undo_path, "w"), indent=1)
+    print("undo file:", undo_path)
     for r in rows:
         c = r["changes"]; patch = {}
         if "createdAt" in c: patch["createdAt"] = ts(c["createdAt"]["to"])
@@ -81,6 +96,34 @@ def main():
         batch.update(db.collection("posts").document(r["id"]), patch); n += 1
         if n % 400 == 0: batch.commit(); batch = db.batch()
     batch.commit(); print("applied", n)
+    left = plan(fetch()); print("re-check after apply: %d posts still need a change" % len(left))
+    if left: sys.exit(1)
+
+
+def admin_db():
+    if EMU:  # local emulator: no Google credentials needed or used
+        from google.auth.credentials import AnonymousCredentials
+        from google.cloud import firestore as gcf
+        return gcf.Client(project=PROJ, credentials=AnonymousCredentials())
+    import firebase_admin  # noqa  (LIVE: service-account JSON via GOOGLE_APPLICATION_CREDENTIALS, or gcloud ADC)
+    from firebase_admin import firestore
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(options={"projectId": PROJ})
+    return firestore.client()
+
+
+def undo(path):
+    d = json.load(open(path)); assert d["project"] == PROJ, "undo file is for %s" % d["project"]
+    from google.cloud.firestore import DELETE_FIELD as DELETE
+    db = admin_db(); batch = db.batch(); n = 0
+    for r in d["rows"]:
+        c = r["changes"]; patch = {}
+        if "createdAt" in c: patch["createdAt"] = ts(c["createdAt"]["from"])
+        if "steward" in c: patch["steward"] = DELETE
+        if patch:
+            batch.update(db.collection("posts").document(r["id"]), patch); n += 1
+        if n and n % 400 == 0: batch.commit(); batch = db.batch()
+    batch.commit(); print("undone", n, "(likes that were zeroed are not restored; plan recorded counts only)")
 
 
 if __name__ == "__main__":
