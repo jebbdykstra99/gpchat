@@ -39,6 +39,20 @@
   let livePosts = [];
   let liveReady = false;
   let liveError = null;
+  let postsUnsub = null;
+  let nestUnsub = null;
+  let nestPosts = [];
+  let nestReady = false;
+  let nestError = null;
+  let nestCursor = null;
+  let nestHasMore = false;
+  let nestLoadingMore = false;
+  let nestListenSlug = '';
+  let nestMode = '';
+  let nestGen = 0;
+  let nestScanned = 0;
+  let nestScanCapped = false;
+  let nestExtended = false;
   let replyTo = null;
   let attachedFile = null;
   let pollActive = false;
@@ -65,6 +79,683 @@
   let notifTab = 'all';
   const ADMIN_UID = 'o774wL9hUVSi19EkDCgLqQomP8i2';
   const DM_TEXT_MAX = 1000;
+
+
+  // ===== PREVIEW-LIFT (guards/privacy/steward) =====
+  // Port this block plus the call sites named in the PR. A room joins guardedSite
+  // only after its factory.js carries guardedPostWrite + the DM lastMsgAt batch.
+  var HANDLE_EXACT = { mod: 1, mods: 1, staff: 1, support: 1, steward: 1, system: 1, root: 1, team: 1 };
+  var guardState = { rate: null, unsub: null, lastPostMs: 0, lastMsgMs: 0, sending: false };
+  var guardTick = null;
+  var reportItems = [];
+  var reportsUnsub = null;
+  var reportedMem = {};
+  var previewLiftWired = false;
+
+  function isAdminUser() {
+    return liveUid() === ADMIN_UID;
+  }
+  function siteMinAge() {
+    var n = parseInt(site && site.minAge, 10);
+    if (!isFinite(n) || n < 18) return 18;
+    return n;
+  }
+  function ageGateMessage() {
+    return 'Confirm you are ' + siteMinAge() + ' or older and agree to the Terms of Service and Privacy Policy.';
+  }
+  function paintAgeLabels() {
+    var n = String(siteMinAge());
+    ['cv-google-age', 'cv-reg-age'].forEach(function (id) {
+      var input = document.getElementById(id);
+      var span = input && input.parentNode && input.parentNode.querySelector('span');
+      if (!span) return;
+      span.innerHTML = span.innerHTML.replace(/I am \d+ or older/g, 'I am ' + n + ' or older');
+    });
+  }
+  function nameOk(n) {
+    if (typeof n !== 'string') return false;
+    var s = n.trim();
+    if (!s || s.length > 50) return false;
+    if (/\b(admin|administrator|moderator|mod team|official|staff|support team|steward)\b/i.test(s)) return false;
+    if (/\b(adm1n|4dmin|0fficial|st3ward)\b/i.test(s)) return false;
+    if (/аdmin|аdministrator|οfficial|оfficial/i.test(s)) return false;
+    return true;
+  }
+  function handleOk(h) {
+    return typeof h === 'string'
+      && /^[a-z0-9_]{1,15}$/.test(h)
+      && !HANDLE_EXACT[h]
+      && !/^(admin|moderator|official|subx|jebb)/.test(h)
+      && !/(adm1n|4dmin|0fficial|st3ward)/.test(h);
+  }
+  function fourDigits() {
+    var s = String(Math.floor(Math.random() * 10000));
+    while (s.length < 4) s = '0' + s;
+    return s;
+  }
+  function handleFromName(name) {
+    var h = String(name || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 15);
+    if (!h) h = 'fan';
+    if (handleOk(h)) return h;
+    var digits = fourDigits();
+    var withDigits = (h + digits).slice(0, 15);
+    if (handleOk(withDigits)) return withDigits;
+    var prefixed = ('f' + digits + h).replace(/[^a-z0-9_]/g, '').slice(0, 15);
+    if (handleOk(prefixed)) return prefixed;
+    return ('fan' + digits).slice(0, 15);
+  }
+  function fanNameStored(uid) {
+    var key = 'subx.fanName.v1.' + String(uid || 'anon');
+    try {
+      var existing = localStorage.getItem(key);
+      if (existing && nameOk(existing)) return existing;
+      var n = 'Fan ' + fourDigits();
+      localStorage.setItem(key, n);
+      return n;
+    } catch (e) {
+      return 'Fan ' + fourDigits();
+    }
+  }
+  function usableDisplayName(user) {
+    var display = String((user && user.displayName) || '').trim();
+    if (!display || display.indexOf('@') !== -1) return '';
+    return display;
+  }
+  function emailPrefixShowing(user) {
+    var email = String((user && user.email) || '');
+    var at = email.indexOf('@');
+    if (at <= 0) return false;
+    var local = email.slice(0, at);
+    var name = usableDisplayName(user);
+    return !!name && name.toLowerCase() === local.toLowerCase();
+  }
+  function memberIdentity(user, typedName) {
+    var typed = String(typedName || '').trim();
+    if (typed) {
+      return { name: typed, handle: handleFromName(typed), minted: false, emailPrefixShowing: false };
+    }
+    var display = usableDisplayName(user);
+    if (display) {
+      return {
+        name: display,
+        handle: handleFromName(display),
+        minted: false,
+        emailPrefixShowing: emailPrefixShowing(user)
+      };
+    }
+    var fan = fanNameStored(user && user.uid);
+    return { name: fan, handle: handleFromName(fan), minted: true, emailPrefixShowing: false };
+  }
+  function authorForWrite(live) {
+    if (currentUser && currentUser.live && currentUser.name && live && currentUser.uid === live.uid) {
+      return { name: currentUser.name, handle: currentUser.handle || handleFromName(currentUser.name) };
+    }
+    return memberIdentity(live);
+  }
+  function ensurePublicProfile(user, typedName, extra) {
+    if (!fbDb || !user) return Promise.resolve();
+    var typed = String(typedName || '').trim();
+    if (typed && !nameOk(typed)) return Promise.reject(new Error('That display name is reserved.'));
+    var idn = memberIdentity(user, typed);
+    var data = { siteId: SITE_ID };
+    var src = extra || {};
+    Object.keys(src).forEach(function (k) {
+      if (k === 'email' || k === 'phone' || k === 'phoneNumber') return;
+      data[k] = src[k];
+    });
+    if (!idn.emailPrefixShowing) data.displayName = idn.name;
+    var chain = Promise.resolve();
+    if (!idn.emailPrefixShowing && user.updateProfile && String(user.displayName || '') !== idn.name) {
+      chain = user.updateProfile({ displayName: idn.name });
+    }
+    return chain.then(function () {
+      return fbDb.collection('users').doc(user.uid).set(data, { merge: true });
+    });
+  }
+  function persistMintedName(user, name) {
+    if (!user || !name) return;
+    ensurePublicProfile(user, name).catch(function (e) { console.warn('fan name', e); });
+  }
+  function ensurePreviewLiftCss() {
+    if (document.getElementById('preview-lift-css')) return;
+    var st = document.createElement('style');
+    st.id = 'preview-lift-css';
+    st.textContent =
+      '.name-prefix-nudge{margin:0.7rem 1rem 0;padding:0.75rem 0.9rem;display:flex;gap:0.6rem;align-items:flex-start;' +
+        'background:var(--surface,#111);color:var(--text,#f4f4f4);border:1px solid var(--border,rgba(255,255,255,0.12));border-radius:10px;font-size:0.86rem;}' +
+      '.name-prefix-nudge[hidden],.name-prompt[hidden]{display:none!important;}' +
+      '.name-prefix-nudge-copy{flex:1;}' +
+      '.name-prefix-nudge-link,.name-prefix-nudge-x{background:transparent;border:1px solid var(--border,rgba(255,255,255,0.18));color:inherit;border-radius:8px;cursor:pointer;}' +
+      '.name-prefix-nudge-link{margin-left:0.35rem;padding:0.15rem 0.5rem;font:inherit;font-weight:600;}' +
+      '.name-prefix-nudge-x{width:1.7rem;height:1.7rem;}' +
+      '.name-prompt{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:1rem;}' +
+      '.name-prompt-card{background:var(--surface,#111);color:var(--text,#f4f4f4);border-radius:12px;padding:1rem;width:min(22rem,100%);}' +
+      '.name-prompt-card input{width:100%;margin:0.5rem 0;padding:0.45rem 0.6rem;border-radius:8px;border:1px solid var(--border,#333);background:transparent;color:inherit;}' +
+      '.name-prompt-err{min-height:1.1rem;color:var(--accent,#e10600);font-size:0.8rem;}' +
+      '.name-prompt-actions{display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.4rem;}' +
+      '.post-menu{position:relative;margin-left:auto;}' +
+      '.post-menu-pop{position:absolute;right:0;top:100%;z-index:5;background:var(--surface,#111);border:1px solid var(--border,#333);border-radius:8px;padding:0.25rem;min-width:8rem;}' +
+      '#nav-reports{cursor:pointer;width:100%;background:none;border:0;font:inherit;text-align:left;}';
+    document.head.appendChild(st);
+  }
+  function showEmailPrefixNudge(uid) {
+    try { if (localStorage.getItem('subx.nameNudge.v1.' + uid) === '1') return; } catch (e) {}
+    ensurePreviewLiftCss();
+    var el = document.getElementById('name-prefix-nudge');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'name-prefix-nudge';
+      el.className = 'name-prefix-nudge';
+      el.setAttribute('role', 'status');
+      el.innerHTML =
+        '<div class="name-prefix-nudge-copy">Pick a display name (your email prefix is showing). <button type="button" class="name-prefix-nudge-link" id="name-prefix-pick">Edit</button></div>' +
+        '<button type="button" class="name-prefix-nudge-x" id="name-prefix-dismiss" aria-label="Dismiss">&times;</button>';
+      var compose = document.getElementById('thoughts-compose-wrap');
+      if (compose && compose.parentNode) compose.parentNode.insertBefore(el, compose);
+      else document.body.appendChild(el);
+    }
+    el.hidden = false;
+  }
+  function dismissEmailPrefixNudge() {
+    var uid = liveUid();
+    if (uid) { try { localStorage.setItem('subx.nameNudge.v1.' + uid, '1'); } catch (e) {} }
+    var el = document.getElementById('name-prefix-nudge');
+    if (el) el.hidden = true;
+  }
+  function openDisplayNamePrompt() {
+    ensurePreviewLiftCss();
+    var el = document.getElementById('name-prompt');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'name-prompt';
+      el.className = 'name-prompt';
+      el.innerHTML =
+        '<div class="name-prompt-card" role="dialog" aria-label="Pick a display name">' +
+          '<p>Pick a display name</p>' +
+          '<input id="name-prompt-input" maxlength="50" autocomplete="nickname" placeholder="Your name">' +
+          '<div class="name-prompt-err" id="name-prompt-err"></div>' +
+          '<div class="name-prompt-actions">' +
+            '<button type="button" id="name-prompt-cancel">Cancel</button>' +
+            '<button type="button" id="name-prompt-save">Save</button>' +
+          '</div></div>';
+      document.body.appendChild(el);
+    }
+    var err = document.getElementById('name-prompt-err');
+    if (err) err.textContent = '';
+    var input = document.getElementById('name-prompt-input');
+    if (input) {
+      input.value = '';
+      try { input.focus(); } catch (e2) {}
+    }
+    el.hidden = false;
+  }
+  function saveDisplayNamePrompt() {
+    var input = document.getElementById('name-prompt-input');
+    var err = document.getElementById('name-prompt-err');
+    var name = String((input && input.value) || '').trim();
+    var user = fbAuth && fbAuth.currentUser;
+    if (!user) { if (err) err.textContent = 'Sign in first.'; return; }
+    if (!nameOk(name)) { if (err) err.textContent = 'That display name is reserved.'; return; }
+    var handle = handleFromName(name);
+    if (!handleOk(handle)) { if (err) err.textContent = 'That handle is reserved.'; return; }
+    ensurePublicProfile(user, name).then(function () {
+      if (currentUser) {
+        currentUser.name = name;
+        currentUser.handle = handle;
+        saveJSON(LS_USER, currentUser);
+      }
+      renderSidebarAuth();
+      syncProfile();
+      dismissEmailPrefixNudge();
+      var el = document.getElementById('name-prompt');
+      if (el) el.hidden = true;
+      composeErr('Display name saved.');
+    }).catch(function (e) {
+      if (err) err.textContent = guardPublicErr(e, 'Could not save that name.');
+    });
+  }
+  function spamFree(t) {
+    return !/(bit\.ly\/|tinyurl\.com|t\.me\/|wa\.me\/|onlyfans\.com|free crypto|crypto giveaway|airdrop claim|dm me on telegram|whatsapp me)/i.test(String(t || ''));
+  }
+  function linkCount(t) {
+    var m = String(t || '').toLowerCase().match(/https?:\/\/|www\./g);
+    return m ? m.length : 0;
+  }
+  function isPermDenied(e) {
+    var code = String((e && e.code) || '');
+    var msg = String((e && e.message) || '');
+    return code === 'permission-denied' || /insufficient permissions/i.test(msg);
+  }
+  function guardPublicErr(e, fallback, kind) {
+    if (isPermDenied(e)) {
+      if (kind === 'dm') return 'Message blocked by room guard (rate limit or content rule).';
+      return 'Post blocked by room guard (rate limit or content rule).';
+    }
+    var msg = (e && e.message) ? e.message : '';
+    if (/insufficient permissions/i.test(msg)) return 'Post blocked by room guard (rate limit or content rule).';
+    return msg || fallback || 'Could not post.';
+  }
+  function tsMillis(ts) {
+    return ts && ts.toMillis ? ts.toMillis() : 0;
+  }
+  function utcMidnightTs(offsetDays) {
+    var d = new Date();
+    var dt = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + (offsetDays || 0)));
+    return firebase.firestore.Timestamp.fromDate(dt);
+  }
+  function rateDayEqual(rate, ts) {
+    if (!rate || !rate.day || !rate.day.toMillis || !ts || !ts.toMillis) return false;
+    return rate.day.toMillis() === ts.toMillis();
+  }
+  function utcIntoDay() {
+    return Date.now() % 86400000;
+  }
+  function nearUtcMidnight() {
+    var into = utcIntoDay();
+    var windowMs = 5 * 60 * 1000;
+    return into <= windowMs || (86400000 - into) <= windowMs;
+  }
+  function otherDayOffset() {
+    return utcIntoDay() < 12 * 3600000 ? -1 : 1;
+  }
+  function postCooldownMs() {
+    if (isAdminUser()) return 0;
+    var last = tsMillis(guardState.rate && guardState.rate.lastPostAt);
+    if (guardState.lastPostMs > last) last = guardState.lastPostMs;
+    var left = 20000 - (Date.now() - last);
+    return left > 0 ? left : 0;
+  }
+  function msgCooldownMs() {
+    var last = tsMillis(guardState.rate && guardState.rate.lastMsgAt);
+    if (guardState.lastMsgMs > last) last = guardState.lastMsgMs;
+    var left = 2000 - (Date.now() - last);
+    return left > 0 ? left : 0;
+  }
+  function postsTodayCount() {
+    if (isAdminUser()) return 0;
+    var rate = guardState.rate;
+    if (!rate) return 0;
+    if (!rateDayEqual(rate, utcMidnightTs(0))) return 0;
+    return rate.dayCount || 0;
+  }
+  function armGuardTick() {
+    if (guardTick) return;
+    guardTick = setInterval(function () {
+      if (postCooldownMs() <= 0 && msgCooldownMs() <= 0) {
+        clearInterval(guardTick);
+        guardTick = null;
+      }
+      syncPostBtn();
+      syncChatChrome();
+    }, 250);
+  }
+  function paintPostBtn(btn, text, pollReady) {
+    if (!btn) return;
+    var left = postCooldownMs();
+    if (guardState.sending || left > 0) {
+      btn.disabled = true;
+      btn.textContent = left > 0 ? ('Post · ' + Math.ceil(left / 1000) + 's') : 'Post';
+      if (left > 0) armGuardTick();
+      return;
+    }
+    btn.textContent = 'Post';
+    btn.disabled = !(text || attachedFile || pollReady);
+  }
+  function paintDmSendBtn() {
+    var sendBtn = document.getElementById('chat-send-btn');
+    if (!sendBtn || !dmsOn()) return;
+    var left = msgCooldownMs();
+    if (left > 0 && isLiveUser()) {
+      sendBtn.disabled = true;
+      sendBtn.textContent = Math.ceil(left / 1000) + 's';
+      armGuardTick();
+    }
+  }
+  // 2026-10-12 burst cap (mirrors rules: max 5 posts+replies per 10-minute window).
+  var BURST_MS = 10 * 60 * 1000, BURST_MAX = 5;
+  function burstInWindow(rate) {
+    var bs = rate && rate.burstStart && rate.burstStart.toMillis ? rate.burstStart.toMillis() : 0;
+    return bs > 0 && Date.now() < bs + BURST_MS;
+  }
+  function burstLeftMs() {
+    var rate = guardState.rate;
+    if (!burstInWindow(rate) || (rate.burstCount || 0) < BURST_MAX) return 0;
+    return rate.burstStart.toMillis() + BURST_MS - Date.now();
+  }
+  function notePostCommitted() {
+    guardState.lastPostMs = Date.now();
+    var day = utcMidnightTs(0);
+    var rate = guardState.rate || {};
+    var same = rateDayEqual(rate, day);
+    guardState.rate = {
+      lastPostAt: rate.lastPostAt,
+      lastMsgAt: rate.lastMsgAt,
+      day: day,
+      dayCount: same ? (rate.dayCount || 0) + 1 : 1,
+      burstStart: burstInWindow(rate) ? rate.burstStart : (function (ms) { return { toMillis: function () { return ms; } }; })(guardState.lastPostMs),
+      burstCount: burstInWindow(rate) ? (rate.burstCount || 0) + 1 : 1
+    };
+    guardState.rate.lastPostAt = { toMillis: function () { return guardState.lastPostMs; } };
+    syncPostBtn();
+  }
+  function noteMsgCommitted() {
+    guardState.lastMsgMs = Date.now();
+    syncChatChrome();
+  }
+  function listenRateLimits(uid) {
+    if (guardState.unsub) { guardState.unsub(); guardState.unsub = null; }
+    guardState.rate = null;
+    if (!fbDb || !uid) return;
+    guardState.unsub = fbDb.collection('rateLimits').doc(uid).onSnapshot(function (snap) {
+      guardState.rate = snap.exists ? (snap.data() || {}) : null;
+      syncPostBtn();
+      if (dmsOn()) syncChatChrome();
+    }, function (e) { console.warn('rateLimits', e); });
+  }
+  function postGuardMessage(doc) {
+    if (isAdminUser()) return '';
+    var left = postCooldownMs();
+    if (left > 0) return 'Wait ' + Math.ceil(left / 1000) + 's before posting again.';
+    if (postsTodayCount() >= 50) return 'Daily limit is 50 posts. Try again after UTC midnight.';
+    var bl = burstLeftMs();
+    if (bl > 0) return 'You posted 5 times in 10 minutes. Try again in ' + Math.ceil(bl / 60000) + ' min.';
+    var text = doc && doc.text ? String(doc.text) : '';
+    if (linkCount(text) > 2) return 'Posts can include at most 2 links.';
+    if (text && !spamFree(text)) return 'That text is blocked by the room spam filter.';
+    if (!nameOk(doc.authorName || '')) return 'That display name is reserved.';
+    if (!handleOk(doc.authorHandle || '')) return 'That handle is reserved. Use letters, numbers, or underscores (max 15).';
+    return '';
+  }
+  function guardedPostWrite(doc) {
+    var msg = postGuardMessage(doc);
+    if (msg) return Promise.reject(new Error(msg));
+    if (guardState.sending) return Promise.reject(new Error('Post already sending.'));
+    guardState.sending = true;
+    function finishOk(ref) {
+      guardState.sending = false;
+      if (doc.authorUid !== ADMIN_UID) notePostCommitted();
+      return ref;
+    }
+    function finishErr(e) {
+      guardState.sending = false;
+      return Promise.reject(e);
+    }
+    if (doc.authorUid === ADMIN_UID) {
+      var aref = fbDb.collection('posts').doc();
+      return aref.set(doc).then(function () { return finishOk(aref); }).catch(finishErr);
+    }
+    function commit(offset, flipBurst) {
+      var batch = fbDb.batch();
+      var ref = fbDb.collection('posts').doc();
+      batch.set(ref, doc);
+      var day = utcMidnightTs(offset);
+      var same = rateDayEqual(guardState.rate, day);
+      var inWin = burstInWindow(guardState.rate);
+      if (flipBurst) inWin = !inWin;   // device clock vs server time at the window edge
+      var rl = {
+        lastPostAt: firebase.firestore.FieldValue.serverTimestamp(),
+        day: day,
+        dayCount: same ? firebase.firestore.FieldValue.increment(1) : 1
+      };
+      if (inWin) rl.burstCount = firebase.firestore.FieldValue.increment(1);
+      else { rl.burstStart = firebase.firestore.FieldValue.serverTimestamp(); rl.burstCount = 1; }
+      batch.set(fbDb.collection('rateLimits').doc(doc.authorUid), rl, { merge: true });
+      return batch.commit().then(function () { return ref; });
+    }
+    return commit(0).then(finishOk).catch(function (e) {
+      if (isPermDenied(e) && nearUtcMidnight()) {
+        return commit(otherDayOffset()).then(finishOk).catch(finishErr);
+      }
+      if (isPermDenied(e)) return commit(0, true).then(finishOk).catch(finishErr);
+      return finishErr(e);
+    });
+  }
+  function stewardPillHtml(post) {
+    if (isSessionSeedPost(post)) return '<span class="post-steward-pill">Sample</span>';
+    if (post && post.steward) {
+      return '<span class="post-steward-pill" title="Operated by SubX using AI tools. Not a real person.">AI steward · SubX</span>';
+    }
+    if (post && post.isAdminAuthor) return '<span class="post-steward-pill">Steward</span>';
+    return '';
+  }
+  function postOverflowHtml(post) {
+    if (!post || isSessionSeedPost(post) || !post.live) return '';
+    if (liveUid() !== ADMIN_UID) return '';
+    return '<span class="post-menu"><button class="post-action" data-act="more" type="button" aria-label="More">⋯</button></span>';
+  }
+  function togglePostMenu(btn) {
+    ensurePreviewLiftCss();
+    var existing = document.getElementById('post-menu-pop');
+    if (existing) {
+      var owner = existing.parentNode;
+      existing.remove();
+      if (owner && owner.contains(btn)) return;
+    }
+    if (liveUid() !== ADMIN_UID) return;
+    var pop = document.createElement('div');
+    pop.id = 'post-menu-pop';
+    pop.className = 'post-menu-pop';
+    pop.innerHTML = '<button type="button" class="post-action" data-act="admin-remove">Remove post</button>';
+    if (btn.parentNode) btn.parentNode.appendChild(pop);
+  }
+  function adminRemovePost(id) {
+    if (liveUid() !== ADMIN_UID || !id || !fbDb) return;
+    if (!window.confirm('Remove this post from the room?')) return;
+    fbDb.collection('posts').doc(id).delete().catch(function (e) {
+      composeErr(guardPublicErr(e, 'Could not remove that post.'));
+    });
+  }
+  function alreadyReported(id) {
+    if (reportedMem[id]) return true;
+    try {
+      var raw = sessionStorage.getItem('subx.reported.' + SITE_ID);
+      var map = raw ? JSON.parse(raw) : {};
+      return !!map[id];
+    } catch (e) { return false; }
+  }
+  function markReported(id) {
+    reportedMem[id] = true;
+    try {
+      var key = 'subx.reported.' + SITE_ID;
+      var raw = sessionStorage.getItem(key);
+      var map = raw ? JSON.parse(raw) : {};
+      map[id] = 1;
+      sessionStorage.setItem(key, JSON.stringify(map));
+    } catch (e) {}
+  }
+  function writeReportAlert(post, me) {
+    if (!me || me === ADMIN_UID || !fbDb || !post) return;
+    var snippet = String(post.text || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+    fbDb.collection('users').doc(ADMIN_UID).collection('notifications').add({
+      toUid: ADMIN_UID,
+      fromUid: me,
+      type: 'report',
+      siteId: SITE_ID,
+      postId: post.id,
+      read: false,
+      text: 'Report: ' + snippet,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(function (e) { console.warn('report alert', e); });
+  }
+  function unreadReportCount() {
+    var n = 0;
+    var i;
+    for (i = 0; i < reportItems.length; i++) if (!reportItems[i].status) n++;
+    return n;
+  }
+  function syncReportsEntry() {
+    var nav = document.querySelector('#sidebar nav ul');
+    var link = document.getElementById('nav-reports');
+    var admin = isLiveUser() && liveUid() === ADMIN_UID;
+    if (!admin) {
+      if (link && link.parentNode) link.parentNode.remove();
+      closeReports();
+      return;
+    }
+    ensurePreviewLiftCss();
+    if (!link && nav) {
+      var li = document.createElement('li');
+      li.innerHTML = '<button type="button" class="nav-social-link" id="nav-reports" data-reports="1">Reports <span class="nav-badge" id="reports-badge" hidden></span></button>';
+      nav.appendChild(li);
+      link = document.getElementById('nav-reports');
+    }
+    var badge = document.getElementById('reports-badge');
+    var n = unreadReportCount();
+    if (!badge) return;
+    if (n) {
+      badge.textContent = n > 9 ? '9+' : String(n);
+      badge.classList.add('visible');
+      badge.hidden = false;
+    } else {
+      badge.textContent = '';
+      badge.classList.remove('visible');
+      badge.hidden = true;
+    }
+  }
+  function listenReports() {
+    if (reportsUnsub) { reportsUnsub(); reportsUnsub = null; }
+    reportItems = [];
+    if (!fbDb || liveUid() !== ADMIN_UID) { syncReportsEntry(); return; }
+    reportsUnsub = fbDb.collection('reports').where('siteId', '==', SITE_ID).onSnapshot(function (snap) {
+      reportItems = snap.docs.map(function (doc) {
+        var d = doc.data() || {};
+        var ms = d.createdAt && d.createdAt.toMillis ? d.createdAt.toMillis() : 0;
+        return {
+          id: doc.id,
+          postId: d.postId || '',
+          reporterUid: d.reporterUid || '',
+          reason: d.reason || '',
+          status: d.status || '',
+          ms: ms
+        };
+      });
+      reportItems.sort(function (a, b) { return (b.ms || 0) - (a.ms || 0); });
+      syncReportsEntry();
+      renderReports();
+    }, function (e) { console.warn('reports', e); });
+  }
+  function ensureReportsPanel() {
+    var el = document.getElementById('reports-overlay');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'reports-overlay';
+    el.className = 'notif-overlay';
+    el.innerHTML =
+      '<button class="view-back" id="reports-back" type="button">Back</button>' +
+      '<div class="notif-header"><div class="notif-title">Reports</div></div>' +
+      '<div class="notif-list" id="reports-list"></div>';
+    document.body.appendChild(el);
+    return el;
+  }
+  function openReports() {
+    if (liveUid() !== ADMIN_UID) return;
+    closeSocialOverlays();
+    var el = ensureReportsPanel();
+    el.classList.add('active');
+    renderReports();
+  }
+  function closeReports() {
+    var el = document.getElementById('reports-overlay');
+    if (el) el.classList.remove('active');
+  }
+  function reporterCount(postId) {
+    var n = 0;
+    var i;
+    for (i = 0; i < reportItems.length; i++) {
+      if (reportItems[i].postId === postId && reportItems[i].status !== 'dismissed') n++;
+    }
+    return n;
+  }
+  function renderReports() {
+    var el = document.getElementById('reports-list');
+    if (!el) return;
+    var rows = reportItems.filter(function (r) { return r.status !== 'dismissed'; }).slice(0, 50);
+    if (!rows.length) {
+      el.innerHTML = '<div class="soon-panel"><strong>No open reports.</strong></div>';
+      return;
+    }
+    el.innerHTML = rows.map(function (r) {
+      var post = findPost(r.postId);
+      var snippet = (post && post.text) ? String(post.text).replace(/\s+/g, ' ').trim().slice(0, 180) : '(post unavailable)';
+      var count = reporterCount(r.postId);
+      return '<div class="notif-item">' +
+        '<p>' + escapeHtml(snippet) + '</p>' +
+        '<p>' + count + ' reporter' + (count === 1 ? '' : 's') + '</p>' +
+        '<button type="button" class="post-action" data-report-remove="' + escapeHtml(r.postId) + '">Remove post</button> ' +
+        '<button type="button" class="post-action" data-report-dismiss="' + escapeHtml(r.id) + '">Dismiss</button>' +
+        '</div>';
+    }).join('');
+  }
+  function dismissReport(id) {
+    if (liveUid() !== ADMIN_UID || !id || !fbDb) return;
+    fbDb.collection('reports').doc(id).update({ status: 'dismissed' }).catch(function (e) {
+      composeErr(guardPublicErr(e, 'Could not dismiss that report.'));
+    });
+  }
+  function stopPreviewLift() {
+    if (guardState.unsub) { guardState.unsub(); guardState.unsub = null; }
+    guardState.rate = null;
+    guardState.lastPostMs = 0;
+    guardState.lastMsgMs = 0;
+    guardState.sending = false;
+    if (reportsUnsub) { reportsUnsub(); reportsUnsub = null; }
+    reportItems = [];
+    var nudge = document.getElementById('name-prefix-nudge');
+    if (nudge) nudge.hidden = true;
+    var prompt = document.getElementById('name-prompt');
+    if (prompt) prompt.hidden = true;
+    closeReports();
+    syncReportsEntry();
+  }
+  function wirePreviewLift() {
+    if (previewLiftWired) return;
+    previewLiftWired = true;
+    document.addEventListener('click', function (e) {
+      if (e.target.closest('#name-prefix-dismiss')) { dismissEmailPrefixNudge(); return; }
+      if (e.target.closest('#name-prefix-pick')) { openDisplayNamePrompt(); return; }
+      if (e.target.closest('#name-prompt-cancel')) {
+        var box = document.getElementById('name-prompt');
+        if (box) box.hidden = true;
+        return;
+      }
+      if (e.target.closest('#name-prompt-save')) { saveDisplayNamePrompt(); return; }
+      if (e.target.closest('[data-reports]')) {
+        e.preventDefault();
+        openReports();
+        return;
+      }
+      if (e.target.closest('#reports-back')) { closeReports(); return; }
+      var dismissBtn = e.target.closest('[data-report-dismiss]');
+      if (dismissBtn) {
+        dismissReport(dismissBtn.getAttribute('data-report-dismiss'));
+        return;
+      }
+      var removeBtn = e.target.closest('[data-report-remove]');
+      if (removeBtn) {
+        adminRemovePost(removeBtn.getAttribute('data-report-remove'));
+        return;
+      }
+      var more = e.target.closest('[data-act="more"]');
+      if (more) {
+        e.preventDefault();
+        togglePostMenu(more);
+        return;
+      }
+      var adminRemove = e.target.closest('[data-act="admin-remove"]');
+      if (adminRemove) {
+        var post = adminRemove.closest('[data-post-id]');
+        if (post) adminRemovePost(post.getAttribute('data-post-id'));
+        var pop = document.getElementById('post-menu-pop');
+        if (pop) pop.remove();
+        return;
+      }
+      if (!e.target.closest('#post-menu-pop')) {
+        var openPop = document.getElementById('post-menu-pop');
+        if (openPop) openPop.remove();
+      }
+    });
+  }
+  // ===== END PREVIEW-LIFT (guards/privacy/steward) =====
 
   try {
     firebase.initializeApp({
@@ -272,7 +963,9 @@
   }
 
   function findPost(id) {
-    for (var i = 0; i < livePosts.length; i++) if (livePosts[i].id === id) return livePosts[i];
+    var i;
+    for (i = 0; i < livePosts.length; i++) if (livePosts[i].id === id) return livePosts[i];
+    for (i = 0; i < nestPosts.length; i++) if (nestPosts[i].id === id) return nestPosts[i];
     var seeds = sessionSeedPosts();
     for (var j = 0; j < seeds.length; j++) if (seeds[j].id === id) return seeds[j];
     return null;
@@ -402,7 +1095,8 @@
   }
 
   function highlightDeepPost() {
-    if (!deepPostId || deepPostDone || !liveReady) return;
+    if (!deepPostId || deepPostDone) return;
+    if (showingNestFeed() ? !nestReady : !liveReady) return;
     var feed = document.getElementById('thoughts-feed');
     if (!feed) return;
     var safe = String(deepPostId).replace(/"/g, '');
@@ -483,17 +1177,21 @@
     if (!requireVerified('report')) return;
     var post = findPost(id);
     if (!post || !fbDb || isSessionSeedPost(post)) return;
+    if (alreadyReported(id)) { composeErr('You already reported this post.'); return; }
+    var me = liveUid();
     fbDb.collection('reports').add({
       siteId: SITE_ID,
       postId: id,
       targetUid: post.authorUid || '',
-      reporterUid: liveUid(),
+      reporterUid: me,
       reason: 'abuse',
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }).then(function () {
+      markReported(id);
       composeErr('Reported. Thanks.');
+      writeReportAlert(post, me);
     }).catch(function (e) {
-      composeErr((e && e.message) ? e.message : 'Could not report.');
+      composeErr(guardPublicErr(e, 'Could not report.'));
     });
   }
   function blockUser(uid) {
@@ -543,10 +1241,12 @@
     if (brandTitle) brandTitle.textContent = title;
     if (brandSub) brandSub.textContent = tag;
     var authTitle = document.getElementById('auth-title');
-    if (authTitle) authTitle.textContent = 'Join ' + title;
+    var closed = site.accountsOpen === false;
+    if (authTitle) authTitle.textContent = (closed ? 'Sign in to ' : 'Join ') + title;
     var authNote = document.querySelector('#cv-auth-overlay .conv-modal-note');
     if (authNote) {
-      authNote.textContent = 'Continue with Google to join ' + title + '. Email is optional. Guest is browse-only.';
+      authNote.textContent = closed ? 'Members sign in here. Guest is browse-only.'
+        : 'Continue with Google to join ' + title + '. Email is optional. Guest is browse-only.';
     }
     var input = document.getElementById('thoughts-compose-input');
     if (input && site.composePlaceholder) {
@@ -688,6 +1388,7 @@
     syncTopicFollowButtons();
     syncStoriesTray();
     renderWatchlist();
+    syncReportsEntry();
   }
 
   function earlyWelcomeOn() {
@@ -765,15 +1466,16 @@
     if (!user) return;
     var draft = peekCompose();
     var shouldLand = consumeAuthLand();
-    const raw = user.displayName || (user.email || 'member').split('@')[0];
+    var idn = memberIdentity(user);
     currentUser = {
       uid: user.uid,
-      name: raw,
-      handle: String(raw).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'member',
+      name: idn.name,
+      handle: idn.handle,
       bio: '',
       live: true
     };
     saveJSON(LS_USER, currentUser);
+    if (idn.minted) persistMintedName(user, idn.name);
     closeAuth();
     renderSidebarAuth();
     hideDummyChrome();
@@ -784,8 +1486,11 @@
     listenNotifs(user.uid);
     listenMemberNests(user.uid);
     listenConversations();
+    listenRateLimits(user.uid);
+    listenReports();
     restoreCompose(draft);
     if (shouldLand) landInFeedCompose();
+    if (idn.emailPrefixShowing) showEmailPrefixNudge(user.uid);
     if (!user.emailVerified) {
       composeErr('Verify your email before posting. Check your inbox, then refresh.');
     }
@@ -812,8 +1517,23 @@
       imageUrl: d.imageUrl || null,
       poll: d.poll || null,
       nestSlug: d.nestSlug || '',
-      topicIds: collectTopicIds(d)
+      topicIds: collectTopicIds(d),
+      steward: d.steward === true || d.adminSeed === true,
+      isAdminAuthor: uid === ADMIN_UID
     };
+  }
+
+
+  function firestoreQuery(spec, cursor) {
+    var q = fbDb.collection(spec.collection);
+    var i;
+    for (i = 0; i < spec.where.length; i++) {
+      var w = spec.where[i];
+      q = q.where(w.field, w.op, w.value);
+    }
+    q = q.orderBy(spec.orderBy.field, spec.orderBy.dir);
+    if (cursor) q = q.startAfter(cursor);
+    return q.limit(spec.limit);
   }
 
   function listenLivePosts() {
@@ -821,25 +1541,301 @@
       composeErr('Feed is not connected.');
       return;
     }
-    fbDb.collection('posts')
-      .where('siteId', '==', SITE_ID)
-      .orderBy('createdAt', 'desc')
-      .limit(80)
-      .onSnapshot(function (snap) {
-        liveReady = true;
-        if (liveError) composeErr('');
-        liveError = null;
-        livePosts = snap.docs.map(mapLive);
-        renderFeed();
-        if (currentUser) syncProfile();
-      }, function (err) {
-        liveReady = false;
-        liveError = err;
-        var msg = (err && err.message) ? err.message : 'Could not load live posts.';
-        composeErr('Feed: ' + msg + ' A composite index on posts (siteId ASC, createdAt DESC) may be required in Firebase project subx-skins. Do not treat this as a loaded empty room.');
+    if (postsUnsub) { postsUnsub(); postsUnsub = null; }
+    postsUnsub = firestoreQuery(feedQuerySpec(SITE_ID, null), null).onSnapshot(function (snap) {
+      liveReady = true;
+      if (liveError) composeErr('');
+      liveError = null;
+      livePosts = snap.docs.map(mapLive);
+      renderFeed();
+      if (currentUser) syncProfile();
+    }, function (err) {
+      liveReady = false;
+      liveError = err;
+      var msg = (err && err.message) ? err.message : 'Could not load live posts.';
+      composeErr('Feed: ' + msg + ' A composite index on posts (siteId ASC, createdAt DESC) may be required in Firebase project subx-skins. Do not treat this as a loaded empty room.');
+      renderFeed();
+    });
+    syncNestFeed();
+  }
+
+  function resetNestFeed() {
+    nestGen += 1;
+    if (nestUnsub) { nestUnsub(); nestUnsub = null; }
+    nestPosts = [];
+    nestReady = false;
+    nestError = null;
+    nestCursor = null;
+    nestHasMore = false;
+    nestLoadingMore = false;
+    nestListenSlug = '';
+    nestMode = '';
+    nestScanned = 0;
+    nestScanCapped = false;
+    nestExtended = false;
+  }
+
+  function syncNestFeed() {
+    var slug = currentNest ? currentNest.slug : '';
+    if (!slug) {
+      if (nestListenSlug || nestUnsub || nestPosts.length) resetNestFeed();
+      return;
+    }
+    if (!fbDb) return;
+    if (slug === nestListenSlug && (nestUnsub || nestMode === 'scan' || nestLoadingMore || nestReady || nestError)) return;
+    listenNestPosts(slug);
+  }
+
+  function dedupePosts(list) {
+    var seen = {};
+    var out = [];
+    var i;
+    for (i = 0; i < list.length; i++) {
+      var post = list[i];
+      if (!post || !post.id || seen[post.id]) continue;
+      seen[post.id] = true;
+      out.push(post);
+    }
+    return out;
+  }
+
+  function absorbNestPage(page, lastSnap, hasMore) {
+    var older = [];
+    var floor = page.length ? (page[page.length - 1].ms || 0) : 0;
+    var i;
+    if (nestExtended && page.length) {
+      for (i = 0; i < nestPosts.length; i++) {
+        if ((nestPosts[i].ms || 0) < floor) older.push(nestPosts[i]);
+      }
+    }
+    nestPosts = dedupePosts(page.concat(older));
+    if (!nestExtended) {
+      nestCursor = lastSnap || null;
+      nestHasMore = !!hasMore;
+    }
+  }
+
+  function runNestScan(slug, gen, cursor, append) {
+    if (gen !== nestGen || nestListenSlug !== slug) return;
+    nestLoadingMore = true;
+    nestMode = 'scan';
+    var found = [];
+    var scanned = append ? nestScanned : 0;
+    function finish(hasMore, capped, nextCursor) {
+      if (gen !== nestGen || nestListenSlug !== slug) return;
+      nestLoadingMore = false;
+      nestReady = true;
+      nestError = null;
+      nestMode = 'scan';
+      nestScanned = scanned;
+      nestScanCapped = !!capped;
+      nestCursor = nextCursor || null;
+      nestHasMore = !!hasMore;
+      if (append) nestPosts = dedupePosts(nestPosts.concat(found));
+      else nestPosts = found.slice();
+      if (append) nestExtended = true;
+      renderFeed();
+    }
+    function step(cur) {
+      if (gen !== nestGen || nestListenSlug !== slug) return;
+      firestoreQuery(feedQuerySpec(SITE_ID, null), cur).get().then(function (snap) {
+        if (gen !== nestGen || nestListenSlug !== slug) return;
+        var plain = snap.docs.map(mapLive);
+        var folded = foldScanPage(plain, slug, scanned, found.length, FEED_PAGE, NEST_SCAN_CAP, FEED_PAGE);
+        var t;
+        for (t = 0; t < folded.take.length; t++) found.push(folded.take[t]);
+        scanned = folded.scanned;
+        var next = folded.consumed > 0 ? snap.docs[folded.consumed - 1] : cur;
+        if (folded.exhausted || folded.capped || !folded.hasMore || found.length >= FEED_PAGE) {
+          finish(folded.hasMore, folded.capped, next);
+          return;
+        }
+        step(next);
+      }).catch(function (err) {
+        if (gen !== nestGen || nestListenSlug !== slug) return;
+        nestLoadingMore = false;
+        nestReady = false;
+        nestError = err;
+        var msg = (err && err.message) ? err.message : 'Could not load this nest.';
+        composeErr('Nest: ' + msg + ' This is not an empty room.');
         renderFeed();
       });
+    }
+    step(cursor);
   }
+
+  function listenNestPosts(slug) {
+    if (!fbDb) {
+      composeErr('Feed is not connected.');
+      return;
+    }
+    resetNestFeed();
+    var gen = nestGen;
+    nestListenSlug = slug;
+    nestMode = 'index';
+    renderFeed();
+    var spec = feedQuerySpec(SITE_ID, slug);
+    nestUnsub = firestoreQuery(spec, null).onSnapshot(function (snap) {
+      if (gen !== nestGen || nestListenSlug !== slug) return;
+      nestReady = true;
+      nestError = null;
+      nestMode = 'index';
+      nestScanCapped = false;
+      nestLoadingMore = false;
+      var page = snap.docs.map(mapLive);
+      var last = snap.docs.length ? snap.docs[snap.docs.length - 1] : null;
+      absorbNestPage(page, last, snap.docs.length === spec.limit);
+      if (!liveError) composeErr('');
+      renderFeed();
+    }, function (err) {
+      if (gen !== nestGen || nestListenSlug !== slug) return;
+      if (isMissingIndexError(err)) {
+        if (nestUnsub) { nestUnsub(); nestUnsub = null; }
+        nestMode = 'scan';
+        nestError = null;
+        if (!liveError) composeErr('');
+        runNestScan(slug, gen, null, false);
+        return;
+      }
+      nestReady = false;
+      nestError = err;
+      nestLoadingMore = false;
+      var msg = (err && err.message) ? err.message : 'Could not load this nest.';
+      composeErr('Nest: ' + msg + ' This is not an empty room.');
+      renderFeed();
+    });
+  }
+
+  function loadMoreNestPosts() {
+    if (!currentNest || !nestHasMore || nestLoadingMore || !nestCursor || !fbDb) return;
+    var slug = currentNest.slug;
+    var gen = nestGen;
+    if (nestMode === 'scan') {
+      runNestScan(slug, gen, nestCursor, true);
+      return;
+    }
+    nestLoadingMore = true;
+    nestExtended = true;
+    renderFeed();
+    var spec = feedQuerySpec(SITE_ID, slug);
+    firestoreQuery(spec, nestCursor).get().then(function (snap) {
+      if (gen !== nestGen || nestListenSlug !== slug) return;
+      nestLoadingMore = false;
+      nestPosts = dedupePosts(nestPosts.concat(snap.docs.map(mapLive)));
+      if (snap.docs.length) nestCursor = snap.docs[snap.docs.length - 1];
+      nestHasMore = snap.docs.length === spec.limit;
+      renderFeed();
+    }).catch(function (err) {
+      if (gen !== nestGen || nestListenSlug !== slug) return;
+      nestLoadingMore = false;
+      if (isMissingIndexError(err)) {
+        nestMode = 'scan';
+        runNestScan(slug, gen, nestCursor, true);
+        return;
+      }
+      composeErr('Nest: ' + ((err && err.message) || 'Could not load older posts.') + ' This is not an empty room.');
+      renderFeed();
+    });
+  }
+
+  function ensureNestFeedCss() {
+    if (document.getElementById('nest-feed-css')) return;
+    var st = document.createElement('style');
+    st.id = 'nest-feed-css';
+    st.textContent = '.nest-feed-more{display:block;width:100%;margin:0;padding:1rem 1.4rem;border:0;border-top:1px solid var(--border,#c9d5de);background:transparent;color:var(--accent,#e07a3d);font:inherit;font-weight:600;cursor:pointer;text-align:center}.nest-feed-more:disabled{cursor:default;color:var(--text-light,#6d8292)}';
+    document.head.appendChild(st);
+  }
+
+  function nestMoreHtml() {
+    if (!showingNestFeed() || !nestReady || nestError) return '';
+    if (!nestHasMore && !nestLoadingMore) return '';
+    ensureNestFeedCss();
+    if (nestLoadingMore) {
+      return '<button type="button" class="nest-feed-more" id="nest-feed-more" disabled>Loading older posts…</button>';
+    }
+    return '<button type="button" class="nest-feed-more" id="nest-feed-more">Older posts in this nest</button>';
+  }
+
+  /* @nest-feed
+     Pure query helpers. test/nest-feed.test.js extracts this block.
+     Home stays siteId + createdAt desc, limit FEED_PAGE.
+     A nest adds nestSlug ==. The scan fold is the pre-index fallback. */
+  var FEED_PAGE = 80;
+  var NEST_SCAN_CAP = 4000;
+
+  function feedQuerySpec(siteId, nestSlug) {
+    var where = [{ field: 'siteId', op: '==', value: siteId }];
+    if (nestSlug) where.push({ field: 'nestSlug', op: '==', value: nestSlug });
+    return {
+      collection: 'posts',
+      where: where,
+      orderBy: { field: 'createdAt', dir: 'desc' },
+      limit: FEED_PAGE
+    };
+  }
+
+  function isMissingIndexError(err) {
+    if (!err) return false;
+    var code = String(err.code || '');
+    if (code === 'failed-precondition' || code === '9') return true;
+    var msg = String(err.message || '');
+    return /requires an index/i.test(msg) || /FAILED_PRECONDITION/i.test(msg);
+  }
+
+  function applyFeedQuery(docs, spec) {
+    var rows = [];
+    var i;
+    var w;
+    for (i = 0; i < docs.length; i++) {
+      var doc = docs[i];
+      var ok = true;
+      for (w = 0; w < spec.where.length; w++) {
+        var clause = spec.where[w];
+        if (clause.op === '==' && doc[clause.field] !== clause.value) ok = false;
+      }
+      if (ok) rows.push(doc);
+    }
+    var field = spec.orderBy.field;
+    var dir = spec.orderBy.dir === 'asc' ? 1 : -1;
+    rows.sort(function (a, b) {
+      var av = a[field] || 0;
+      var bv = b[field] || 0;
+      if (av === bv) return 0;
+      return av < bv ? -dir : dir;
+    });
+    return rows.slice(0, spec.limit);
+  }
+
+  function nestKey(s) {
+    return String(s || '').replace(/^#/, '').trim().toLowerCase();
+  }
+
+  function foldScanPage(pageDocs, nestSlug, scanned, alreadyFound, want, scanCap, pageSize) {
+    var take = [];
+    var i = 0;
+    var wantKey = nestKey(nestSlug);
+    if (!pageDocs || !pageDocs.length) {
+      return { take: take, consumed: 0, scanned: scanned, hasMore: false, capped: false, exhausted: true };
+    }
+    for (; i < pageDocs.length; i++) {
+      if (scanned >= scanCap) break;
+      if (alreadyFound + take.length >= want) break;
+      scanned += 1;
+      if (nestKey(pageDocs[i].nestSlug) === wantKey) take.push(pageDocs[i]);
+    }
+    var consumedAll = i >= pageDocs.length;
+    var exhausted = consumedAll && pageDocs.length < pageSize;
+    var hitCap = scanned >= scanCap;
+    return {
+      take: take,
+      consumed: i,
+      scanned: scanned,
+      hasMore: !exhausted && !hitCap,
+      capped: hitCap && !exhausted,
+      exhausted: exhausted
+    };
+  }
+  /* @nest-feed-end */
 
   function composeErr(msg) {
     var el = document.getElementById('thoughts-compose-err');
@@ -875,7 +1871,7 @@
   }
 
   function closeSocialOverlays() {
-    ['explore-overlay', 'notif-overlay', 'chat-overlay', 'profile-overlay'].forEach(function (id) {
+    ['explore-overlay', 'notif-overlay', 'chat-overlay', 'profile-overlay', 'reports-overlay'].forEach(function (id) {
       const el = document.getElementById(id);
       if (el) el.classList.remove('active', 'thread-open');
     });
@@ -1437,6 +2433,7 @@
   function applyRoute() {
     closeMobileNav();
     currentNest = resolveNestFromPath();
+    syncNestFeed();
     applyNestChrome();
     const raw = routeFromHash();
     var roomHighlight = currentNest ? currentNest.slug : 'home';
@@ -1553,6 +2550,7 @@
                 ? ' data-profile-uid="' + escapeHtml(post.authorUid) + '" data-profile-name="' + escapeHtml(post.name) + '" data-profile-handle="' + escapeHtml(post.handle) + '"'
                 : '') +
             '>' + escapeHtml(post.name) + '</span>' +
+            stewardPillHtml(post) +
             '<span class="post-handle">@' + escapeHtml(post.handle) + '</span>' +
             '<span class="post-time">· ' + (post.hours != null ? post.hours + 'h' : 'now') + '</span>' +
           '</div>' +
@@ -1564,14 +2562,23 @@
             '<button class="post-action" data-act="share" type="button">Share</button>' +
             reportBtn + blockBtn +
             delBtn +
+            postOverflowHtml(post) +
           '</div>' +
         '</div>' +
       '</article>'
     );
   }
 
+  function showingNestFeed() {
+    return !!(currentNest && !focusedTopicId && currentTab !== 'following');
+  }
+
+  function postsForFeed() {
+    return showingNestFeed() ? nestPosts : livePosts;
+  }
+
   function topLevelPosts() {
-    return livePosts.filter(function (p) {
+    return postsForFeed().filter(function (p) {
       if (p.parentId || (p.authorUid && blockedUids[p.authorUid])) return false;
       if (currentNest) return nestSlugNorm(p.nestSlug) === nestSlugNorm(currentNest.slug);
       return true;
@@ -1579,7 +2586,7 @@
   }
 
   function repliesFor(parentId) {
-    return livePosts.filter(function (p) { return p.parentId === parentId && !(p.authorUid && blockedUids[p.authorUid]); })
+    return postsForFeed().filter(function (p) { return p.parentId === parentId && !(p.authorUid && blockedUids[p.authorUid]); })
       .sort(function (a, b) { return (a.ms || 0) - (b.ms || 0); });
   }
 
@@ -1933,28 +2940,35 @@
       return;
     }
 
-    var seeds = currentNest ? [] : sessionSeedPosts();
-    if (liveError && !seeds.length) {
-      el.innerHTML = '<div class="post-empty">Live feed could not load. The error is in the compose line above — this is not an empty room.</div>';
+    var nestView = !!currentNest;
+    var seeds = nestView ? [] : sessionSeedPosts();
+    var scopeError = nestView ? nestError : liveError;
+    var scopeReady = nestView ? nestReady : liveReady;
+    if (scopeError && !seeds.length) {
+      el.innerHTML = '<div class="post-empty">' + (nestView
+        ? 'This nest could not load. The error is in the compose line above — this is not an empty room.'
+        : 'Live feed could not load. The error is in the compose line above — this is not an empty room.') + '</div>';
       refreshPorchUi();
       return;
     }
-    if (!liveReady && !seeds.length) {
+    if (!scopeReady && !seeds.length) {
       el.innerHTML = '<div class="post-empty">Connecting to the live feed…</div>';
       refreshPorchUi();
       return;
     }
 
-    let posts = (liveReady && !liveError) ? topLevelPosts().slice() : [];
-    if (liveReady && !liveError && currentTab === 'hot') posts.sort(function (a, b) { return (b.likes || 0) - (a.likes || 0); });
-    if (liveReady && !liveError && currentTab === 'new') posts.sort(function (a, b) { return (b.ms || 0) - (a.ms || 0); });
+    let posts = (scopeReady && !scopeError) ? topLevelPosts().slice() : [];
+    if (scopeReady && !scopeError && currentTab === 'hot') posts.sort(function (a, b) { return (b.likes || 0) - (a.likes || 0); });
+    if (scopeReady && !scopeError && currentTab === 'new') posts.sort(function (a, b) { return (b.ms || 0) - (a.ms || 0); });
     var seedIds = {};
     for (var si = 0; si < seeds.length; si++) seedIds[seeds[si].id] = true;
     posts = seeds.concat(posts.filter(function (p) { return !seedIds[p.id]; }));
 
     if (!posts.length) {
-      var empty = currentNest
-        ? ('No posts in ' + (currentNest.label || currentNest.slug) + ' yet. This nest is live at /' + currentNest.slug + '. Sign in to post the first take.')
+      var empty = nestView
+        ? (nestScanCapped
+          ? ('Posts in ' + (currentNest.label || currentNest.slug) + ' could not be reached yet. The nest index is not built, and the fallback scan stopped after ' + NEST_SCAN_CAP + ' newer posts. This is not an empty room.')
+          : ('No posts in ' + (currentNest.label || currentNest.slug) + ' yet. This nest is live at /' + currentNest.slug + '. Sign in to post the first take.'))
         : ((site && site.emptyState) || 'This room is empty. Sign in to post. Guest can browse only.');
       el.innerHTML = '<div class="post-empty">' + escapeHtml(empty) + '</div>';
       refreshPorchUi();
@@ -1965,7 +2979,7 @@
     el.innerHTML = posts.map(function (p) {
       var kids = repliesFor(p.id);
       return renderPost(p, false) + kids.map(function (r) { return renderPost(r, true); }).join('');
-    }).join('');
+    }).join('') + nestMoreHtml();
     highlightDeepPost();
     refreshPorchUi();
     refreshNestSurfaces();
@@ -3151,14 +4165,14 @@
 
   function addRoomTextPost(text) {
     var live = fbAuth && fbAuth.currentUser;
-    var disp = (currentUser && currentUser.name) || live.displayName || (live.email || 'member').split('@')[0] || 'Member';
-    var handle = (currentUser && currentUser.handle) || String(disp).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'member';
-    return fbDb.collection('posts').add({
+    if (!live) return Promise.reject(new Error('Sign in to post. Guest can only browse.'));
+    var who = authorForWrite(live);
+    return guardedPostWrite({
       siteId: SITE_ID,
       parentId: null,
       authorUid: live.uid,
-      authorName: disp,
-      authorHandle: handle,
+      authorName: who.name,
+      authorHandle: who.handle,
       text: String(text || '').slice(0, 280),
       likes: {},
       likeCount: 0,
@@ -3188,7 +4202,7 @@
       composeErr('Posted.');
       refreshPorchUi();
     }).catch(function (e) {
-      composeErr((e && e.message) ? e.message : 'Could not post.');
+      composeErr(guardPublicErr(e, 'Could not post.'));
     });
   }
 
@@ -3231,6 +4245,11 @@
 
   function notifLine(n) {
     var who = nameForUid(n.fromUid);
+    if (n.type === 'report') {
+      var room = (site && site.name) || SITE_ID || 'room';
+      var snip = String(n.text || '').replace(/^Report:\s*/, '');
+      return 'Report on ' + room + ': ' + snip;
+    }
     if (n.type === 'reply') return who + ' replied to your post' + (n.text ? (': ' + n.text) : '');
     if (n.type === 'like') return who + ' liked your post';
     if (n.type === 'follow') return who + ' followed you';
@@ -3295,7 +4314,7 @@
       return;
     }
     el.innerHTML = list.map(function (n) {
-      return '<button type="button" class="notif-item' + (n.read ? '' : ' unread') + '" data-notif-id="' + escapeHtml(n.id) + '"' +
+      return '<button type="button" class="notif-item' + (n.read ? '' : ' unread') + '" data-notif-id="' + escapeHtml(n.id) + '" data-notif-type="' + escapeHtml(n.type || '') + '"' +
         (n.postId ? ' data-post-id="' + escapeHtml(n.postId) + '"' : '') + '>' +
         '<p>' + escapeHtml(notifLine(n)) + '</p>' +
         '<time>' + escapeHtml(notifWhen(n.ms)) + '</time></button>';
@@ -3711,6 +4730,7 @@
     if (blocked && threadOpen) chatErr('You blocked this user.');
     if (threadOpen) paintActiveChatName(threadPeerName());
     paintChatPlaceholder();
+    paintDmSendBtn();
   }
 
   function renderThreads() {
@@ -3850,6 +4870,14 @@
       return;
     }
     if (!fbDb) { chatErr('Chat is not connected.'); return; }
+    if (msgCooldownMs() > 0) {
+      chatErr('Wait ' + Math.ceil(msgCooldownMs() / 1000) + 's before another message.');
+      return;
+    }
+    if (!isAdminUser() && !spamFree(text)) {
+      chatErr('That message is blocked by the room spam filter.');
+      return;
+    }
     var peerName = dmDisplayName((pendingPeer && pendingPeer.name) || (conv && convPeerName(conv)) || 'Member');
     var myName = myDisplayName();
     var cid = convIdFor(me, other);
@@ -3859,48 +4887,52 @@
     dmSendInFlight = true;
     if (sendBtn) sendBtn.disabled = true;
     chatErr('');
-    fbDb.runTransaction(function (transaction) {
-      return transaction.get(convRef).then(function (snap) {
-        var names = {};
-        names[me] = myName;
-        names[other] = peerName;
-        var unread = {};
-        unread[me] = 0;
-        unread[other] = 1;
-        if (snap.exists) {
-          var d = snap.data() || {};
-          var existingNames = d.participantNames || {};
-          names[me] = myName || dmDisplayName(existingNames[me]);
-          names[other] = dmDisplayName(existingNames[other]) !== 'Member' ? dmDisplayName(existingNames[other]) : peerName;
-          var prev = d.unreadCounts || {};
-          unread[other] = (typeof prev[other] === 'number' ? prev[other] : 0) + 1;
-          transaction.update(convRef, {
-            lastMessage: text,
-            lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-            lastMessageBy: me,
-            unreadCounts: unread,
-            participantNames: names
-          });
-        } else {
-          transaction.set(convRef, {
-            siteId: dmSiteId(),
-            participants: [me, other],
-            participantNames: names,
-            lastMessage: text,
-            lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
-            lastMessageBy: me,
-            unreadCounts: unread,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          });
-        }
-        transaction.set(msgRef, {
-          fromUid: me,
-          text: text,
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          siteId: dmSiteId()
+    convRef.get().then(function (snap) {
+      var names = {};
+      names[me] = myName;
+      names[other] = peerName;
+      var unread = {};
+      unread[me] = 0;
+      unread[other] = 1;
+      var batch = fbDb.batch();
+      if (snap.exists) {
+        var d = snap.data() || {};
+        var existingNames = d.participantNames || {};
+        names[me] = myName || dmDisplayName(existingNames[me]);
+        names[other] = dmDisplayName(existingNames[other]) !== 'Member' ? dmDisplayName(existingNames[other]) : peerName;
+        var prev = d.unreadCounts || {};
+        unread[other] = (typeof prev[other] === 'number' ? prev[other] : 0) + 1;
+        batch.update(convRef, {
+          lastMessage: text,
+          lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+          lastMessageBy: me,
+          unreadCounts: unread,
+          participantNames: names
         });
+      } else {
+        batch.set(convRef, {
+          siteId: dmSiteId(),
+          participants: [me, other],
+          participantNames: names,
+          lastMessage: text,
+          lastMessageAt: firebase.firestore.FieldValue.serverTimestamp(),
+          lastMessageBy: me,
+          unreadCounts: unread,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      }
+      batch.set(msgRef, {
+        fromUid: me,
+        text: text,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        siteId: dmSiteId()
       });
+      batch.set(fbDb.collection('rateLimits').doc(me), {
+        lastMsgAt: firebase.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+      return batch.commit();
     }).then(function () {
+      noteMsgCommitted();
       if (input) {
         input.value = '';
         input.style.height = 'auto';
@@ -3909,7 +4941,7 @@
       listenMessages(cid);
       chatErr('');
     }).catch(function (e) {
-      chatErr((e && e.message) ? e.message : 'Could not send.');
+      chatErr(guardPublicErr(e, 'Could not send.', 'dm'));
     }).finally(function () {
       dmSendInFlight = false;
       if (sendBtn) sendBtn.disabled = false;
@@ -4316,6 +5348,7 @@
     restoreCompose(draft);
   }
   function signOut() {
+    stopPreviewLift();
     listenMemberNests(null);
     teardownPeopleSocial();
     if (fbAuth && fbAuth.currentUser) fbAuth.signOut();
@@ -4335,7 +5368,7 @@
     const text = (input && input.value || '').trim();
     const pollReady = pollActive && [...document.querySelectorAll('#compose-poll .compose-poll-input')].filter(function (i) { return i.value.trim(); }).length >= 2;
     const btn = document.getElementById('thoughts-post-btn');
-    if (btn) btn.disabled = !(text || attachedFile || pollReady);
+    paintPostBtn(btn, text, pollReady);
   }
 
   var MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -4423,6 +5456,7 @@
   }
   function setImagePreview(file) {
     if (!file) return;
+    if (!imageUploadsOn()) { composeErr('Photo uploads are off in this room.'); return; }
     if (isVideoFile(file)) {
       composeErr('Images only. No video yet.');
       return;
@@ -4440,7 +5474,180 @@
     });
   }
 
+  // Per-room config (one codebase): site.json "imageUploads": false turns off photo/GIF attach + upload.
+  function imageUploadsOn() {
+    return !(site && (site.imageUploads === false || site.images === false));
+  }
+  function applyImageUploadsGate() {
+    if (imageUploadsOn()) return;
+    ['compose-btn-image', 'compose-btn-gif'].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b) { b.hidden = true; b.disabled = true; b.setAttribute('aria-hidden', 'true'); }
+    });
+    ['compose-btn-image', 'compose-btn-gif', 'compose-image-input', 'compose-gif-input',
+     'compose-image-preview', 'compose-upload-bar'].forEach(function (id) {
+      var i = document.getElementById(id);
+      if (i && i.parentNode) i.parentNode.removeChild(i);
+    });
+  }
+  // Per-room config: site.json "minAge" (e.g. 18) adds a date-of-birth check at signup.
+  // The DOB is checked in the browser only and never stored; the users doc gets ageConfirmed: true.
+  function dobMinAge() {
+    var n = parseInt(site && site.minAge, 10);
+    return (n > 0 && n < 120) ? n : 0;
+  }
+  // Record which Terms version the member accepted at signup / R2 attest (site.json termsVersion, default 1.1).
+  function termsVersion() { return String((site && site.termsVersion) || '1.1'); }
+  function withAgeConfirmed(doc) {
+    doc.termsVersion = termsVersion();
+    doc.termsAcceptedAt = firebase.firestore.FieldValue.serverTimestamp();
+    if (dobMinAge()) {
+      doc.ageConfirmed = true;
+      doc.ageAttested18 = true;
+      doc.ageAttestedAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
+    return doc;
+  }
+  function ageFromDob(v, now) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
+    if (!m) return -1;
+    var y = +m[1], mo = +m[2], d = +m[3];
+    now = now || new Date();
+    if (y < 1900 || mo < 1 || mo > 12 || d < 1 || d > 31 || new Date(y, mo - 1, d) > now) return -1;
+    var age = now.getFullYear() - y;
+    if (now.getMonth() + 1 < mo || (now.getMonth() + 1 === mo && now.getDate() < d)) age--;
+    return age;
+  }
+  function dobError(prefix) {
+    var min = dobMinAge();
+    if (!min) return '';
+    var el = document.getElementById(prefix + '-dob');
+    var age = ageFromDob(el && el.value);
+    if (ageBlocked()) return 'Sorry, you must be ' + min + ' or older to join ' + ((site && site.name) || SITE_ID || 'this room') + '.';
+    if (age < 0) return 'Enter your date of birth.';
+    if (age < min) {
+      try { localStorage.setItem('subx.ageBlock.' + SITE_ID, String(Date.now())); } catch (e) {}
+      return 'Sorry, you must be ' + min + ' or older to join ' + ((site && site.name) || SITE_ID || 'this room') + '.';
+    }
+    return '';
+  }
+  function clearDob(prefix) {
+    var el = document.getElementById(prefix + '-dob');
+    if (el) el.value = '';
+  }
+  function applyMinAgeGate() {
+    var min = dobMinAge();
+    if (!min) return;
+    ['cv-reg', 'cv-google'].forEach(function (prefix) {
+      var box = document.getElementById(prefix + '-age');
+      var label = box && box.closest ? box.closest('label') : null;
+      if (label) {
+        var span = label.querySelector('span');
+        if (span) span.innerHTML = span.innerHTML.replace(/\bI am \d+ or older\b/, 'I am ' + min + ' or older');
+      }
+      if (document.getElementById(prefix + '-dob') || !label || !label.parentNode) return;
+      var wrap = document.createElement('label');
+      wrap.className = 'conv-modal-dob';
+      wrap.setAttribute('for', prefix + '-dob');
+      wrap.innerHTML = '<span>Date of birth (checked here, not stored)</span> ' +
+        '<input type="date" id="' + prefix + '-dob" autocomplete="bday" required>';
+      label.parentNode.insertBefore(wrap, label);
+    });
+  }
+
+  function ageBlocked() {
+    try {
+      var t = parseInt(localStorage.getItem('subx.ageBlock.' + SITE_ID), 10);
+      return isFinite(t) && Date.now() - t < 24 * 3600 * 1000;
+    } catch (e) { return false; }
+  }
+  // site.json "accountsOpen": false hides Join / Register / Google signup. Existing email members can still sign in.
+  function accountsOpen() {
+    return !(site && site.accountsOpen === false);
+  }
+  function applyAccountsGate() {
+    var note = document.getElementById('cv-accounts-closed');
+    if (accountsOpen()) { if (note) note.hidden = true; return; }
+    document.querySelectorAll('[data-accounts="join"]').forEach(function (el) {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    var reg = document.getElementById('cv-panel-register');
+    if (reg && reg.parentNode) reg.parentNode.removeChild(reg);
+    ['cv-goto-join', 'cv-google-age', 'cv-google-dob'].forEach(function (id) {
+      var el = document.getElementById(id);
+      var lab = el && el.closest ? el.closest('label') : null;
+      if (lab && lab.parentNode) lab.parentNode.removeChild(lab);
+      else if (el && el.parentNode) el.parentNode.removeChild(el);
+    });
+    var div = document.querySelector('#cv-panel-login .conv-modal-divider');
+    if (div && div.parentNode) div.parentNode.removeChild(div);
+    ['profile-signin-prompt-btn', 'chat-placeholder-new'].forEach(function (id) {
+      var b = document.getElementById(id);
+      if (b) b.textContent = 'Sign in';
+    });
+    if (note) note.hidden = false;
+  }
+  // R2 (CLO 10-16 §2): existing accounts attest 18+ at next sign-in. Under 18: suspend + hide; deletion
+  // queued for 30 days. The DOB is never stored. Email notice only if site.json ageAttest.notifyUnder18Email
+  // is true (default false; Jebb decision R2-email).
+  function ageAttestCfg() { return (site && site.ageAttest) || {}; }
+  function runAgeAttestGate(user) {
+    if (!fbDb || !user || ageAttestCfg().enabled === false || isAdminUser()) return Promise.resolve(true);
+    var ref = fbDb.collection('users').doc(user.uid);
+    return ref.get().then(function (snap) {
+      var d = (snap && snap.exists && snap.data()) || {};
+      if (d.suspended === true) { showSuspended(d.suspendedReason); return false; }
+      if (d.ageAttested18 === true) return true;
+      return promptAgeAttest().then(function (age) {
+        if (age >= 18) {
+          return ref.set({ siteId: SITE_ID, ageAttested18: true, ageConfirmed: true,
+            ageAttestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            termsVersion: termsVersion(), termsAcceptedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }).then(function () { return true; });
+        }
+        try { localStorage.setItem('subx.ageBlock.' + SITE_ID, String(Date.now())); } catch (e) {}
+        var patch = { siteId: SITE_ID, suspended: true, suspendedReason: 'under18', ageAttested18: false,
+          profileHidden: true, deletionQueuedAt: firebase.firestore.FieldValue.serverTimestamp() };
+        if (ageAttestCfg().notifyUnder18Email === true) patch.notifyUnder18Email = true;   // OFF by default
+        return ref.set(patch, { merge: true }).then(function () { showSuspended('under18'); return false; });
+      });
+    }).catch(function (e) { console.warn('age attest', e); return true; });
+  }
+  function promptAgeAttest() {
+    return new Promise(function (resolve) {
+      var el = document.createElement('div');
+      el.className = 'name-prompt age-attest';
+      el.id = 'age-attest';
+      el.innerHTML = '<div class="name-prompt-card" role="dialog" aria-modal="true" aria-label="Confirm your age">' +
+        '<p><strong>' + escapeHtml((site && site.name) || 'This room') + ' is now 18+.</strong> Please confirm your age to keep using your account.</p>' +
+        '<label for="age-attest-dob">Date of birth</label> <input type="date" id="age-attest-dob" autocomplete="bday" required>' +
+        '<label class="conv-modal-check" for="age-attest-ok"><input type="checkbox" id="age-attest-ok"> <span>I am 18 or older and I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>' +
+        '<div class="name-prompt-err" id="age-attest-err"></div>' +
+        '<div class="name-prompt-actions"><button type="button" id="age-attest-go" disabled>Continue</button></div></div>';
+      ensurePreviewLiftCss();
+      document.body.appendChild(el);
+      var dob = document.getElementById('age-attest-dob'), ok = document.getElementById('age-attest-ok');
+      var go = document.getElementById('age-attest-go');
+      function sync() { go.disabled = !(ageFromDob(dob.value) >= 0 && ok.checked); }
+      dob.addEventListener('input', sync); ok.addEventListener('change', sync);
+      go.addEventListener('click', function () {
+        var age = ageFromDob(dob.value);
+        dob.value = '';
+        if (el.parentNode) el.parentNode.removeChild(el);
+        resolve(age);
+      });
+    });
+  }
+  function showSuspended(reason) {
+    var room = (site && site.name) || SITE_ID;
+    // Only the R2 under-18 path says "18 or older"; an admin suspension (abuse, spam, ...) gets a neutral notice.
+    composeErr(reason === 'under18'
+      ? 'Sorry, you must be 18 or older to use ' + room + '. Your account is suspended.'
+      : 'This ' + room + ' account is suspended. If you think this is a mistake, contact us through the Report page.');
+    try { if (fbAuth) fbAuth.signOut(); } catch (e) {}
+  }
+
   function uploadImage(file, uid) {
+    if (!imageUploadsOn()) return Promise.reject(new Error('Photo uploads are off in this room.'));
     if (!fbStorage) return Promise.reject(new Error('Storage not ready'));
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
     const path = 'posts/' + SITE_ID + '/' + uid + '/' + Date.now() + '.' + ext;
@@ -4507,16 +5714,16 @@
     composeErr('');
     const btn = document.getElementById('thoughts-post-btn');
     btn.disabled = true;
+    if (!imageUploadsOn()) attachedFile = null;
     const start = attachedFile ? uploadImage(attachedFile, live.uid) : Promise.resolve(null);
     start.then(function (imageUrl) {
-      const disp = (currentUser && currentUser.name) || live.displayName || (live.email || 'member').split('@')[0] || 'Member';
-      const handle = (currentUser && currentUser.handle) || String(disp).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'member';
+      const who = authorForWrite(live);
       const doc = {
         siteId: SITE_ID,
         parentId: parentId,
         authorUid: live.uid,
-        authorName: disp,
-        authorHandle: handle,
+        authorName: who.name,
+        authorHandle: who.handle,
         text: text.slice(0, 280),
         likes: {},
         likeCount: 0,
@@ -4524,7 +5731,7 @@
         nestSlug: postNestSlug(parentId),
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       };
-      if (imageUrl) doc.imageUrl = imageUrl;
+      if (imageUrl && imageUploadsOn()) doc.imageUrl = imageUrl;
       if (pollActive) {
         const opts = [...document.querySelectorAll('#compose-poll .compose-poll-input')].map(function (i) { return i.value.trim(); }).filter(Boolean);
         if (opts.length >= 2) {
@@ -4537,7 +5744,7 @@
           };
         }
       }
-      return fbDb.collection('posts').add(doc);
+      return guardedPostWrite(doc);
     }).then(function () {
       input.value = '';
       input.placeholder = input.getAttribute('data-ph') || input.placeholder;
@@ -4552,7 +5759,7 @@
         });
       }
     }).catch(function (e) {
-      composeErr((e && e.message) ? e.message : 'Could not post.');
+      composeErr(guardPublicErr(e, 'Could not post.'));
       console.warn('post', e);
       syncPostBtn();
     });
@@ -4654,6 +5861,7 @@
       wrap.addEventListener('dragleave', function () { wrap.classList.remove('drag-over'); });
       wrap.addEventListener('drop', function (e) {
         e.preventDefault(); wrap.classList.remove('drag-over');
+        if (!imageUploadsOn()) return;
         var files = e.dataTransfer && e.dataTransfer.files;
         if (!files) return;
         for (var i = 0; i < files.length; i++) {
@@ -4687,6 +5895,7 @@
       return false;
     }
     function onComposePaste(e) {
+      if (!imageUploadsOn()) return;
       if (takeClipboardImage(e)) {
         e.preventDefault();
         e.stopPropagation();
@@ -4775,6 +5984,11 @@
       if (e.target.closest('#nest-add-save')) {
         e.preventDefault();
         submitNestAdd();
+        return;
+      }
+      if (e.target.closest('#nest-feed-more')) {
+        e.preventDefault();
+        loadMoreNestPosts();
         return;
       }
       const nestLink = e.target.closest('[data-nest]');
@@ -4984,6 +6198,11 @@
       const nitem = e.target.closest('[data-notif-id]');
       if (nitem) {
         var nid = nitem.getAttribute('data-notif-id');
+        if (nitem.getAttribute('data-notif-type') === 'report') {
+          if (nid) markNotifsRead(nid);
+          openReports();
+          return;
+        }
         if (nid) markNotifsRead(nid);
         var pid = nitem.getAttribute('data-post-id');
         if (pid) {
@@ -5087,6 +6306,8 @@
     });
     postBtn.addEventListener('click', maybePost);
     wireComposeToolbar();
+    applyImageUploadsGate();
+    applyMinAgeGate();
 
     document.getElementById('cv-modal-close').addEventListener('click', function (e) {
       e.preventDefault();
@@ -5117,26 +6338,28 @@
       const pw = document.getElementById('cv-reg-pw').value || '';
       const age = document.getElementById('cv-reg-age');
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
+      if (!accountsOpen()) { err.textContent = 'Accounts are not open yet.'; err.classList.add('show'); return; }
       if (!age || !age.checked) {
-        err.textContent = 'Confirm you are 13 or older and agree to the preview Terms and Privacy pages.';
+        err.textContent = ageGateMessage();
         err.classList.add('show');
         return;
       }
+      if (name && !nameOk(name)) {
+        err.textContent = 'That display name is reserved.';
+        err.classList.add('show');
+        return;
+      }
+      var regDobErr = dobError('cv-reg');
+      if (regDobErr) { err.textContent = regDobErr; err.classList.add('show'); return; }
+      clearDob('cv-reg');
       if (!email || pw.length < 6) { err.textContent = 'Email and a password of at least 6 characters.'; err.classList.add('show'); return; }
       err.textContent = '';
       markAuthLand();
       fbAuth.createUserWithEmailAndPassword(email, pw).then(function (cred) {
-        const disp = name || email.split('@')[0];
         cred.user.sendEmailVerification().catch(function () {});
-        return cred.user.updateProfile({ displayName: disp }).then(function () {
-          if (fbDb) {
-            return fbDb.collection('users').doc(cred.user.uid).set({
-              displayName: disp,
-                            siteId: SITE_ID,
-              createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
-          }
-        }).then(function () {
+        return ensurePublicProfile(cred.user, name, withAgeConfirmed({
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        })).then(function () {
           composeErr('Account created. Verify your email before posting.');
         });
       }).catch(function (e) {
@@ -5147,12 +6370,16 @@
     document.getElementById('cv-google-login').addEventListener('click', function () {
       var err = document.getElementById('cv-login-err');
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
+      if (!accountsOpen()) { err.textContent = 'Accounts are not open yet.'; err.classList.add('show'); return; }
       var age = document.getElementById('cv-google-age');
       if (!age || !age.checked) {
-        err.textContent = 'Confirm you are 13 or older and agree to the preview Terms and Privacy pages.';
+        err.textContent = ageGateMessage();
         err.classList.add('show');
         return;
       }
+      var gDobErr = dobError('cv-google');
+      if (gDobErr) { err.textContent = gDobErr; err.classList.add('show'); return; }
+      clearDob('cv-google');
       err.textContent = '';
       err.classList.remove('show');
       markAuthLand();
@@ -5163,13 +6390,10 @@
       function finishGoogle(cred) {
         var u = cred && cred.user;
         if (fbDb && u) {
-          var disp = u.displayName || (u.email || 'member').split('@')[0];
-          return fbDb.collection('users').doc(u.uid).set({
-            displayName: disp,
-            siteId: SITE_ID,
+          return ensurePublicProfile(u, '', withAgeConfirmed({
             provider: 'google',
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
+          }));
         }
       }
       function failGoogle(e) {
@@ -5693,8 +6917,9 @@
     wait.then(function () {
       return storyFile ? uploadStoryMedia(storyFile, live.uid, docRef.id) : Promise.resolve('');
     }).then(function (mediaUrl) {
-      var disp = (currentUser && currentUser.name) || live.displayName || (live.email || 'member').split('@')[0] || 'Member';
-      var handle = (currentUser && currentUser.handle) || String(disp).toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'member';
+      var who = authorForWrite(live);
+      var disp = who.name;
+      var handle = who.handle;
       var now = firebase.firestore.Timestamp.now();
       var doc = {
         siteId: SITE_ID,
@@ -6068,6 +7293,8 @@
     applyTheme(site.theme);
     applySiteChrome();
     ensureJoinAuthLayout();
+    paintAgeLabels();
+    wirePreviewLift();
     ensureDmCss();
     hideDummyChrome();
     syncChatChrome();
@@ -6076,18 +7303,16 @@
       fbAuth.getRedirectResult().then(function (cred) {
         var u = cred && cred.user;
         if (fbDb && u) {
-          var disp = u.displayName || (u.email || 'member').split('@')[0];
-          return fbDb.collection('users').doc(u.uid).set({
-            displayName: disp,
-            siteId: SITE_ID,
+          return ensurePublicProfile(u, '', withAgeConfirmed({
             provider: 'google',
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
+          }));
         }
       }).catch(function () {});
       fbAuth.onAuthStateChanged(function (user) {
-        if (user) applyFbUser(user);
+        if (user) runAgeAttestGate(user).then(function (ok) { if (ok) applyFbUser(user); });
         else {
+          stopPreviewLift();
           listenMemberNests(null);
           listenBlocks(null);
           teardownPeopleSocial();
@@ -6110,6 +7335,7 @@
 
     listenKillSwitch();
     wireEvents();
+    applyAccountsGate();   // after wiring: removes Join/Register/Google nodes when accountsOpen === false
     document.addEventListener('subx-auth-land', function () { landInFeedCompose(); });
     renderTrends();
     renderExplore();
