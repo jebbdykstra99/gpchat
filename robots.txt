@@ -1,10 +1,11 @@
-# gpchat robots.txt · PREVIEW LOCK (unchanged posture)
-# Accounts are not open. Do not crawl, index, scrape, or use any content for AI training.
+# gpchat robots.txt · public beta (lock lifted by Jebb Dykstra)
+# Search indexing allowed. Do not scrape or use any content for AI training (named bots below stay blocked).
 # Lifting this lock is Jebb Dykstra's decision only. Agent rules: https://gpchat.com/terms.html
 # Contact: jebb@techsectorlaw.com · +1-650-539-5005
 
 User-agent: *
-Disallow: /
+Allow: /
+Disallow: /preview-lift/
 
 # Named AI crawlers and training bots: also fully disallowed (redundant with *, listed for clarity)
 User-agent: GPTBot
@@ -21,5 +22,6 @@ User-agent: Meta-ExternalAgent
 Disallow: /
 
 # Note: no Allow line for /llms.txt. The file is fetchable directly; robots.txt does not need to
-# carve it out, and adding "Allow" here would be a change to the preview posture (Jebb's call).
-# No Sitemap line during preview.
+# carve it out.
+
+Sitemap: https://gpchat.com/sitemap.xml
