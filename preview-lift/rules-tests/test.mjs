@@ -122,7 +122,7 @@ const IMG = 'https://firebasestorage.googleapis.com/v0/b/subx-skins.firebasestor
 await t('50 gpchat post with imageUrl denied', assertFails(guardedPost(db('u70'), 'u70', base('u70', 'gpchat', { imageUrl: IMG }), null)));
 await t('50b gpchat text post still ok', assertSucceeds(guardedPost(db('u71'), 'u71', base('u71'), null)));
 await t('50c 27chat imageUrl post unaffected', assertSucceeds(db('u72').collection('posts').add(base('u72', '27chat', { imageUrl: IMG.replace('gpchat', '27chat') }))));
-const story = (u, site) => ({ siteId: site, authorUid: u, type: 'text', text: 'pit lane', createdAt: TS.now(), expiresAt: TS.fromDate(new Date(Date.now() + 864e5)) });
+const story = (u, site) => ({ siteId: site, authorUid: u, authorName: 'Fan ' + u, authorHandle: 'fan' + u, type: 'text', text: 'pit lane', createdAt: TS.now(), expiresAt: TS.fromDate(new Date(Date.now() + 864e5)) });
 await t('51 gpchat story create denied', assertFails(db('u73').collection('stories').add(story('u73', 'gpchat'))));
 await t('51b 27chat same story ok (control)', assertSucceeds(db('u79').collection('stories').add(story('u79', '27chat'))));
 await seed(async (s) => s.doc('users/u74').set({ siteId: 'gpchat', suspended: true, suspendedReason: 'under18' }));
@@ -133,5 +133,14 @@ await t('53 member self-suspends (R2 under 18) ok', assertSucceeds(db('u75').doc
 await t('53b member attests 18+ ok', assertSucceeds(db('u76').doc('users/u76').set({ siteId: 'gpchat', ageAttested18: true, ageConfirmed: true, ageAttestedAt: FV.serverTimestamp() }, { merge: true })));
 await t('53c DOB never storable', assertFails(db('u77').doc('users/u77').set({ siteId: 'gpchat', dob: '2001-01-01' }, { merge: true })));
 await t('53d attest 18+ and suspended in one write denied', assertFails(db('u78').doc('users/u78').set({ siteId: 'gpchat', suspended: true, ageAttested18: true }, { merge: true })));
+// ---- 2026-10-18 rebuild on v2 A2: follow/mute with the REAL client payload (E2E F1 found follow denied)
+await t('54 follow with real client payload {targetUid, siteId, createdAt} ok', assertSucceeds(db('u80').doc('users/u80/following/u81').set({ targetUid: 'u81', siteId: 'gpchat', createdAt: FV.serverTimestamp() })));
+await t('54b follow edge written into someone else\'s list denied', assertFails(db('u80').doc('users/u82/following/u81').set({ targetUid: 'u81', siteId: 'gpchat', createdAt: FV.serverTimestamp() })));
+await t('54c follow with forged followerUid denied', assertFails(db('u80').doc('users/u80/following/u83').set({ targetUid: 'u83', followerUid: 'u99', siteId: 'gpchat', createdAt: FV.serverTimestamp() })));
+await t('54d unverified follow denied', assertFails(db('u84', false).doc('users/u84/following/u81').set({ targetUid: 'u81', siteId: 'gpchat', createdAt: FV.serverTimestamp() })));
+await t('55 mute (v2 inline check, muterUid) ok', assertSucceeds(db('u80').doc('users/u80/mutes/u81').set({ muterUid: 'u80', targetUid: 'u81', siteId: 'gpchat', createdAt: FV.serverTimestamp() })));
+await t('56 signup records termsVersion 1.1 + termsAcceptedAt', assertSucceeds(db('u85').doc('users/u85').set({ siteId: 'gpchat', displayName: 'Austin Fan', ageAttested18: true, ageConfirmed: true, termsVersion: '1.1', termsAcceptedAt: FV.serverTimestamp() }, { merge: true })));
+await t('57 27chat story without authorName denied (v2 story guard)', assertFails(db('u86').collection('stories').add({ siteId: '27chat', authorUid: 'u86', type: 'text', text: 'x', createdAt: TS.now(), expiresAt: TS.fromDate(new Date(Date.now() + 864e5)) })));
+await t('57b 27chat story dated 2099 denied (v2 story guard)', assertFails(db('u87').collection('stories').add(Object.assign(story('u87', '27chat'), { createdAt: TS.fromDate(new Date('2099-01-01')) }))));
 console.log(results.join('\n')); console.log(failN ? `\n${failN} FAILED` : '\nALL PASS');
 await env.cleanup(); process.exit(failN ? 1 : 0);

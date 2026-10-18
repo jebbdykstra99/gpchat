@@ -3,6 +3,9 @@ rules_version = '2';
 // by a Firestore TTL policy on `expireAt` (Admin SDK writes; these client rules don't govern them).
 // TTL deletion is not instant: Firestore typically deletes within ~24 h AFTER expireAt, so a raw row
 // can live ~91 days. Aggregates: up to 13 months (expireAt = periodEnd + 395d) if a rollup is added.
+// GPCHAT LIFT (2026-10-18 rebuild): this file = RULES_PASTE_for_Jebb_v2.txt SECTION A2 (v2: follow/mute fix,
+// story guard, burst cap) + the gpchat lift deltas U3 (no uploads/stories in gpchat) and R2 (under-18 suspension).
+// The Oct 17 draft was built on v1 SECTION A and dropped the v2 follow/mute/story fixes for all 20 rooms.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() {
@@ -126,9 +129,14 @@ service cloud.firestore {
 
     // ===== PREVIEW-LIFT GUARD (draft 2026-10-09; Jebb hand-publishes) =====
     // Rooms whose factory.js writes rateLimits/{uid} in the same batch as a post/DM.
-    // Add a siteId here ONLY after that room's factory.js guard PR is live.
-    // PUBLISH ORDER: step 1 publish with [] (no client change needed);
-    // step 2 merge the gpchat factory.js PR; step 3 change to ['gpchat'] and republish.
+    // Add a siteId here ONLY after that room's live factory.js carries the guard block
+    // (check: allrooms/guarded-line.sh prints the exact line). Use the site.json siteId,
+    // NOT the domain: booze, buffet, boyfriend, cia, cobra are short; buffettchat is long.
+    // All 20 live siteIds (verified against live site.json, Oct 9 2026):
+    //   '27chat','311chat','415chat','808chat','airlineschat','amachat','atmchat','bartchat',
+    //   'behindtheblackwall','booze','boyfriend','buffet','buffettchat','cia','cobra',
+    //   'gaichat','gpchat','popechat','recruitchat','samochat'
+    // v2 PUBLISH ORDER: paste with [] (no client change needed); later change ONLY this line.
     function guardedSite(sid) {
       return sid in [];
     }
@@ -136,7 +144,7 @@ service cloud.firestore {
       return /databases/$(database)/documents/rateLimits/$(request.auth.uid);
     }
     // The batch that creates the post must also bump rateLimits/{uid}.lastPostAt
-    // to request.time; the rateLimits rule enforces the gap and daily cap.
+    // to request.time; the rateLimits rule enforces the gap, daily cap and burst cap.
     function postThrottled(sid) {
       return isAdmin() || !guardedSite(sid)
         || (existsAfter(rlPath()) && getAfter(rlPath()).data.lastPostAt == request.time);
@@ -224,6 +232,26 @@ service cloud.firestore {
         && !d.keys().hasAny(['role', 'admin', 'isAdmin', 'verified', 'steward'])
       );
     }
+    // v2 (2026-10-10): member stories get the same identity/text guards as posts.
+    // Clients set createdAt from the device clock (Timestamp.now()), so allow +-15 min
+    // instead of == request.time. Stops a 2099 story (never expires) and fake likeCount.
+    function memberStoryOk(d) {
+      return isAdmin() || (
+        d.keys().hasOnly([
+          'siteId', 'authorUid', 'authorName', 'authorHandle', 'type', 'createdAt',
+          'expiresAt', 'likeCount', 'text', 'mediaUrl', 'mediaContentType', 'posterUrl'
+        ])
+        && d.createdAt > request.time - duration.value(15, 'm')
+        && d.createdAt < request.time + duration.value(15, 'm')
+        && nameOk(d.authorName)
+        && handleOk(d.authorHandle)
+        && (!d.keys().hasAny(['likeCount']) || d.likeCount == 0)
+        && (!d.keys().hasAny(['text']) || cleanText(d.text))
+        && (!d.keys().hasAny(['mediaUrl'])
+            || (d.mediaUrl is string && d.mediaUrl.size() <= 600
+                && d.mediaUrl.matches('^https://firebasestorage[.]googleapis[.]com/v0/b/subx-skins[.]firebasestorage[.]app/o/stories%2F.*')))
+      );
+    }
     // GPCHAT LIFT (Oct 17, 2026 local): uploads/stories off per room (CLO U3), R2 under-18 suspension.
     function noUploadsSite(sid) {
       return sid in ['gpchat'];
@@ -298,14 +326,22 @@ service cloud.firestore {
       }
       match /following/{targetUid} {
         allow read: if signedIn() && request.auth.uid == uid;
-        allow create, update: if ownEdge(targetUid)
-          && request.resource.data.followerUid == uid
+        // v2 fix: follow never worked. ownEdge() is declared outside this match, so it can't see
+        // {uid} (rules error = deny), and live clients omit followerUid. The path already pins the owner.
+        allow create, update: if emailVerified()
+          && request.auth.uid == uid
+          && request.auth.uid != targetUid
+          && factorySite(request.resource.data)
+          && (!request.resource.data.keys().hasAny(['followerUid']) || request.resource.data.followerUid == uid)
           && request.resource.data.targetUid == targetUid;
         allow delete: if signedIn() && request.auth.uid == uid;
       }
       match /mutes/{targetUid} {
         allow read: if signedIn() && request.auth.uid == uid;
-        allow create, update: if ownEdge(targetUid)
+        allow create, update: if emailVerified()
+          && request.auth.uid == uid
+          && request.auth.uid != targetUid
+          && factorySite(request.resource.data)
           && request.resource.data.muterUid == uid
           && request.resource.data.targetUid == targetUid;
         allow delete: if signedIn() && request.auth.uid == uid;
@@ -399,7 +435,6 @@ service cloud.firestore {
     // Burst cap (2026-10-12): at most 5 posts+replies per 10-minute window (window opens at the
     // first post after the previous window ends). Steward admin o774wL9h... is exempt (postThrottled
     // skips the rateLimits check for isAdmin(); Path A drips also run outside rules).
-    // Matches RULES_PASTE_for_Jebb_v2.txt SECTION A2 (sha256 f487a152da17) for this block.
     match /rateLimits/{uid} {
       function rlKeysOk(d) {
         return d.keys().hasOnly(['lastPostAt', 'lastMsgAt', 'day', 'dayCount', 'burstStart', 'burstCount']);
@@ -454,7 +489,8 @@ service cloud.firestore {
         && request.auth.uid == request.resource.data.authorUid
         && factorySite(request.resource.data)
         && !noUploadsSite(request.resource.data.siteId)      // GPCHAT LIFT U3: stories off
-        && hasStoryFields(request.resource.data);
+        && hasStoryFields(request.resource.data)
+        && memberStoryOk(request.resource.data);                // v2 GUARD
       allow update: if false;
       allow delete: if isAdmin()
         || (signedIn() && resource.data.authorUid == request.auth.uid);
