@@ -2932,7 +2932,7 @@
 
     if (currentTab === 'following') {
       if (!followingLive()) {
-        el.innerHTML = '<div class="post-empty soon-panel"><strong>Following — Soon.</strong> There is no follows graph in this preview. The live room is on For You.</div>';
+        el.innerHTML = '<div class="post-empty soon-panel"><strong>Following — Soon.</strong> Following is not built yet. The live room is on For You.</div>';
         refreshPorchUi();
         return;
       }
@@ -4648,7 +4648,7 @@
     var view = document.getElementById('chat-thread-view');
     if (!dmsOn()) {
       if (title) title.textContent = 'Chat — Soon';
-      if (sub) sub.textContent = 'Direct messages are not live in this preview. No DMs graph. Sample thread copy in site.json is not a real inbox.';
+      if (sub) sub.textContent = 'Direct messages are not live yet.';
       if (ph) ph.hidden = false;
       if (view) view.hidden = true;
       return;
@@ -4739,7 +4739,7 @@
     if (!dmsOn()) {
       el.innerHTML = '<div class="soon-panel soon-panel-pad">' +
         '<strong>Chat — Soon.</strong>' +
-        '<p>Direct messages are not live. Sample thread copy in site.json is not a real inbox.</p>' +
+        '<p>Direct messages are not live yet.</p>' +
         '</div>';
       return;
     }
@@ -5148,7 +5148,7 @@
     } else {
       el.innerHTML = '<button class="sidebar-auth-btn primary" id="auth-signin" type="button">Sign in</button>';
       if (av) {
-        av.textContent = "415";
+        av.textContent = "GP";
         av.style.background = '';
       }
     }
@@ -6431,7 +6431,7 @@
         });
       }
       function cards(list) {
-        if (!list.length) return '<p class="empty-note">Nothing in the 415 matched that.</p>';
+        if (!list.length) return '<p class="empty-note">Nothing matched that.</p>';
         return list.map(function (c) {
           return '<article class="explore-card"><div class="explore-card-tag">' + escapeHtml(c.tag) +
             '</div><div class="explore-card-title">' + escapeHtml(c.title) +
