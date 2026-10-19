@@ -3035,7 +3035,7 @@
       renderFollowBtn(porchCard) +
       '<div class="news-item-tag">Porch</div>' +
       '<div class="news-item-headline">' + escapeHtml(prompt) + '</div>' +
-      '<div class="news-item-snippet">Pick a side. Posts to this room.</div>' +
+      '<div class="news-item-snippet">' + escapeHtml(isLiveUser() ? 'Pick a side. Posts to this room.' : guestCopy().porch) + '</div>' +
       '<div class="porch-btns">' + btns + '</div>' +
       '<div class="porch-tally" aria-live="polite">' + escapeHtml(porchTallyLine()) + '</div>' +
       '<div class="news-item-meta">This room</div>' +
@@ -4661,8 +4661,8 @@
     if (ph) ph.hidden = false;
     if (view) view.hidden = true;
     if (!isLiveUser()) {
-      if (title) title.textContent = 'Join to chat';
-      if (sub) sub.textContent = 'Sign in to send and receive direct messages. Guest cannot chat.';
+      if (title) title.textContent = guestCopy().chatTitle;
+      if (sub) sub.textContent = guestCopy().chatSub;
     } else if (!dmConversations.length) {
       if (title) title.textContent = 'No messages yet';
       if (sub) sub.textContent = 'Start a DM from another user\'s profile.';
@@ -4705,7 +4705,7 @@
       } else if (!isLiveUser()) {
         phNew.hidden = false;
         phNew.disabled = false;
-        phNew.textContent = 'Join';
+        phNew.textContent = guestCopy().chatBtn;
       } else if (admin && !threadOpen) {
         phNew.hidden = false;
         phNew.disabled = false;
@@ -4745,8 +4745,8 @@
     }
     if (!isLiveUser()) {
       el.innerHTML = '<div class="soon-panel soon-panel-pad">' +
-        '<strong>Join to chat.</strong>' +
-        '<p>Sign in to send and receive direct messages. Guest cannot chat.</p>' +
+        '<strong>' + escapeHtml(guestCopy().chatTitle) + '.</strong>' +
+        '<p>' + escapeHtml(guestCopy().chatSub) + '</p>' +
         '</div>';
       return;
     }
@@ -5565,8 +5565,34 @@
   function accountsOpen() {
     return !(site && site.accountsOpen === false);
   }
+  // Honest guest copy while accounts are closed (no "Join" dead ends). Flipping accountsOpen restores the Join copy.
+  var INVITE_ONLY = 'Accounts are invite-only right now. Guests can read the room.';
+  function guestCopy() {
+    var open = accountsOpen();
+    return {
+      chatTitle: open ? 'Join to chat' : 'Members only',
+      chatSub: open ? 'Sign in to send and receive direct messages. Guest cannot chat.'
+        : INVITE_ONLY + ' Members sign in to chat.',
+      chatBtn: open ? 'Join' : 'Sign in',
+      profileNote: open ? 'Continue with Google to post about the Grand Prix. Guest is browse-only. Not official F1.'
+        : INVITE_ONLY + ' Members sign in to post. Not official F1.',
+      profileBtn: open ? 'Join' : 'Sign in',
+      porch: open ? 'Pick a side. Posts to this room.' : 'Members pick a side here. ' + INVITE_ONLY
+    };
+  }
   function applyAccountsGate() {
     var note = document.getElementById('cv-accounts-closed');
+    var gc = guestCopy();
+    var pNote = document.querySelector('#profile-signin-prompt p');
+    if (pNote) pNote.textContent = gc.profileNote;
+    var cTitle = document.querySelector('#chat-placeholder .chat-placeholder-title');
+    var cSub = document.querySelector('#chat-placeholder .chat-placeholder-sub');
+    if (cTitle && !isLiveUser()) cTitle.textContent = gc.chatTitle;
+    if (cSub && !isLiveUser()) cSub.textContent = gc.chatSub;
+    var pBtn = document.getElementById('profile-signin-prompt-btn');
+    if (pBtn) pBtn.textContent = gc.profileBtn;
+    var cBtn = document.getElementById('chat-placeholder-new');
+    if (cBtn) cBtn.textContent = gc.chatBtn;
     if (accountsOpen()) { if (note) note.hidden = true; return; }
     document.querySelectorAll('[data-accounts="join"]').forEach(function (el) {
       if (el.parentNode) el.parentNode.removeChild(el);
@@ -5581,11 +5607,7 @@
     });
     var div = document.querySelector('#cv-panel-login .conv-modal-divider');
     if (div && div.parentNode) div.parentNode.removeChild(div);
-    ['profile-signin-prompt-btn', 'chat-placeholder-new'].forEach(function (id) {
-      var b = document.getElementById(id);
-      if (b) b.textContent = 'Sign in';
-    });
-    if (note) note.hidden = false;
+    if (note) { note.textContent = INVITE_ONLY; note.hidden = false; }
   }
   // R2 (CLO 10-16 §2): existing accounts attest 18+ at next sign-in. Under 18: suspend + hide; deletion
   // queued for 30 days. The DOB is never stored. Email notice only if site.json ageAttest.notifyUnder18Email
@@ -6338,7 +6360,7 @@
       const pw = document.getElementById('cv-reg-pw').value || '';
       const age = document.getElementById('cv-reg-age');
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
-      if (!accountsOpen()) { err.textContent = 'Accounts are not open yet.'; err.classList.add('show'); return; }
+      if (!accountsOpen()) { err.textContent = INVITE_ONLY; err.classList.add('show'); return; }
       if (!age || !age.checked) {
         err.textContent = ageGateMessage();
         err.classList.add('show');
@@ -6370,7 +6392,7 @@
     document.getElementById('cv-google-login').addEventListener('click', function () {
       var err = document.getElementById('cv-login-err');
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
-      if (!accountsOpen()) { err.textContent = 'Accounts are not open yet.'; err.classList.add('show'); return; }
+      if (!accountsOpen()) { err.textContent = INVITE_ONLY; err.classList.add('show'); return; }
       var age = document.getElementById('cv-google-age');
       if (!age || !age.checked) {
         err.textContent = ageGateMessage();
