@@ -1,0 +1,142 @@
+# IndexNow: tell Bing / Yandex / Seznam / Naver (and other IndexNow engines) which
+# public gpchat.com pages changed, right after GitHub Pages publishes them.
+#
+# How gpchat.com deploys: GitHub Pages "Deploy from a branch" (main, /), legacy build.
+# There is no deploy workflow in this repo; GitHub runs its own dynamic
+# "pages-build-deployment" run on every push to main. So this workflow triggers on
+# push to main, then WAITS until the Pages build for this commit (or a newer commit
+# that contains it) reports "built" and one changed URL answers 200, then pings.
+#
+# Free, no secrets, no service account: the IndexNow key is public by design and is
+# served at https://gpchat.com/<key>.txt (root file in this repo).
+# A ping failure never fails anything: the job is continue-on-error and the deploy
+# itself is GitHub's own Pages run, which this workflow cannot affect.
+name: IndexNow ping
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: read
+
+concurrency:
+  group: indexnow
+  cancel-in-progress: false
+
+env:
+  INDEXNOW_HOST: gpchat.com
+  INDEXNOW_KEY: 7f8d29189008d288ab04b85925adbc78
+  INDEXNOW_ENDPOINT: https://api.indexnow.org/indexnow
+
+jobs:
+  ping:
+    if: github.repository == 'jebbdykstra99/gpchat'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Work out changed public URLs
+        id: urls
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          base="${BEFORE:-}"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git rev-parse "${AFTER}^" 2>/dev/null || true)"
+          fi
+          if [ -z "$base" ]; then
+            echo "No base commit to diff against; nothing to ping."; echo "count=0" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "Diff: ${base}..${AFTER}"
+          : > urls.txt
+          # Added / modified / renamed-to files only.
+          git diff --name-only --diff-filter=AMR "$base" "$AFTER" | while IFS= read -r f; do
+            case "$f" in
+              *.html) ;;                       # only pages
+              *) continue ;;
+            esac
+            case "/$f" in
+              */_*|*/.*) continue ;;           # Jekyll-ignored / hidden paths are not published
+              /preview-lift/*) continue ;;     # Disallowed in robots.txt
+            esac
+            [ "$f" = "404.html" ] && continue
+            [ -f "$f" ] || continue
+            # Skip pages that still carry a robots noindex meta tag (e.g. report.html).
+            if grep -Eqi '<meta[^>]*name=["'"'"']?robots["'"'"']?[^>]*noindex' "$f"; then
+              echo "skip (noindex): $f"; continue
+            fi
+            case "$f" in
+              index.html) path="/" ;;
+              */index.html) path="/${f%index.html}" ;;
+              *) path="/${f%.html}" ;;
+            esac
+            echo "https://${INDEXNOW_HOST}${path}" >> urls.txt
+          done
+          sort -u urls.txt -o urls.txt
+          # Belt and braces: only our host.
+          grep -E "^https://${INDEXNOW_HOST//./\\.}/" urls.txt > urls.ok || true
+          mv urls.ok urls.txt
+          n=$(wc -l < urls.txt | tr -d ' ')
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+          echo "Changed public URLs ($n):"; cat urls.txt
+
+      - name: Wait for GitHub Pages to publish this commit
+        if: steps.urls.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          deadline=$(( $(date +%s) + 900 ))
+          built=no
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            read -r status commit < <(gh api "repos/${GITHUB_REPOSITORY}/pages/builds/latest" \
+              --jq '"\(.status) \(.commit)"' 2>/dev/null || echo "unknown none")
+            echo "Pages latest build: status=${status} commit=${commit}"
+            if [ "$status" = "built" ] && { [ "$commit" = "$SHA" ] || \
+                 { git fetch -q origin main && git merge-base --is-ancestor "$SHA" "$commit" 2>/dev/null; }; }; then
+              built=yes; break
+            fi
+            if [ "$status" = "errored" ] && [ "$commit" = "$SHA" ]; then
+              echo "Pages build errored for this commit; not pinging."; exit 1
+            fi
+            sleep 20
+          done
+          [ "$built" = yes ] || echo "::warning::Pages build status not confirmed in 15 min; falling back to URL check."
+          # Wait for one changed URL to answer 200 (CDN can lag the build).
+          first="$(head -n1 urls.txt)"
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -L "$first" || echo 000)
+            echo "GET $first -> $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 20
+          done
+          echo "$first never returned 200; not pinging."; exit 1
+
+      - name: Ping IndexNow
+        if: steps.urls.outputs.count != '0'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          body=$(jq -n --arg host "$INDEXNOW_HOST" --arg key "$INDEXNOW_KEY" \
+            --arg loc "https://${INDEXNOW_HOST}/${INDEXNOW_KEY}.txt" \
+            --rawfile urls urls.txt \
+            '{host:$host, key:$key, keyLocation:$loc, urlList:($urls|split("\n")|map(select(length>0)))}')
+          echo "$body"
+          code=$(curl -sS -o resp.txt -w '%{http_code}' -X POST "$INDEXNOW_ENDPOINT" \
+            -H 'Content-Type: application/json; charset=utf-8' --data "$body" || echo 000)
+          echo "IndexNow HTTP $code"; cat resp.txt 2>/dev/null || true; echo
+          case "$code" in
+            200|202) echo "IndexNow accepted the URL list." ;;
+            *) echo "::warning::IndexNow returned HTTP $code (ping is best-effort; deploy unaffected)."; exit 1 ;;
+          esac
