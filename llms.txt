@@ -1,6 +1,6 @@
 # gpchat
 
-> gpchat is a community room for Grand Prix and motorsport talk, part of the SubX family. It is in public beta and open to search indexing. Accounts are invite-only.
+> gpchat is a community room for Grand Prix and motorsport talk, part of the SubX family. It is in public beta and open to search indexing. Accounts are open to people 18 and older.
 
 ## Agent and crawler policy
 - Search engines and the AI search/answer fetchers named in robots.txt may access public pages for indexing and citation. AI training crawlers are disallowed in robots.txt. Please honor it. This file grants no access that robots.txt denies.
