@@ -2968,7 +2968,9 @@
       var empty = nestView
         ? (nestScanCapped
           ? ('Posts in ' + (currentNest.label || currentNest.slug) + ' could not be reached yet. The nest index is not built, and the fallback scan stopped after ' + NEST_SCAN_CAP + ' newer posts. This is not an empty room.')
-          : ('No posts in ' + (currentNest.label || currentNest.slug) + ' yet. This nest is live at /' + currentNest.slug + '. Sign in to post the first take.'))
+          : (isLiveUser()
+            ? ('No posts in ' + (currentNest.label || currentNest.slug) + ' yet. Write the first take in the box above.')
+            : ('No posts in ' + (currentNest.label || currentNest.slug) + ' yet. This nest is live at /' + currentNest.slug + '. Sign in to post the first take.')))
         : ((site && site.emptyState) || 'This room is empty. Sign in to post. Guest can browse only.');
       el.innerHTML = '<div class="post-empty">' + escapeHtml(empty) + '</div>';
       refreshPorchUi();
@@ -4665,7 +4667,7 @@
       if (sub) sub.textContent = 'Sign in to send and receive direct messages. Guest cannot chat.';
     } else if (!dmConversations.length) {
       if (title) title.textContent = 'No messages yet';
-      if (sub) sub.textContent = 'Start a DM from another user\'s profile.';
+      if (sub) sub.textContent = 'Messages you receive show up here.';
     } else {
       if (title) title.textContent = 'Chat';
       if (sub) sub.textContent = 'Pick a conversation.';
@@ -5112,7 +5114,7 @@
     paintProfile(
       currentUser.name,
       currentUser.handle,
-      currentUser.bio || "Talking about the city.",
+      currentUser.bio || "Nothing but Grand Prix.",
       currentUser.uid
     );
     syncFollowButton();
