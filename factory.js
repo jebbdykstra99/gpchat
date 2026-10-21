@@ -5593,13 +5593,102 @@
   // queued for 30 days. The DOB is never stored. Email notice only if site.json ageAttest.notifyUnder18Email
   // is true (default false; Jebb decision R2-email).
   function ageAttestCfg() { return (site && site.ageAttest) || {}; }
+  // Set only after the Join form (18+ checkbox and an adult DOB) passes, immediately
+  // before this browser's Google popup or redirect. Survives the Safari redirect reload.
+  // While it is set, skip the legacy "is now 18+" dialog and finish the signup write.
+  var JOIN_ATTEST_MS = 30 * 60 * 1000;
+  var googleSignupWrite = null;
+  function joinAttestKey() { return 'subx.joinAttested.' + SITE_ID; }
+  function markJoinAttested() {
+    try { sessionStorage.setItem(joinAttestKey(), String(Date.now())); } catch (e) {}
+  }
+  function clearJoinAttested() {
+    try { sessionStorage.removeItem(joinAttestKey()); } catch (e) {}
+  }
+  function joinAttestedThisSignIn() {
+    try {
+      var t = parseInt(sessionStorage.getItem(joinAttestKey()), 10);
+      return isFinite(t) && Date.now() - t < JOIN_ATTEST_MS;
+    } catch (e) { return false; }
+  }
+  function surfaceSignupWriteError(e) {
+    try { if (e && typeof e === 'object') e.__signupSurfaced = true; } catch (err) {}
+    var detail = (e && e.code) ? String(e.code) : ((e && e.message) ? String(e.message) : '');
+    if (detail.length > 180) detail = detail.slice(0, 180);
+    var msg = 'Could not finish creating your account. Refresh the page to try again.';
+    if (detail) msg += ' (' + detail + ')';
+    try { composeErr(msg); } catch (err2) {}
+    var el = document.getElementById('cv-login-err');
+    if (el) { el.textContent = msg; el.classList.add('show'); }
+    try { openAuth('join'); } catch (err3) {}
+  }
+  // One in-flight write shared by the age gate and the popup/redirect handler, so
+  // auth state firing first cannot race a second write or a second dialog.
+  function commitGoogleSignup(user) {
+    if (!user) return Promise.resolve();
+    if (googleSignupWrite) return googleSignupWrite;
+    if (!fbDb) {
+      var missing = new Error('Feed is not connected.');
+      surfaceSignupWriteError(missing);
+      return Promise.reject(missing);
+    }
+    var ref = fbDb.collection('users').doc(user.uid);
+    function attempt() {
+      return ref.get().then(function (snap) {
+        var d = (snap && snap.exists && snap.data()) || {};
+        if (d.suspended === true) {
+          var suspended = new Error('This account is suspended.');
+          suspended.__suspended = true;
+          suspended.suspendedReason = d.suspendedReason;
+          throw suspended;
+        }
+        var extra = { provider: 'google' };
+        if (!(snap && snap.exists)) extra.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        return ensurePublicProfile(user, '', withAgeConfirmed(extra));
+      });
+    }
+    var settled;
+    settled = attempt().catch(function (e) {
+      if (e && e.__suspended) throw e;
+      return attempt();
+    }).then(function () {
+      clearJoinAttested();
+      if (googleSignupWrite === settled) googleSignupWrite = null;
+    }).catch(function (e) {
+      if (googleSignupWrite === settled) googleSignupWrite = null;
+      if (e && e.__suspended) {
+        clearJoinAttested();
+        throw e;
+      }
+      surfaceSignupWriteError(e);
+      throw e;
+    });
+    googleSignupWrite = settled;
+    return settled;
+  }
+  function finishJoinAttestedSignup(user) {
+    return commitGoogleSignup(user).then(function () { return true; }).catch(function (e) {
+      if (e && e.__suspended) showSuspended(e.suspendedReason);
+      return false;
+    });
+  }
   function runAgeAttestGate(user) {
     if (!fbDb || !user || ageAttestCfg().enabled === false || isAdminUser()) return Promise.resolve(true);
     var ref = fbDb.collection('users').doc(user.uid);
     return ref.get().then(function (snap) {
       var d = (snap && snap.exists && snap.data()) || {};
-      if (d.suspended === true) { showSuspended(d.suspendedReason); return false; }
-      if (d.ageAttested18 === true) return true;
+      if (d.suspended === true) {
+        clearJoinAttested();
+        showSuspended(d.suspendedReason);
+        return false;
+      }
+      if (d.ageAttested18 === true) {
+        clearJoinAttested();
+        return true;
+      }
+      // Join already collected an adult DOB in this browser. Do not ask again,
+      // even when this read lands before the signup write.
+      if (joinAttestedThisSignIn()) return finishJoinAttestedSignup(user);
       return promptAgeAttest().then(function (age) {
         if (age >= 18) {
           return ref.set({ siteId: SITE_ID, ageAttested18: true, ageConfirmed: true,
@@ -5612,7 +5701,11 @@
         if (ageAttestCfg().notifyUnder18Email === true) patch.notifyUnder18Email = true;   // OFF by default
         return ref.set(patch, { merge: true }).then(function () { showSuspended('under18'); return false; });
       });
-    }).catch(function (e) { console.warn('age attest', e); return true; });
+    }).catch(function (e) {
+      console.warn('age attest', e);
+      if (joinAttestedThisSignIn()) return finishJoinAttestedSignup(user);
+      return true;
+    });
   }
   function promptAgeAttest() {
     return new Promise(function (resolve) {
@@ -6371,8 +6464,13 @@
     });
     document.getElementById('cv-google-login').addEventListener('click', function () {
       var err = document.getElementById('cv-login-err');
+      var btn = document.getElementById('cv-google-login');
+      // This handler is the Join Google button (data-accounts="join"). Email
+      // "Sign In" is cv-login-btn and never calls markJoinAttested. Gate the
+      // marker on Join mode plus the 18+ checkbox and an adult DOB.
+      var joinMode = !!(accountsOpen() && btn && btn.getAttribute('data-accounts') === 'join');
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
-      if (!accountsOpen()) { err.textContent = 'Accounts are not open yet.'; err.classList.add('show'); return; }
+      if (!joinMode) { err.textContent = 'Accounts are not open yet.'; err.classList.add('show'); return; }
       var age = document.getElementById('cv-google-age');
       if (!age || !age.checked) {
         err.textContent = ageGateMessage();
@@ -6385,18 +6483,15 @@
       err.textContent = '';
       err.classList.remove('show');
       markAuthLand();
+      if (joinMode && age.checked && !gDobErr) markJoinAttested();
       var provider = new firebase.auth.GoogleAuthProvider();
       var ua = navigator.userAgent || '';
       var isiOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
       var isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS|Android/i.test(ua);
       function finishGoogle(cred) {
-        var u = cred && cred.user;
-        if (fbDb && u) {
-          return ensurePublicProfile(u, '', withAgeConfirmed({
-            provider: 'google',
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          }));
-        }
+        var u = (cred && cred.user) || (fbAuth && fbAuth.currentUser);
+        if (!u) { clearJoinAttested(); return; }
+        return commitGoogleSignup(u);
       }
       function failGoogle(e) {
         var msg;
@@ -6410,13 +6505,21 @@
         err.textContent = msg;
         err.classList.add('show');
       }
+      function redirectGoogle() {
+        return fbAuth.signInWithRedirect(provider).catch(function (e) {
+          clearJoinAttested();
+          failGoogle(e);
+        });
+      }
       if (isiOS || isSafari) {
-        fbAuth.signInWithRedirect(provider).catch(failGoogle);
+        redirectGoogle();
       } else {
         fbAuth.signInWithPopup(provider).then(finishGoogle).catch(function (e) {
+          if (e && (e.__signupSurfaced || e.__suspended)) return;
           if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request')) {
-            return fbAuth.signInWithRedirect(provider);
+            return redirectGoogle();
           }
+          clearJoinAttested();
           failGoogle(e);
         });
       }
@@ -7304,13 +7407,16 @@
     if (fbAuth) {
       fbAuth.getRedirectResult().then(function (cred) {
         var u = cred && cred.user;
-        if (fbDb && u) {
-          return ensurePublicProfile(u, '', withAgeConfirmed({
-            provider: 'google',
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-          }));
-        }
-      }).catch(function () {});
+        if (u) return commitGoogleSignup(u);
+      }).catch(function (e) {
+        if (e && (e.__signupSurfaced || e.__suspended)) return;
+        clearJoinAttested();
+        var msg = (e && e.message) ? e.message : 'Google sign-in failed.';
+        var el = document.getElementById('cv-login-err');
+        if (el) { el.textContent = msg; el.classList.add('show'); }
+        try { composeErr(msg); } catch (err) {}
+        try { openAuth('join'); } catch (err2) {}
+      });
       fbAuth.onAuthStateChanged(function (user) {
         if (user) runAgeAttestGate(user).then(function (ok) { if (ok) applyFbUser(user); });
         else {
