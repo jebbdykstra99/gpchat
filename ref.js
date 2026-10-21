@@ -4,6 +4,7 @@
    origin + pathname only, omitted when missing or same-origin. */
 (function () {
   var REF_RE = /^[a-z0-9_-]{1,32}$/;
+  var UTM_RE = /^[A-Za-z0-9._-]{1,64}$/;
   var SESSION_KEY = 'subx.ref';
   var FIRST_KEY = 'subx.ref.first';
   var UTM_KEY = 'subx.utm_source';
@@ -29,8 +30,8 @@
     }
   }
 
-  var utmIn = String(param('utm_source') || '').replace(/^\s+|\s+$/g, '').slice(0, 64);
-  if (utmIn && !getStore(window.sessionStorage, UTM_KEY)) {
+  var utmIn = String(param('utm_source') || '').replace(/^\s+|\s+$/g, '');
+  if (UTM_RE.test(utmIn) && !getStore(window.sessionStorage, UTM_KEY)) {
     setStore(window.sessionStorage, UTM_KEY, utmIn);
   }
 
@@ -54,7 +55,8 @@
 
   var ref = getStore(window.sessionStorage, SESSION_KEY);
   if (!REF_RE.test(ref)) ref = '';
-  var utm = getStore(window.sessionStorage, UTM_KEY).replace(/^\s+|\s+$/g, '').slice(0, 64);
+  var utm = getStore(window.sessionStorage, UTM_KEY).replace(/^\s+|\s+$/g, '');
+  if (!UTM_RE.test(utm)) utm = '';
   var referrer = externalReferrer(getStore(window.sessionStorage, REFERRER_KEY));
 
   function hasParam(url, key) {
