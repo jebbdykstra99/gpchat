@@ -5146,9 +5146,9 @@
         av.style.background = colorFor(currentUser.handle || 'guest');
       }
     } else {
-      el.innerHTML = '<button class="sidebar-auth-btn primary" id="auth-signin" type="button">Sign in</button>';
+      el.innerHTML = '<button class="sidebar-auth-btn primary" id="auth-signin" type="button">' + (accountsOpen() ? 'Join' : 'Sign in') + '</button>';
       if (av) {
-        av.textContent = "415";
+        av.textContent = String((site && site.name) || 'GP').slice(0, 2).toUpperCase();
         av.style.background = '';
       }
     }

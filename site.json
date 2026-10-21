@@ -818,7 +818,7 @@
   "v": 1,
   "cacheBust": 1,
   "images": false,
-  "accountsOpen": false,
+  "accountsOpen": true,
   "ageAttest": {
     "enabled": true,
     "notifyUnder18Email": false
