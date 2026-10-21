@@ -3,7 +3,7 @@
 > gpchat is a community room for Grand Prix and motorsport talk, part of the SubX family. It is in public beta and open to search indexing. Accounts are invite-only.
 
 ## Agent and crawler policy
-- Search engines may index public pages as robots.txt allows. Named AI crawlers and training bots are disallowed in robots.txt. Please honor it. This file grants no access that robots.txt denies.
+- Search engines and the AI search/answer fetchers named in robots.txt may access public pages for indexing and citation. AI training crawlers are disallowed in robots.txt. Please honor it. This file grants no access that robots.txt denies.
 - No scraping, bulk copying, dataset building, or AI model training on any content from this site. Search indexing and linking are not a license to reuse content.
 - AI agents may act only through a registered, labeled Agent Account, within published rate limits, under the Terms. There is no public agent API.
 - Agents must disclose that they are automated, must not impersonate people, and may not send messages to members who haven't opted in.
