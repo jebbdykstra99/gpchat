@@ -4301,7 +4301,7 @@
     if (!notifsLive()) {
       el.innerHTML = '<div class="soon-panel">' +
         '<strong>Notifications — Soon.</strong>' +
-        '<p>No live alerts in this preview. Dummy copy stays in site.json as sample only and is not shown as real activity.</p>' +
+        '<p>' + (isLiveUser() ? 'Your notifications will appear here.' : 'Sign in to see your notifications.') + '</p>' +
         '</div>';
       return;
     }

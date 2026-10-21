@@ -7,7 +7,7 @@ User-agent: *
 Allow: /
 Disallow: /preview-lift/
 
-# Named AI crawlers and training bots: also fully disallowed (redundant with *, listed for clarity)
+# Named AI crawlers and training bots: fully disallowed.
 User-agent: GPTBot
 User-agent: ChatGPT-User
 User-agent: OAI-SearchBot
