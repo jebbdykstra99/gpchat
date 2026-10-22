@@ -1025,8 +1025,8 @@
         '<img class="share-sheet-preview" id="share-sheet-preview" alt="" hidden>' +
         '<h3>Share</h3>' +
         '<button type="button" data-share="copy">Copy link</button>' +
-        '<button type="button" data-share="x">Post on X</button>' +
-        '<button type="button" data-share="reddit">Post on Reddit</button>' +
+        '<button type="button" data-share="x">Share to x.com</button>' +
+        '<button type="button" data-share="reddit">Share to Reddit</button>' +
         '<button type="button" class="share-cancel" data-share="close">Cancel</button>' +
       '</div>';
     document.body.appendChild(ov);
@@ -1054,7 +1054,7 @@
         return;
       }
       if (act === 'x') {
-        var xUrl = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(slice) +
+        var xUrl = 'https://x.com/intent/post?text=' + encodeURIComponent(slice) +
           '&url=' + encodeURIComponent(permalink);
         window.open(xUrl, '_blank', 'noopener,noreferrer');
         closeShareSheet();
