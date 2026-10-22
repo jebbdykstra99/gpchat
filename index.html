@@ -23,6 +23,16 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css?v=18">
   <link rel="preload" href="site.json?v=61" as="fetch" crossorigin="anonymous">
+  <style>
+    .race-strip{padding:.7rem 1.3rem .65rem;border-bottom:1px solid var(--border);background:var(--surface);font-size:.82rem;line-height:1.45;color:var(--text-muted)}
+    .race-strip a{color:var(--text);text-decoration:none}
+    .race-strip a:hover{color:var(--accent);text-decoration:underline}
+    .race-strip .race-strip-hub{font-weight:600}
+    .race-strip .race-strip-hub span{color:var(--accent)}
+    .race-strip-more{margin-top:.25rem}
+    .race-strip-more strong{color:var(--text-muted);font-weight:600}
+    @media (max-width:900px){.race-strip{padding-left:3.8rem}}
+  </style>
 </head>
 <body>
 <div class="preview-banner" role="status">Beta: early and a bit unfinished. Not official F1.</div>
@@ -147,6 +157,10 @@
 <main class="main">
 
   <section class="page active" id="page-thoughts">
+    <nav class="race-strip" aria-label="Race weekend">
+      <a class="race-strip-hub" href="/us-grand-prix">United States Grand Prix, Austin: race weekend hub <span aria-hidden="true">&rarr;</span></a>
+      <div class="race-strip-more"><strong>More for race weekend:</strong> <a href="/us-grand-prix-race-time">Race time</a> &middot; <a href="/us-grand-prix-qualifying-time">Qualifying time</a> &middot; <a href="/us-grand-prix-practice-times">Practice times</a> &middot; <a href="/articles/usgp-austin-2026-pre-race/">Pre-race preview</a></div>
+    </nav>
     <div class="thoughts-tabs" role="tablist">
       <button class="thoughts-tab active" data-thoughts-tab="foryou" role="tab">For You</button>
       <button class="thoughts-tab" data-thoughts-tab="following" role="tab">Following <span class="tab-soon">Soon</span></button>
