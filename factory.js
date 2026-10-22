@@ -118,13 +118,60 @@
       renderReports();
     }, function () {});
   }
-  function pickReportReason() {
-    if (typeof window === 'undefined' || typeof window.prompt !== 'function') return 'ncii';
-    var r = window.prompt('Report reason (1-5):\n1=NCII (auto-hide)\n2=Copyright (auto-hide)\n3=Violent/offensive (auto-hide)\n4=Hate/harassment (auto-hide)\n5=Other abuse/spam', '1');
-    if (r === null) return '';
-    var m = { '1': 'ncii', '2': 'copyright', '3': 'violent_offensive', '4': 'hate', '5': 'abuse' };
-    var s = String(r || '').trim().toLowerCase();
-    return m[s] || (HIDE_REASONS[s] || s === 'abuse' ? s : 'ncii');
+  function pickReportReason(done) {
+    if (pickReportReason._open) return;
+    pickReportReason._open = true;
+    var ov = document.createElement('div'), box = document.createElement('div'), h = document.createElement('h2'), note = document.createElement('p'), more = document.createElement('p'), a = document.createElement('a');
+    ov.className = 'conv-modal-overlay open';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.setAttribute('aria-label', 'Report');
+    box.className = 'conv-modal';
+    h.textContent = 'Report';
+    note.className = 'conv-modal-note';
+    note.textContent = 'Why are you reporting this?';
+    box.appendChild(h);
+    box.appendChild(note);
+    function onKey(e) { if (e && e.key === 'Escape') { if (e.preventDefault) e.preventDefault(); close(null); } }
+    function close(reason) {
+      if (!pickReportReason._open) return;
+      pickReportReason._open = false;
+      document.removeEventListener('keydown', onKey, true);
+      if (ov.parentNode) ov.parentNode.removeChild(ov);
+      if (done) done(reason || null);
+    }
+    function btn(label, cls, reason) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = cls;
+      if (reason) b.setAttribute('data-reason', reason);
+      b.textContent = label;
+      b.addEventListener('click', function () { close(reason); });
+      box.appendChild(b);
+      return b;
+    }
+    var opts = [
+      { code: 'ncii', label: 'Intimate image without consent' },
+      { code: 'copyright', label: 'Copyright or trademark (DMCA)' },
+      { code: 'violent_offensive', label: 'Violent or graphic image' },
+      { code: 'hate', label: 'Hateful or racist image' },
+      { code: 'other', label: 'Other abuse or rule-breaking' }
+    ];
+    var first = null;
+    opts.forEach(function (o, i) { var b = btn(o.label, 'conv-modal-submit', o.code); if (!i) first = b; });
+    btn('Cancel', 'conv-guest-btn', null);
+    more.className = 'conv-modal-note';
+    a.href = 'report.html';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = 'How reports work, and how to send a removal request';
+    more.appendChild(a);
+    box.appendChild(more);
+    ov.addEventListener('click', function (e) { if (e && e.target === ov) close(null); });
+    document.addEventListener('keydown', onKey, true);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+    try { if (first) first.focus(); } catch (e) {}
   }
   function commitAutoHideReport(postId, targetUid, storyId, reason, fallbackAdd) {
     var me = liveUid(), rRef = fbDb.collection('reports').doc(), ts = firebase.firestore.FieldValue.serverTimestamp();
@@ -135,7 +182,8 @@
     if (typeof renderStoriesTray === 'function') renderStoriesTray();
     var b = fbDb.batch();
     b.set(rRef, rDoc);
-    b.set(fbDb.collection('hides').doc(SITE_ID + '_' + postId), { siteId: SITE_ID, postId: postId, reportId: rRef.id, reporterUid: me, reason: reason, hiddenAt: ts });
+    b.set(fbDb.collection('hides').doc(SITE_ID + '_' + postId), { siteId: SITE_ID, postId: postId, reportId: rRef.id, reporterUid: me, createdAt: ts });
+    b.set(fbDb.collection('rateLimits').doc(me), { lastHideAt: ts }, { merge: true });
     return b.commit().catch(function (e) {
       if (isPermDenied(e) && fallbackAdd) return fallbackAdd();
       throw e;
@@ -725,7 +773,7 @@
       var isHid = !!(hiddenIds[r.postId] || HIDE_REASONS[r.reason]);
       var post = isHid ? null : findPost(r.postId);
       var snippet = isHid ? ('[Hidden — ' + (r.reason || 'reported') + ' · ' + r.postId + ']') :
-        ((post && post.text) ? String(post.text).replace(/\s+/g, ' ').trim().slice(0, 180) : '(post unavailable)');
+        ((post && post.text) ? String(post.text).replace(/\s+/g, ' ').trim().slice(0, 180) : '(post not loaded)');
       var count = reporterCount(r.postId);
       var rest = isHid ? '<button type="button" class="post-action" data-report-restore="' + escapeHtml(r.postId) + '" data-report-id="' + escapeHtml(r.id) + '">Restore</button> ' : '';
       return '<div class="notif-item"' + (isHid ? ' style="opacity:0.65"' : '') + '>' +
@@ -1249,28 +1297,31 @@
     var post = findPost(id);
     if (!post || !fbDb || isSessionSeedPost(post)) return;
     if (alreadyReported(id)) { toast('You already reported this post.'); return; }
-    var reason = optReason || pickReportReason();
-    if (!reason) return;
-    var me = liveUid();
-    var addOnly = function () {
-      return fbDb.collection('reports').add({
-        siteId: SITE_ID,
-        postId: id,
-        targetUid: post.authorUid || '',
-        reporterUid: me,
-        reason: reason,
-        status: 'open',
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    function go(reason) {
+      if (!reason) return;
+      var me = liveUid();
+      var addOnly = function () {
+        return fbDb.collection('reports').add({
+          siteId: SITE_ID,
+          postId: id,
+          targetUid: post.authorUid || '',
+          reporterUid: me,
+          reason: reason,
+          status: 'open',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      };
+      var op = (HIDE_REASONS[reason] || isAdminUser()) ? commitAutoHideReport(id, post.authorUid || '', '', reason, addOnly) : addOnly();
+      op.then(function () {
+        markReported(id);
+        toast(HIDE_REASONS[reason] ? 'Reported and hidden pending review.' : 'Reported. Thanks.');
+        writeReportAlert(post, me, reason);
+      }).catch(function (e) {
+        toast(reportErr(e));
       });
-    };
-    var op = (HIDE_REASONS[reason] || isAdminUser()) ? commitAutoHideReport(id, post.authorUid || '', '', reason, addOnly) : addOnly();
-    op.then(function () {
-      markReported(id);
-      toast(HIDE_REASONS[reason] ? 'Reported and hidden pending review.' : 'Reported. Thanks.');
-      writeReportAlert(post, me, reason);
-    }).catch(function (e) {
-      toast(reportErr(e));
-    });
+    }
+    if (optReason) { go(optReason); return; }
+    pickReportReason(go);
   }
   function blockUser(uid) {
     if (!requireVerified('block')) return;
@@ -7298,28 +7349,31 @@
     if (!requireVerified('report')) return;
     var story = findStory(id);
     if (!story || !fbDb) return;
-    var reason = optReason || pickReportReason();
-    if (!reason) return;
-    var me = liveUid(), pid = 'story:' + id;
-    var addOnly = function () {
-      return fbDb.collection('reports').add({
-        siteId: SITE_ID,
-        storyId: id,
-        postId: pid,
-        targetUid: story.authorUid || '',
-        reporterUid: me,
-        reason: reason,
-        status: 'open',
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    function go(reason) {
+      if (!reason) return;
+      var me = liveUid(), pid = 'story:' + id;
+      var addOnly = function () {
+        return fbDb.collection('reports').add({
+          siteId: SITE_ID,
+          storyId: id,
+          postId: pid,
+          targetUid: story.authorUid || '',
+          reporterUid: me,
+          reason: reason,
+          status: 'open',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      };
+      var op = (HIDE_REASONS[reason] || isAdminUser()) ? commitAutoHideReport(pid, story.authorUid || '', id, reason, addOnly) : addOnly();
+      op.then(function () {
+        toast(HIDE_REASONS[reason] ? 'Reported and hidden pending review.' : 'Reported. Thanks.');
+        writeReportAlert({ id: pid, text: story.text || '' }, me, reason);
+      }).catch(function (e) {
+        toast(reportErr(e));
       });
-    };
-    var op = (HIDE_REASONS[reason] || isAdminUser()) ? commitAutoHideReport(pid, story.authorUid || '', id, reason, addOnly) : addOnly();
-    op.then(function () {
-      toast(HIDE_REASONS[reason] ? 'Reported and hidden pending review.' : 'Reported. Thanks.');
-      writeReportAlert({ id: pid, text: story.text || '' }, me, reason);
-    }).catch(function (e) {
-      toast(reportErr(e));
-    });
+    }
+    if (optReason) { go(optReason); return; }
+    pickReportReason(go);
   }
   function deleteOwnStory(id) {
     var story = findStory(id);
