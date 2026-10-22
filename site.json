@@ -823,5 +823,8 @@
     "enabled": true,
     "notifyUnder18Email": false
   },
-  "termsVersion": "1.1"
+  "termsVersion": "1.1",
+  "skin": {
+    "avatarInitials": "GP"
+  }
 }

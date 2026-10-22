@@ -5150,7 +5150,7 @@
     } else {
       el.innerHTML = '<button class="sidebar-auth-btn primary" id="auth-signin" type="button">Sign in</button>';
       if (av) {
-        av.textContent = "415";
+        av.textContent = (site && site.skin && typeof site.skin.avatarInitials === 'string' && site.skin.avatarInitials) || 'GP';
         av.style.background = '';
       }
     }
@@ -5337,7 +5337,7 @@
     var draft = peekCompose();
     currentUser = {
       name: name || 'Guest',
-      handle: (handle || 'guest415').replace(/^@/, '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'guest415',
+      handle: (handle || 'guestgp').replace(/^@/, '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 15) || 'guestgp',
       bio: "San Francisco, talking.",
       live: false
     };
@@ -6524,7 +6524,7 @@
         });
       }
     });
-    document.getElementById('cv-guest-login').addEventListener('click', function () { stubSignIn('Guest', 'guest415'); });
+    document.getElementById('cv-guest-login').addEventListener('click', function () { stubSignIn('Guest', 'guestgp'); });
 
     const search = document.getElementById('explore-search-input');
     search.addEventListener('input', function () {
@@ -6536,7 +6536,7 @@
         });
       }
       function cards(list) {
-        if (!list.length) return '<p class="empty-note">Nothing in the 415 matched that.</p>';
+        if (!list.length) return '<p class="empty-note">Nothing in ' + escapeHtml((site && site.name) || 'gpchat') + ' matched that.</p>';
         return list.map(function (c) {
           return '<article class="explore-card"><div class="explore-card-tag">' + escapeHtml(c.tag) +
             '</div><div class="explore-card-title">' + escapeHtml(c.title) +
