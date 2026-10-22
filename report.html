@@ -12,15 +12,18 @@
   <article class="legal-doc">
     <p class="legal-kicker">Report / takedown request · Effective October 18, 2026</p>
     <h1>Report content or request a takedown on gpchat</h1>
-    <!-- CTO (before lift): this page is a static shell with mailto links only. There is NO backend.
-         Wire up (1) a report endpoint or form (Firestore `reports` doc or Cloud Function) for the NCII
-         and illegal-content paths, keeping the 4 required NCII elements as fields; (2) alerting to Jebb
-         on every new report and every email to the subjects below (preview-lift/report-alert/);
-         (3) the 48-hour NCII clock log (NCII_CSAM_PROCEDURE.md section 5). If a form ships, add
-         "the form on this page or" before the email address in the NCII section. Never accept
-         image uploads on this page. NCMEC links verified Oct 10, 2026 on missingkids.org. -->
-    <p>Use this page to tell us about content that breaks the law or our Terms. You don’t need an account. A person at SubX (operated by Jebb Dykstra) reviews every request; AI stewards don’t make these decisions.</p>
+    <p>Use this page to tell us about content that breaks the law or our Terms. You don’t need an account. When a report comes in, we may hide the reported content right away while we review it. A person decides whether hidden content is restored, and makes the final decision before we suspend an account. AI stewards don’t make these decisions.</p>
     <p><strong>Someone in danger right now?</strong> Call 911 or your local emergency number first.</p>
+
+    <h2>How we handle reports: remove first</h2>
+    <p>When someone reports content in one of the categories below—or when we spot a likely problem ourselves—we may hide it right away while we review it:</p>
+    <ul>
+      <li><strong>Intimate image without consent</strong> (real or realistic AI-made/edited)</li>
+      <li><strong>Copyright infringement</strong> (DMCA)</li>
+      <li><strong>Violent, gory or offensive image</strong></li>
+      <li><strong>Hateful or racist image</strong></li>
+    </ul>
+    <p>Hiding a post takes it out of public view while a person at SubX looks at the report. A person decides whether hidden content is restored, and makes the final decision before we suspend an account. AI stewards may flag and sort reports, never clear them.</p>
 
     <h2>An intimate image or video of me was posted without my consent</h2>
     <p>This includes real photos and videos and realistic AI-made or edited images. Send us:</p>
@@ -30,24 +33,25 @@
       <li>a short statement that you believe in good faith it was posted without your consent, plus anything that helps us confirm that; and</li>
       <li>how to reach you (an email address is fine).</li>
     </ol>
-    <p>Please don’t send us a copy of the image. <strong>We remove valid requests within 48 hours,</strong> and we look for and remove known identical copies on our sites. We won’t tell the person who posted it who you are.<br>
-    <strong>Send to:</strong> <a href="mailto:jebb@techsectorlaw.com">jebb@techsectorlaw.com</a>, subject <a href="mailto:jebb@techsectorlaw.com?subject=NCII%20removal%20request%20%E2%80%94%20gpchat">“NCII removal request — gpchat”</a>.</p>
+    <p>Please don’t send us a copy of the image. <strong>We review reports and act on them as quickly as we can. If you report an intimate image of you shared without your consent, we will remove it, and any identical copies we know about, within 48 hours of receiving a valid request.</strong> We won’t tell the person who posted it who you are.<br>
+    <strong>Send to:</strong> <a data-takedown href="mailto:takedown@subx.it">takedown@subx.it</a>, subject <a data-takedown href="mailto:takedown@subx.it?subject=NCII%20removal%20request%20%E2%80%94%20gpchat">“NCII removal request — gpchat”</a>.</p>
 
     <h2>Content that may involve a child</h2>
-    <p>Report it here or with the Report button. Give us the link only. <strong>Don’t download, screenshot, or send the image.</strong> We remove it, report it to the National Center for Missing &amp; Exploited Children as federal law requires, and preserve evidence for law enforcement. You can also report directly to NCMEC’s CyberTipline (<a href="https://www.missingkids.org/gethelpnow/cybertipline">missingkids.org/gethelpnow/cybertipline</a>) at <a href="https://report.cybertip.org/">report.cybertip.org</a> or 1-800-843-5678.</p>
+    <p>Report it by email to <a data-takedown href="mailto:takedown@subx.it">takedown@subx.it</a> or with the Report button. Give us the link only. <strong>Don’t download, screenshot, or send the image.</strong> We remove it, report it to the National Center for Missing &amp; Exploited Children as federal law requires, and preserve evidence for law enforcement. You can also report directly to NCMEC’s CyberTipline (<a href="https://www.missingkids.org/gethelpnow/cybertipline">missingkids.org/gethelpnow/cybertipline</a>) at <a href="https://report.cybertip.org/">report.cybertip.org</a> or 1-800-843-5678.</p>
 
     <h2>Other illegal content, threats, or posting someone’s private information</h2>
-    <p>Send the link and a short explanation to <a href="mailto:jebb@techsectorlaw.com">jebb@techsectorlaw.com</a>, subject <a href="mailto:jebb@techsectorlaw.com?subject=Illegal%20content%20report%20%E2%80%94%20gpchat">“Illegal content report — gpchat”</a>.</p>
+    <p>Send the link and a short explanation to <a data-takedown href="mailto:takedown@subx.it">takedown@subx.it</a>, subject <a data-takedown href="mailto:takedown@subx.it?subject=Illegal%20content%20report%20%E2%80%94%20gpchat">“Illegal content report — gpchat”</a>.</p>
 
     <h2>Copyright</h2>
     <p>Follow the DMCA steps in section 12 of our <a href="terms.html">Terms of Service</a>. Notices go to our designated agent listed there.</p>
     <p>Submitting a request you know is false may violate our Terms and the law.</p>
 
     <h2>Privacy or account deletion</h2>
-    <p>See our <a href="privacy.html">Privacy Policy</a>, or email <a href="mailto:jebb@techsectorlaw.com">jebb@techsectorlaw.com</a>, subject <a href="mailto:jebb@techsectorlaw.com?subject=Privacy%20request%20%E2%80%94%20gpchat">“Privacy request — gpchat”</a> or <a href="mailto:jebb@techsectorlaw.com?subject=Delete%20my%20account%20%E2%80%94%20gpchat">“Delete my account — gpchat”</a>.</p>
-    <p><strong>Contact:</strong> SubX (operated by Jebb Dykstra) · 3019 Ocean Park Boulevard, #193, Santa Monica, CA 90405, USA · <a href="mailto:jebb@techsectorlaw.com">jebb@techsectorlaw.com</a> · +1-650-539-5005. Tech Sector Law is counsel for Operator and is not the operator of the Service.</p>
+    <p>See our <a href="privacy.html">Privacy Policy</a>, or email <a data-takedown href="mailto:takedown@subx.it">takedown@subx.it</a>, subject <a data-takedown href="mailto:takedown@subx.it?subject=Privacy%20request%20%E2%80%94%20gpchat">“Privacy request — gpchat”</a> or <a data-takedown href="mailto:takedown@subx.it?subject=Delete%20my%20account%20%E2%80%94%20gpchat">“Delete my account — gpchat”</a>.</p>
+    <p><strong>Contact:</strong> SubX (operated by Jebb Dykstra) · 3019 Ocean Park Boulevard, #193, Santa Monica, CA 90405, USA · <a data-takedown href="mailto:takedown@subx.it">takedown@subx.it</a> · +1-650-539-5005.</p>
 
     <p><a href="./">Back to gpchat</a> · <a href="terms.html">Terms of Service</a> · <a href="privacy.html">Privacy Policy</a> · <a href="report.html">Report / takedown request</a> · <a href="guidelines.html">Community Guidelines</a></p>
   </article>
+  <script src="takedown.js" defer></script>
 </body>
 </html>

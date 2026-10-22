@@ -1174,18 +1174,78 @@
       if (dmsOn()) syncChatChrome();
     }, function () {});
   }
-  function reportPost(id) {
+  // Report reason chooser (TAKE IT DOWN Act NCII 2026-10-22; remove-first reason codes 2026-10-22).
+  // Reason codes: 'ncii', 'copyright', 'violent_offensive', 'hate', 'other'.
+  // Cancel, Escape or a backdrop click files nothing. Agents flag and sort only; a person decides any restore.
+  var reportPickerOpen = false;
+  function pickReportReason(done) {
+    if (reportPickerOpen) return;
+    reportPickerOpen = true;
+    var ov = document.createElement('div');
+    ov.className = 'conv-modal-overlay open';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.setAttribute('aria-label', 'Report');
+    var box = document.createElement('div');
+    box.className = 'conv-modal';
+    var h = document.createElement('h2');
+    h.textContent = 'Report';
+    var note = document.createElement('p');
+    note.className = 'conv-modal-note';
+    note.textContent = 'Why are you reporting this?';
+    box.appendChild(h);
+    box.appendChild(note);
+    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(null); } }
+    function close(reason) {
+      if (!reportPickerOpen) return;
+      reportPickerOpen = false;
+      document.removeEventListener('keydown', onKey, true);
+      if (ov.parentNode) ov.parentNode.removeChild(ov);
+      if (reason) done(reason);
+    }
+    function btn(label, cls, reason) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = cls;
+      b.textContent = label;
+      b.addEventListener('click', function () { close(reason); });
+      box.appendChild(b);
+      return b;
+    }
+    var first = btn('An intimate image of me (or someone I act for) shared without consent', 'conv-modal-submit', 'ncii');
+    btn('Copyright: my work posted without permission', 'conv-modal-submit', 'copyright');
+    btn('Violent or offensive image', 'conv-modal-submit', 'violent_offensive');
+    btn('Hateful or racist image', 'conv-modal-submit', 'hate');
+    btn('Other abuse or rule-breaking', 'conv-modal-submit', 'other');
+    btn('Cancel', 'conv-guest-btn', null);
+    var more = document.createElement('p');
+    more.className = 'conv-modal-note';
+    var a = document.createElement('a');
+    a.href = 'report.html';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = 'How reports work, and how to send a removal request';
+    more.appendChild(a);
+    box.appendChild(more);
+    ov.addEventListener('click', function (e) { if (e.target === ov) close(null); });
+    document.addEventListener('keydown', onKey, true);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+    try { first.focus(); } catch (e) {}
+  }
+  function reportPost(id, reason) {
     if (!requireVerified('report')) return;
     var post = findPost(id);
     if (!post || !fbDb || isSessionSeedPost(post)) return;
     if (alreadyReported(id)) { toast('You already reported this post.'); return; }
     var me = liveUid();
+    if (!reason) { pickReportReason(function (r) { reportPost(id, r); }); return; }
     fbDb.collection('reports').add({
       siteId: SITE_ID,
       postId: id,
       targetUid: post.authorUid || '',
       reporterUid: me,
-      reason: 'abuse',
+      reason: reason,
       status: 'open',
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }).then(function () {
@@ -3004,7 +3064,7 @@
 
   function nwsHeaders(accept) {
     var cfg = railCfg();
-    var ua = cfg.userAgent || ((site && site.name) || SITE_ID || 'subx') + '/rail (jebb@subx.it)';
+    var ua = cfg.userAgent || ((site && site.name) || SITE_ID || 'subx') + '/rail (takedown@subx.it)';
     return {
       'Accept': accept || 'application/geo+json',
       'User-Agent': ua
@@ -4984,7 +5044,7 @@
       return;
     }
     if (liveUid() !== ADMIN_UID) {
-      chatErr('Welcome sends need the factory admin Google (jebb.dykstra@gmail.com). This signed-in account is not that admin.');
+      chatErr('Welcome sends require the factory admin account. This signed-in account is not that admin.');
       return;
     }
     if (!requireVerified('chat')) return;
@@ -7213,17 +7273,18 @@
       }
     }
   }
-  function reportStory(id) {
+  function reportStory(id, reason) {
     if (!requireVerified('report')) return;
     var story = findStory(id);
     if (!story || !fbDb) return;
+    if (!reason) { pickReportReason(function (r) { reportStory(id, r); }); return; }
     fbDb.collection('reports').add({
       siteId: SITE_ID,
       storyId: id,
       postId: 'story:' + id,
       targetUid: story.authorUid || '',
       reporterUid: liveUid(),
-      reason: 'abuse',
+      reason: reason,
       status: 'open',
       createdAt: firebase.firestore.FieldValue.serverTimestamp()
     }).then(function () {
