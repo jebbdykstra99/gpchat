@@ -1848,7 +1848,7 @@
     setTimeout(function () { t.remove(); }, 4000);
   }
   function reportErr(e) {
-    return isPermDenied(e) ? 'Report not accepted. Verify your email, then refresh and try again.' : ((e && e.message) || 'Could not report.');
+    return isPermDenied(e) ? 'Report not accepted. Verify your email, then refresh and try again.' : 'Could not report. Try again.';
   }
   function composeErr(msg) {
     var el = document.getElementById('thoughts-compose-err');
