@@ -10,6 +10,7 @@
 - No endorsement, partnership, or agency is implied. No uptime or availability is promised.
 
 ## Key pages
+- [About gpchat](https://gpchat.com/about.html)
 - [Terms of Service](https://gpchat.com/terms.html)
 - [Privacy Policy](https://gpchat.com/privacy.html)
 - [Community Guidelines](https://gpchat.com/guidelines.html)
