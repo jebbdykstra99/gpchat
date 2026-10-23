@@ -90,10 +90,104 @@
   var reportItems = [];
   var reportsUnsub = null;
   var reportedMem = {};
+  var hiddenIds = {};
+  var hidesUnsub = null;
+  var HIDE_REASONS = { ncii: 1, copyright: 1, violent_offensive: 1, hate: 1, impersonation: 1, csam: 1 };
   var previewLiftWired = false;
 
   function isAdminUser() {
     return liveUid() === ADMIN_UID;
+  }
+  function isPostHidden(p) {
+    return !!(p && (hiddenIds[p.id] || (p.parentId && hiddenIds[p.parentId]) || (p.authorUid && hiddenIds['uid:' + p.authorUid])));
+  }
+  function isStoryHidden(s) {
+    return !!(s && (hiddenIds['story:' + s.id] || hiddenIds[s.id] || (s.authorUid && hiddenIds['uid:' + s.authorUid])));
+  }
+  function listenHides() {
+    if (hidesUnsub) { hidesUnsub(); hidesUnsub = null; }
+    if (!fbDb || !SITE_ID) return;
+    hidesUnsub = fbDb.collection('hides').where('siteId', '==', SITE_ID).onSnapshot(function (snap) {
+      var next = {};
+      snap.forEach(function (d) { d = d.data() || {}; if (d.postId) next[d.postId] = true; });
+      hiddenIds = next;
+      renderFeed();
+      if (typeof renderStoriesTray === 'function') renderStoriesTray();
+      if (currentUser) syncProfile();
+      renderNotifs();
+      renderReports();
+    }, function () {});
+  }
+  function pickReportReason(done) {
+    if (pickReportReason._open) return;
+    pickReportReason._open = true;
+    var ov = document.createElement('div'), box = document.createElement('div'), h = document.createElement('h2'), note = document.createElement('p'), more = document.createElement('p'), a = document.createElement('a');
+    ov.className = 'conv-modal-overlay open';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.setAttribute('aria-label', 'Report');
+    box.className = 'conv-modal';
+    h.textContent = 'Report';
+    note.className = 'conv-modal-note';
+    note.textContent = 'Why are you reporting this?';
+    box.appendChild(h);
+    box.appendChild(note);
+    function onKey(e) { if (e && e.key === 'Escape') { if (e.preventDefault) e.preventDefault(); close(null); } }
+    function close(reason) {
+      if (!pickReportReason._open) return;
+      pickReportReason._open = false;
+      document.removeEventListener('keydown', onKey, true);
+      if (ov.parentNode) ov.parentNode.removeChild(ov);
+      if (done) done(reason || null);
+    }
+    function btn(label, cls, reason) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = cls;
+      if (reason) b.setAttribute('data-reason', reason);
+      b.textContent = label;
+      b.addEventListener('click', function () { close(reason); });
+      box.appendChild(b);
+      return b;
+    }
+    var opts = [
+      { code: 'ncii', label: 'Intimate image without consent' },
+      { code: 'copyright', label: 'Copyright or trademark (DMCA)' },
+      { code: 'violent_offensive', label: 'Violent or graphic image' },
+      { code: 'hate', label: 'Hateful or racist image' },
+      { code: 'other', label: 'Other abuse or rule-breaking' }
+    ];
+    var first = null;
+    opts.forEach(function (o, i) { var b = btn(o.label, 'conv-modal-submit', o.code); if (!i) first = b; });
+    btn('Cancel', 'conv-guest-btn', null);
+    more.className = 'conv-modal-note';
+    a.href = 'report.html';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = 'How reports work, and how to send a removal request';
+    more.appendChild(a);
+    box.appendChild(more);
+    ov.addEventListener('click', function (e) { if (e && e.target === ov) close(null); });
+    document.addEventListener('keydown', onKey, true);
+    ov.appendChild(box);
+    document.body.appendChild(ov);
+    try { if (first) first.focus(); } catch (e) {}
+  }
+  function commitAutoHideReport(postId, targetUid, storyId, reason, fallbackAdd) {
+    var me = liveUid(), rRef = fbDb.collection('reports').doc(), ts = firebase.firestore.FieldValue.serverTimestamp();
+    var rDoc = { siteId: SITE_ID, postId: postId, targetUid: targetUid || '', reporterUid: me, reason: reason, status: 'open', createdAt: ts };
+    if (storyId) rDoc.storyId = storyId;
+    hiddenIds[postId] = true;
+    renderFeed();
+    if (typeof renderStoriesTray === 'function') renderStoriesTray();
+    var b = fbDb.batch();
+    b.set(rRef, rDoc);
+    b.set(fbDb.collection('hides').doc(SITE_ID + '_' + postId), { siteId: SITE_ID, postId: postId, reportId: rRef.id, reporterUid: me, createdAt: ts });
+    b.set(fbDb.collection('rateLimits').doc(me), { lastHideAt: ts }, { merge: true });
+    return b.commit().catch(function (e) {
+      if (isPermDenied(e) && fallbackAdd) return fallbackAdd();
+      throw e;
+    });
   }
   function siteMinAge() {
     var n = parseInt(site && site.minAge, 10);
@@ -563,9 +657,10 @@
       sessionStorage.setItem(key, JSON.stringify(map));
     } catch (e) {}
   }
-  function writeReportAlert(post, me) {
+  function writeReportAlert(post, me, reason) {
     if (!me || me === ADMIN_UID || !fbDb || !post) return;
-    var snippet = String(post.text || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+    var hide = HIDE_REASONS[reason] || isPostHidden(post);
+    var snippet = hide ? ('[' + (reason || 'hidden') + ' · auto-hidden]') : String(post.text || '').replace(/\s+/g, ' ').trim().slice(0, 180);
     fbDb.collection('users').doc(ADMIN_UID).collection('notifications').add({
       toUid: ADMIN_UID,
       fromUid: me,
@@ -675,14 +770,17 @@
       return;
     }
     el.innerHTML = rows.map(function (r) {
-      var post = findPost(r.postId);
-      var snippet = (post && post.text) ? String(post.text).replace(/\s+/g, ' ').trim().slice(0, 180) : '(post unavailable)';
+      var isHid = !!(hiddenIds[r.postId] || HIDE_REASONS[r.reason]);
+      var post = isHid ? null : findPost(r.postId);
+      var snippet = isHid ? ('[Hidden — ' + (r.reason || 'reported') + ' · ' + r.postId + ']') :
+        ((post && post.text) ? String(post.text).replace(/\s+/g, ' ').trim().slice(0, 180) : '(post not loaded)');
       var count = reporterCount(r.postId);
-      return '<div class="notif-item">' +
+      var rest = isHid ? '<button type="button" class="post-action" data-report-restore="' + escapeHtml(r.postId) + '" data-report-id="' + escapeHtml(r.id) + '">Restore</button> ' : '';
+      return '<div class="notif-item"' + (isHid ? ' style="opacity:0.65"' : '') + '>' +
         '<p>' + escapeHtml(snippet) + '</p>' +
-        '<p>' + count + ' reporter' + (count === 1 ? '' : 's') + '</p>' +
+        '<p>' + count + ' reporter' + (count === 1 ? '' : 's') + (r.reason ? ' · ' + escapeHtml(r.reason) : '') + '</p>' +
         '<button type="button" class="post-action" data-report-remove="' + escapeHtml(r.postId) + '">Remove post</button> ' +
-        '<button type="button" class="post-action" data-report-dismiss="' + escapeHtml(r.id) + '">Dismiss</button>' +
+        rest + '<button type="button" class="post-action" data-report-dismiss="' + escapeHtml(r.id) + '">Dismiss</button>' +
         '</div>';
     }).join('');
   }
@@ -691,6 +789,20 @@
     fbDb.collection('reports').doc(id).update({ status: 'dismissed' }).catch(function (e) {
       composeErr(guardPublicErr(e, 'Could not dismiss that report.'));
     });
+  }
+  function restoreHiddenReport(postId, reportId) {
+    var me = liveUid();
+    if (me !== ADMIN_UID || !fbDb || !postId) return;
+    if (!window.confirm('Restore ' + postId + ' to the room? Only admin can restore hidden content.')) return;
+    fbDb.collection('hides').doc(SITE_ID + '_' + postId).delete().then(function () {
+      delete hiddenIds[postId];
+      if (reportId) {
+        fbDb.collection('reports').doc(reportId).update({ status: 'dismissed' }).catch(function () {});
+      }
+      renderFeed();
+      renderReports();
+      toast('Restored.');
+    }).catch(function (e) { toast((e && e.message) || 'Could not restore.'); });
   }
   function stopPreviewLift() {
     if (guardState.unsub) { guardState.unsub(); guardState.unsub = null; }
@@ -725,6 +837,11 @@
         return;
       }
       if (e.target.closest('#reports-back')) { closeReports(); return; }
+      var restoreBtn = e.target.closest('[data-report-restore]');
+      if (restoreBtn) {
+        restoreHiddenReport(restoreBtn.getAttribute('data-report-restore'), restoreBtn.getAttribute('data-report-id'));
+        return;
+      }
       var dismissBtn = e.target.closest('[data-report-dismiss]');
       if (dismissBtn) {
         dismissReport(dismissBtn.getAttribute('data-report-dismiss'));
@@ -963,9 +1080,10 @@
   }
 
   function findPost(id) {
+    if (hiddenIds[id]) return null;
     var i;
-    for (i = 0; i < livePosts.length; i++) if (livePosts[i].id === id) return livePosts[i];
-    for (i = 0; i < nestPosts.length; i++) if (nestPosts[i].id === id) return nestPosts[i];
+    for (i = 0; i < livePosts.length; i++) if (livePosts[i].id === id && !isPostHidden(livePosts[i])) return livePosts[i];
+    for (i = 0; i < nestPosts.length; i++) if (nestPosts[i].id === id && !isPostHidden(nestPosts[i])) return nestPosts[i];
     var seeds = sessionSeedPosts();
     for (var j = 0; j < seeds.length; j++) if (seeds[j].id === id) return seeds[j];
     return null;
@@ -1174,87 +1292,36 @@
       if (dmsOn()) syncChatChrome();
     }, function () {});
   }
-  // Report reason chooser (TAKE IT DOWN Act NCII 2026-10-22; remove-first reason codes 2026-10-22).
-  // Reason codes: 'ncii', 'copyright', 'violent_offensive', 'hate', 'other'.
-  // Cancel, Escape or a backdrop click files nothing. Agents flag and sort only; a person decides any restore.
-  var reportPickerOpen = false;
-  function pickReportReason(done) {
-    if (reportPickerOpen) return;
-    reportPickerOpen = true;
-    var ov = document.createElement('div');
-    ov.className = 'conv-modal-overlay open';
-    ov.setAttribute('role', 'dialog');
-    ov.setAttribute('aria-modal', 'true');
-    ov.setAttribute('aria-label', 'Report');
-    var box = document.createElement('div');
-    box.className = 'conv-modal';
-    var h = document.createElement('h2');
-    h.textContent = 'Report';
-    var note = document.createElement('p');
-    note.className = 'conv-modal-note';
-    note.textContent = 'Why are you reporting this?';
-    box.appendChild(h);
-    box.appendChild(note);
-    function onKey(e) { if (e.key === 'Escape') { e.preventDefault(); close(null); } }
-    function close(reason) {
-      if (!reportPickerOpen) return;
-      reportPickerOpen = false;
-      document.removeEventListener('keydown', onKey, true);
-      if (ov.parentNode) ov.parentNode.removeChild(ov);
-      if (reason) done(reason);
-    }
-    function btn(label, cls, reason) {
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.className = cls;
-      b.textContent = label;
-      b.addEventListener('click', function () { close(reason); });
-      box.appendChild(b);
-      return b;
-    }
-    var first = btn('An intimate image of me (or someone I act for) shared without consent', 'conv-modal-submit', 'ncii');
-    btn('Copyright: my work posted without permission', 'conv-modal-submit', 'copyright');
-    btn('Violent or offensive image', 'conv-modal-submit', 'violent_offensive');
-    btn('Hateful or racist image', 'conv-modal-submit', 'hate');
-    btn('Other abuse or rule-breaking', 'conv-modal-submit', 'other');
-    btn('Cancel', 'conv-guest-btn', null);
-    var more = document.createElement('p');
-    more.className = 'conv-modal-note';
-    var a = document.createElement('a');
-    a.href = 'report.html';
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.textContent = 'How reports work, and how to send a removal request';
-    more.appendChild(a);
-    box.appendChild(more);
-    ov.addEventListener('click', function (e) { if (e.target === ov) close(null); });
-    document.addEventListener('keydown', onKey, true);
-    ov.appendChild(box);
-    document.body.appendChild(ov);
-    try { first.focus(); } catch (e) {}
-  }
-  function reportPost(id, reason) {
+  function reportPost(id, optReason) {
     if (!requireVerified('report')) return;
     var post = findPost(id);
     if (!post || !fbDb || isSessionSeedPost(post)) return;
     if (alreadyReported(id)) { toast('You already reported this post.'); return; }
-    var me = liveUid();
-    if (!reason) { pickReportReason(function (r) { reportPost(id, r); }); return; }
-    fbDb.collection('reports').add({
-      siteId: SITE_ID,
-      postId: id,
-      targetUid: post.authorUid || '',
-      reporterUid: me,
-      reason: reason,
-      status: 'open',
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(function () {
-      markReported(id);
-      toast('Reported. Thanks.');
-      writeReportAlert(post, me);
-    }).catch(function (e) {
-      toast(reportErr(e));
-    });
+    function go(reason) {
+      if (!reason) return;
+      var me = liveUid();
+      var addOnly = function () {
+        return fbDb.collection('reports').add({
+          siteId: SITE_ID,
+          postId: id,
+          targetUid: post.authorUid || '',
+          reporterUid: me,
+          reason: reason,
+          status: 'open',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      };
+      var op = (HIDE_REASONS[reason] || isAdminUser()) ? commitAutoHideReport(id, post.authorUid || '', '', reason, addOnly) : addOnly();
+      op.then(function () {
+        markReported(id);
+        toast(HIDE_REASONS[reason] ? 'Reported and hidden pending review.' : 'Reported. Thanks.');
+        writeReportAlert(post, me, reason);
+      }).catch(function (e) {
+        toast(reportErr(e));
+      });
+    }
+    if (optReason) { go(optReason); return; }
+    pickReportReason(go);
   }
   function blockUser(uid) {
     if (!requireVerified('block')) return;
@@ -2007,7 +2074,7 @@
     var key = nestSlugNorm(slug);
     if (!key) return false;
     for (var i = 0; i < livePosts.length; i++) {
-      if (nestSlugNorm(livePosts[i].nestSlug) === key) return true;
+      if (!isPostHidden(livePosts[i]) && nestSlugNorm(livePosts[i].nestSlug) === key) return true;
     }
     return false;
   }
@@ -2566,6 +2633,7 @@
   }
 
   function renderPostMedia(post) {
+    if (isPostHidden(post)) return '';
     var html = '';
     if (post.imageUrl) {
       html += '<div class="post-image"><img src="' + escapeHtml(post.imageUrl) + '" alt="" loading="lazy"></div>';
@@ -2593,6 +2661,7 @@
   }
 
   function renderPost(post, isReply) {
+    if (isPostHidden(post)) return '';
     const uid = liveUid();
     const liked = !!(uid && post.likedBy && post.likedBy[uid]);
     const likeCount = post.likes || 0;
@@ -2652,14 +2721,15 @@
 
   function topLevelPosts() {
     return postsForFeed().filter(function (p) {
-      if (p.parentId || (p.authorUid && blockedUids[p.authorUid])) return false;
+      if (p.parentId || isPostHidden(p) || (p.authorUid && blockedUids[p.authorUid])) return false;
       if (currentNest) return nestSlugNorm(p.nestSlug) === nestSlugNorm(currentNest.slug);
       return true;
     });
   }
 
   function repliesFor(parentId) {
-    return postsForFeed().filter(function (p) { return p.parentId === parentId && !(p.authorUid && blockedUids[p.authorUid]); })
+    if (hiddenIds[parentId]) return [];
+    return postsForFeed().filter(function (p) { return p.parentId === parentId && !isPostHidden(p) && !(p.authorUid && blockedUids[p.authorUid]); })
       .sort(function (a, b) { return (a.ms || 0) - (b.ms || 0); });
   }
 
@@ -2729,7 +2799,7 @@
     return out;
   }
   function postHasTopic(post, topicId) {
-    if (!post || !topicId) return false;
+    if (!post || !topicId || isPostHidden(post)) return false;
     var ids = Array.isArray(post.topicIds) ? post.topicIds : collectTopicIds(post);
     for (var i = 0; i < ids.length; i++) if (ids[i] === topicId) return true;
     return false;
@@ -2977,7 +3047,7 @@
       return;
     }
     var posts = livePosts.filter(function (p) {
-      if (!p || p.parentId) return false;
+      if (!p || p.parentId || isPostHidden(p)) return false;
       if (p.authorUid && blockedUids[p.authorUid]) return false;
       return !!(p.authorUid && followingUids[p.authorUid]);
     });
@@ -4201,7 +4271,7 @@
     var posts = livePosts || [];
     for (i = 0; i < posts.length; i++) {
       var post = posts[i];
-      if (!post || post.parentId) continue;
+      if (!post || post.parentId || isPostHidden(post)) continue;
       var opt = porchOptionFromText(post.text);
       if (opt && Object.prototype.hasOwnProperty.call(counts, opt)) counts[opt] += 1;
     }
@@ -4333,7 +4403,7 @@
   }
 
   function siteNotifs() {
-    return notifItems.filter(function (n) { return !n.siteId || n.siteId === SITE_ID; });
+    return notifItems.filter(function (n) { return (!n.siteId || n.siteId === SITE_ID) && !(n.postId && hiddenIds[n.postId] && n.type !== 'report' && n.type !== 'report_update'); });
   }
 
   function unreadNotifCount() {
@@ -5152,7 +5222,7 @@
     if (b) b.textContent = bio || '';
     const pane = document.getElementById('profile-pane-posts');
     if (!pane) return;
-    const mine = livePosts.filter(function (p) { return p.authorUid && p.authorUid === uid; });
+    const mine = livePosts.filter(function (p) { return p.authorUid && p.authorUid === uid && !isPostHidden(p); });
     if (!mine.length) {
       pane.innerHTML = '<div class="empty-note" id="profile-posts-empty">No posts yet. Hit Post when something about the city is on your mind.</div>';
     } else {
@@ -6704,7 +6774,8 @@
     catch (e) { /* private mode */ }
   }
   function findStory(id) {
-    for (var i = 0; i < liveStories.length; i++) if (liveStories[i].id === id) return liveStories[i];
+    if (hiddenIds['story:' + id] || hiddenIds[id]) return null;
+    for (var i = 0; i < liveStories.length; i++) if (liveStories[i].id === id && !isStoryHidden(liveStories[i])) return liveStories[i];
     return null;
   }
   function mapStory(doc) {
@@ -6825,6 +6896,7 @@
     var byUid = {};
     var order = [];
     liveStories.forEach(function (s) {
+      if (isStoryHidden(s)) return;
       if (s.siteId && s.siteId !== SITE_ID) return;
       if (s.expiresAtMs && s.expiresAtMs <= now) return;
       var uid = s.authorUid || s.id;
@@ -7174,7 +7246,7 @@
     var el = document.getElementById('stories-viewer');
     if (!el) return;
     var story = storyViewerList[storyViewerIdx];
-    if (!story) { closeStoriesViewer(); return; }
+    if (!story || isStoryHidden(story)) { closeStoriesViewer(); return; }
     markStoriesSeen([story.id]);
     var segs = storyViewerList.map(function (_, i) {
       var cls = i < storyViewerIdx ? ' is-done' : (i === storyViewerIdx ? ' is-active' : '');
@@ -7273,25 +7345,35 @@
       }
     }
   }
-  function reportStory(id, reason) {
+  function reportStory(id, optReason) {
     if (!requireVerified('report')) return;
     var story = findStory(id);
     if (!story || !fbDb) return;
-    if (!reason) { pickReportReason(function (r) { reportStory(id, r); }); return; }
-    fbDb.collection('reports').add({
-      siteId: SITE_ID,
-      storyId: id,
-      postId: 'story:' + id,
-      targetUid: story.authorUid || '',
-      reporterUid: liveUid(),
-      reason: reason,
-      status: 'open',
-      createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(function () {
-      toast('Reported. Thanks.');
-    }).catch(function (e) {
-      toast(reportErr(e));
-    });
+    function go(reason) {
+      if (!reason) return;
+      var me = liveUid(), pid = 'story:' + id;
+      var addOnly = function () {
+        return fbDb.collection('reports').add({
+          siteId: SITE_ID,
+          storyId: id,
+          postId: pid,
+          targetUid: story.authorUid || '',
+          reporterUid: me,
+          reason: reason,
+          status: 'open',
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      };
+      var op = (HIDE_REASONS[reason] || isAdminUser()) ? commitAutoHideReport(pid, story.authorUid || '', id, reason, addOnly) : addOnly();
+      op.then(function () {
+        toast(HIDE_REASONS[reason] ? 'Reported and hidden pending review.' : 'Reported. Thanks.');
+        writeReportAlert({ id: pid, text: story.text || '' }, me, reason);
+      }).catch(function (e) {
+        toast(reportErr(e));
+      });
+    }
+    if (optReason) { go(optReason); return; }
+    pickReportReason(go);
   }
   function deleteOwnStory(id) {
     var story = findStory(id);
@@ -7528,6 +7610,7 @@
     }
 
     listenKillSwitch();
+    listenHides();
     wireEvents();
     applyAccountsGate();   // after wiring: removes Join/Register/Google nodes when accountsOpen === false
     document.addEventListener('subx-auth-land', function () { landInFeedCompose(); });
