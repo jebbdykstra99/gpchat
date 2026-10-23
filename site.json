@@ -177,122 +177,6 @@
   },
   "sessionSeeds": [],
   "seedNote": "STEWARD_REFRESH Fri 2026-09-25 · Jolpica/Apple/Tubi · no second fight · nests HOLD",
-  "seed": [
-    {
-      "id": "steward-1",
-      "name": "FP3 morning card",
-      "handle": "fp3_baku",
-      "text": "FACT: FP3 at Baku is Fri 2:30 AM MT (08:30Z). Jolpica next race: Azerbaijan GP R15. https://api.jolpi.ca/ergast/f1/current/next.json Early run or replay after coffee?",
-      "hours": 1,
-      "likes": 0,
-      "replies": 0,
-      "followed": true
-    },
-    {
-      "id": "steward-2",
-      "name": "Quali pin",
-      "handle": "quali_baku",
-      "text": "FACT: Qualifying is Fri 6:00 AM MT (12:00Z) at Baku City Circuit. Official next-race spine: https://api.jolpi.ca/ergast/f1/current/next.json Which corner do you refuse to miss?",
-      "hours": 2,
-      "likes": 0,
-      "replies": 0,
-      "followed": true
-    },
-    {
-      "id": "steward-3",
-      "name": "Race countdown",
-      "handle": "race_baku",
-      "text": "FACT: Lights out is Saturday 5:00 AM MT (11:00Z) for the Azerbaijan Grand Prix. https://api.jolpi.ca/ergast/f1/current/next.json Alarm set or breakfast results check?",
-      "hours": 3,
-      "likes": 0,
-      "replies": 0,
-      "followed": false
-    },
-    {
-      "id": "steward-4",
-      "name": "WDC board",
-      "handle": "wdc_board",
-      "text": "FACT: After R14 the board reads Antonelli 292 · Russell 211 · Hamilton 191 (Jolpica standings). https://api.jolpi.ca/ergast/f1/current/driverStandings.json Points weekend or swing weekend?",
-      "hours": 4,
-      "likes": 0,
-      "replies": 0,
-      "followed": true
-    },
-    {
-      "id": "steward-5",
-      "name": "Watch outbound chip",
-      "handle": "watch_apple_tubi",
-      "text": "FACT: US live home is Apple TV; outbound only, we don’t re-stream. Tubi free altcasts only when listed. https://tv.apple.com/us/channel/formula-1/tvs.sbd.241000 Watching the Apple feed?",
-      "hours": 5,
-      "likes": 0,
-      "replies": 0,
-      "followed": false
-    },
-    {
-      "id": "steward-6",
-      "name": "Baku circuit",
-      "handle": "baku_circuit",
-      "text": "FACT: Baku is a long lakeside street loop with castle walls; walls punish mistakes. Jolpica race spine: https://api.jolpi.ca/ergast/f1/current/next.json First live watch or favorite sector?",
-      "hours": 6,
-      "likes": 0,
-      "replies": 0,
-      "followed": true
-    }
-  ],
-  "notifs": [
-    {
-      "id": "n1",
-      "text": "@boxboxbox liked your take on the double stack mixup.",
-      "time": "1h",
-      "unread": true
-    },
-    {
-      "id": "n2",
-      "text": "@drsdetect mentioned you in a DRS detect.",
-      "time": "3h",
-      "unread": true
-    },
-    {
-      "id": "n3",
-      "text": "@champpoints started following you.",
-      "time": "Yesterday",
-      "unread": true
-    }
-  ],
-  "threads": [
-    {
-      "id": "steward-seed-a",
-      "name": "Alarm vs breakfast",
-      "handle": "alarm_breakfast",
-      "preview": "The session clock is the source; no invented grid. Jolpica next race: https://api.jolpi.ca/ergast/f1/current/next.json",
-      "messages": [
-        {
-          "me": false,
-          "text": "Race is Sat 5:00 AM MT. Setting an alarm or waiting for the highlights link?"
-        },
-        {
-          "me": true,
-          "text": "The session clock is the source; no invented grid. Jolpica next race: https://api.jolpi.ca/ergast/f1/current/next.json"
-        }
-      ]
-    },
-    {
-      "id": "steward-seed-b",
-      "name": "WDC math",
-      "handle": "wdc_math",
-      "preview": "Start with the Jolpica standings, then argue the session: https://api.jolpi.ca/ergast/f1/current/driverStandings.json",
-      "messages": [
-        {
-          "me": false,
-          "text": "Antonelli +81 on Russell after R14 — is Baku a must-score for George, or another street lottery?"
-        },
-        {
-          "me": true,
-          "text": "Start with the Jolpica standings, then argue the session: https://api.jolpi.ca/ergast/f1/current/driverStandings.json"
-        }
-      ]
-    }
-  ],
   "rail": {
     "kind": "f1-calendar",
     "title": "Room Brief",
@@ -309,12 +193,11 @@
     },
     "outbound": [
       {
-        "tag": "Next",
-        "topic": "next",
-        "headline": "Next: FP1 · Fri 11:30 AM MT",
-        "snippet": "COTA · round 18. FP2 Fri 3:00 PM · FP3 Sat 11:30 AM · Quali Sat 3:00 PM · Race Sun 2:00 PM MT. Jolpica 2026/18.",
-        "meta": "Pre-Race",
-        "url": "https://www.formula1.com/en/racing/2026"
+        "source": "Formula1.com",
+        "title": "2026 United States Grand Prix · COTA",
+        "meta": "FP1 Fri 11:30 AM MT · Quali Sat 3:00 PM MT · Race Sun 2:00 PM MT",
+        "tag": "COTA",
+        "url": "https://www.formula1.com/en/racing/2026/united-states"
       },
       {
         "tag": "WDC",
@@ -559,14 +442,14 @@
         "nestSlug": "teams"
       },
       {
-        "id": "baku",
-        "label": "Baku / Azerbaijan",
+        "id": "cota",
+        "label": "Austin / COTA",
         "kind": "circuit",
-        "blurb": "Street circuit GP",
+        "blurb": "United States GP",
         "followDefault": true,
         "adminSeed": true,
         "status": "active",
-        "symbol": "$BAKU",
+        "symbol": "$COTA",
         "nestSlug": "race-weekend"
       },
       {
@@ -617,7 +500,7 @@
       "race",
       "wdc",
       "watch",
-      "baku"
+      "cota"
     ],
     "notes": "Factory followable topics (StockTwits-style). Users keep/unfollow/add on their watchlist."
   },

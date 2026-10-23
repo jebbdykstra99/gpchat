@@ -1,83 +1,92 @@
-/* Capture visit source for the hit pixel. Kept out of factory.js.
-   The pixel Cloud Function writes the Firestore hits row from this beacon's
-   query string. ref is omitted when absent (stored as null). referrer is
-   origin + pathname only, omitted when missing or same-origin. */
 (function () {
-  var REF_RE = /^[a-z0-9_-]{1,32}$/;
-  var UTM_RE = /^[A-Za-z0-9._-]{1,64}$/;
+  'use strict';
+  var PIXEL_RE = /^https:\/\/us-central1-subx-skins\.cloudfunctions\.net\/pixel\b/;
+  var REF_RE = /^[a-z0-9_-]{1,64}$/;
+  var INTERNAL_PAGE_REF_RE = /^(usgp-|share-usgp-)/;
   var SESSION_KEY = 'subx.ref';
-  var FIRST_KEY = 'subx.ref.first';
-  var UTM_KEY = 'subx.utm_source';
+  var SIGNUP_KEY = 'subx.signupRef';
   var REFERRER_KEY = 'subx.referrer';
+  var UTM_KEY = 'subx.utm_source';
+  var PAGE_REF = '';
+  try {
+    if (document.currentScript && document.currentScript.getAttribute) {
+      PAGE_REF = String(document.currentScript.getAttribute('data-page-ref') || '').toLowerCase();
+    }
+  } catch (e) {}
 
-  function getStore(store, key) {
-    try { return store.getItem(key) || ''; } catch (e) { return ''; }
+  function getStore(store, k) {
+    try { return store ? store.getItem(k) : ''; } catch (e) { return ''; }
   }
-  function setStore(store, key, value) {
-    try { store.setItem(key, value); } catch (e) {}
+  function setStore(store, k, v) {
+    try { if (store && v) store.setItem(k, v); } catch (e) {}
   }
+
   function param(name) {
     try {
-      return new URLSearchParams(window.location.search).get(name) || '';
+      return new URLSearchParams(window.location.search || '').get(name) || '';
     } catch (e) { return ''; }
   }
 
   var incoming = String(param('ref') || '').toLowerCase();
+  var existingSessionRef = getStore(window.sessionStorage, SESSION_KEY);
   if (REF_RE.test(incoming)) {
-    setStore(window.sessionStorage, SESSION_KEY, incoming);
-    if (!REF_RE.test(getStore(window.localStorage, FIRST_KEY))) {
-      setStore(window.localStorage, FIRST_KEY, incoming);
+    var keepExisting = existingSessionRef && !INTERNAL_PAGE_REF_RE.test(existingSessionRef) && INTERNAL_PAGE_REF_RE.test(incoming);
+    if (!keepExisting) {
+      setStore(window.sessionStorage, SESSION_KEY, incoming);
+    }
+    if (!getStore(window.localStorage, SIGNUP_KEY) || (!keepExisting && !INTERNAL_PAGE_REF_RE.test(incoming))) {
+      setStore(window.localStorage, SIGNUP_KEY, incoming);
+    }
+  } else if (!existingSessionRef && REF_RE.test(PAGE_REF)) {
+    setStore(window.sessionStorage, SESSION_KEY, PAGE_REF);
+    if (!getStore(window.localStorage, SIGNUP_KEY)) {
+      setStore(window.localStorage, SIGNUP_KEY, PAGE_REF);
     }
   }
 
-  var utmIn = String(param('utm_source') || '').replace(/^\s+|\s+$/g, '');
-  if (UTM_RE.test(utmIn) && !getStore(window.sessionStorage, UTM_KEY)) {
-    setStore(window.sessionStorage, UTM_KEY, utmIn);
+  var utm = String(param('utm_source') || '').toLowerCase();
+  if (REF_RE.test(utm) && !getStore(window.sessionStorage, UTM_KEY)) {
+    setStore(window.sessionStorage, UTM_KEY, utm);
   }
 
-  function externalReferrer(raw) {
-    if (!raw) return '';
-    try {
-      var u = new URL(raw, window.location.href);
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
-      if (u.origin === window.location.origin) return '';
-      var out = u.origin + u.pathname;
-      return out.length > 200 ? out.slice(0, 200) : out;
-    } catch (e) { return ''; }
-  }
-
-  var refPath = externalReferrer(window.document.referrer || '');
-  if (refPath && !getStore(window.sessionStorage, REFERRER_KEY)) {
-    setStore(window.sessionStorage, REFERRER_KEY, refPath);
-  }
-
-  if (!window.navigator || typeof window.navigator.sendBeacon !== 'function') return;
-
-  var ref = getStore(window.sessionStorage, SESSION_KEY);
-  if (!REF_RE.test(ref)) ref = '';
-  var utm = getStore(window.sessionStorage, UTM_KEY).replace(/^\s+|\s+$/g, '');
-  if (!UTM_RE.test(utm)) utm = '';
-  var referrer = externalReferrer(getStore(window.sessionStorage, REFERRER_KEY));
-
-  function hasParam(url, key) {
-    try { return new URL(url).searchParams.has(key); } catch (e) {
-      return url.indexOf(key + '=') !== -1;
-    }
-  }
-  function addParam(url, key, value) {
-    if (!value || hasParam(url, key)) return url;
-    return url + (url.indexOf('?') === -1 ? '?' : '&') + key + '=' + encodeURIComponent(value);
-  }
-
-  var orig = window.navigator.sendBeacon.bind(window.navigator);
-  window.navigator.sendBeacon = function (url, data) {
-    try {
-      if (typeof url === 'string' && url.indexOf('/pixel') !== -1) {
-        url = addParam(url, 'ref', ref);
-        url = addParam(url, 'referrer', referrer);
-        url = addParam(url, 'utm_source', utm);
+  try {
+    var docRef = String(document.referrer || '');
+    if (docRef && !getStore(window.sessionStorage, REFERRER_KEY)) {
+      var refHost = new URL(docRef).hostname.replace(/^www\./i, '').toLowerCase();
+      var ownHost = String(window.location.hostname || '').replace(/^www\./i, '').toLowerCase();
+      if (refHost && refHost !== ownHost) {
+        setStore(window.sessionStorage, REFERRER_KEY, docRef.slice(0, 512));
       }
-    } catch (e) {}
-    return orig(url, data);
+    }
+  } catch (e) {}
+
+  function enrichPixelUrl(url) {
+    try {
+      var s = String(url || '');
+      if (!PIXEL_RE.test(s)) return url;
+      var u = new URL(s);
+      var ref = getStore(window.sessionStorage, SESSION_KEY);
+      var referrer = getStore(window.sessionStorage, REFERRER_KEY);
+      var utmVal = getStore(window.sessionStorage, UTM_KEY);
+      if (ref && !u.searchParams.get('ref')) u.searchParams.set('ref', ref);
+      if (referrer && !u.searchParams.get('referrer')) u.searchParams.set('referrer', referrer);
+      if (utmVal && !u.searchParams.get('utm_source')) u.searchParams.set('utm_source', utmVal);
+      return u.toString();
+    } catch (e) {
+      return url;
+    }
+  }
+
+  if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+    var origBeacon = navigator.sendBeacon.bind(navigator);
+    navigator.sendBeacon = function (url, data) {
+      return origBeacon(enrichPixelUrl(url), data);
+    };
+  }
+
+  window.__subxRef = {
+    getRef: function () { return getStore(window.sessionStorage, SESSION_KEY) || ''; },
+    getSignupRef: function () { return getStore(window.localStorage, SIGNUP_KEY) || ''; },
+    enrichPixelUrl: enrichPixelUrl
   };
 })();
