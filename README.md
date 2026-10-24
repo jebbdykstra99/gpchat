@@ -1,6 +1,6 @@
 # gpchat
 
-Nothing but Grand Prix. Fanatical fan chat for Formula 1 — race weekend chatter, quali drama, safety cars, team radio, DNFs, pit-lane mixups. **Not official F1.**
+Nothing but Grand Prix. Fanatical fan chat for Formula 1: race weekend chatter, quali drama, safety cars, team radio, DNFs, pit-lane mixups. **Not official F1.**
 
 This is a **static** dress rehearsal of the SubX chrome (three-column X-like shell: left nav, center feed, right rail, hash routes, sign-in modal that closes, mobile hamburger). It is **not** the FastAPI / Next `subx` stack. No React, no Next, no FastAPI, no Firebase, no model calls.
 
@@ -26,7 +26,7 @@ Until DNS is pointed, Pages will serve on the github.io URL only if the repo is 
 - Feed-first **dummy** posts about Grand Prix racing (quali, SC/VSC, team radio, DNFs, championship points fights, pit-lane mixups, formation lap, undercut/overcut, dummy 2026 grid talk). Fake handles only. Not official F1. **No live results.**
 - Ranking chrome (For You / Following / Hot / New) shows different slices of the seed feed.
 - Sign-in modal closes (X, Escape, overlay click); auth is stubbed locally. No Firebase project keys.
-- No AskAI. No live timing API. No cross-post to X or Reddit. We are not X.com.
+- No AskAI. No live timing API. No cross-post to X or Reddit. SubX is not X.com.
 - **Real F1 APIs are phase 2, not tonight.** Dummy feed is enough for this dress rehearsal.
 
 ## Nested rooms
