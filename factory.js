@@ -5743,7 +5743,7 @@
   }
   // R2 (CLO 10-16 §2): existing accounts attest 18+ at next sign-in. Under 18: suspend + hide; deletion
   // queued for 30 days. The DOB is never stored. Email notice only if site.json ageAttest.notifyUnder18Email
-  // is true (default false; Jebb decision R2-email).
+  // is true (default false; decision R2-email).
   function ageAttestCfg() { return (site && site.ageAttest) || {}; }
   // Set only after the Join form (18+ checkbox and an adult DOB) passes, immediately
   // before this browser's Google popup or redirect. Survives the Safari redirect reload.
