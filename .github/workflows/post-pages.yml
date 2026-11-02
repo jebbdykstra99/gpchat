@@ -1,0 +1,162 @@
+# Build crawlable /p/<postId>/ pages for public gpchat posts.
+#
+# Schedule: every 15 minutes (cron '*/15 * * * *'), plus workflow_dispatch.
+# GitHub's scheduled runs can start a few minutes after the cron time. A post
+# that becomes ineligible is removed on the next run that actually starts, so
+# the public page can lag the Firestore change by that delay plus the Pages build.
+#
+# site.json "postPages" must be true. While it is false the generator exits
+# without reading Firestore and without writing or deleting files.
+#
+# Reads use the public Firebase web config already in factory.js. No service
+# account and no new secrets. If users/{uid} or reports are not publicly
+# readable, the generator exits without writing so unverified posts are not published.
+#
+# IndexNow runs only for gpchat.com, after this commit is on main and Pages has
+# published it. Removals are included so engines recrawl URLs that now 404.
+name: Public post pages
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pages: read
+
+concurrency:
+  group: public-post-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'jebbdykstra99/gpchat'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test the generator
+        run: node --test scripts/post_pages.test.mjs
+
+      - name: Generate public post pages
+        run: node scripts/build_post_pages.mjs --indexnow-out /tmp/gpchat-indexnow.json
+
+      - name: Commit and push generated pages
+        id: commit
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- sitemap.xml
+          if [ -d p ] || git ls-files --error-unmatch p >/dev/null 2>&1; then
+            git add -A -- p
+          fi
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No post-page changes to commit."
+            exit 0
+          fi
+          git commit -m "Publish eligible public gpchat post pages"
+          git push origin HEAD
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for GitHub Pages, then ping IndexNow
+        if: github.ref == 'refs/heads/main' && steps.commit.outputs.changed == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INDEXNOW_HOST: gpchat.com
+          INDEXNOW_ENDPOINT: https://api.indexnow.org/indexnow
+        run: |
+          set -euo pipefail
+          if [ ! -f /tmp/gpchat-indexnow.json ]; then
+            echo "No IndexNow payload."
+            exit 0
+          fi
+          ping=$(jq -r '.ping' /tmp/gpchat-indexnow.json)
+          if [ "$ping" != "true" ]; then
+            echo "IndexNow skipped: $(jq -r '.reason' /tmp/gpchat-indexnow.json)"
+            exit 0
+          fi
+          host=$(jq -r '.host' /tmp/gpchat-indexnow.json)
+          if [ "$host" != "gpchat.com" ]; then
+            echo "IndexNow is gpchat only (host=$host)."
+            exit 0
+          fi
+          jq -r '.urls[]' /tmp/gpchat-indexnow.json > /tmp/gpchat-indexnow-urls.txt
+          count=$(wc -l < /tmp/gpchat-indexnow-urls.txt | tr -d ' ')
+          echo "IndexNow URLs ($count):"
+          cat /tmp/gpchat-indexnow-urls.txt
+          if [ "$count" = "0" ]; then exit 0; fi
+
+          deadline=$(( $(date +%s) + 900 ))
+          built=no
+          sha=$(git rev-parse HEAD)
+          while [ "$(date +%s)" -lt "$deadline" ]; do
+            read -r status commit < <(gh api "repos/${GITHUB_REPOSITORY}/pages/builds/latest" \
+              --jq '"\(.status) \(.commit)"' 2>/dev/null || echo "unknown none")
+            echo "Pages latest build: status=${status} commit=${commit}"
+            if [ "$status" = "built" ] && { [ "$commit" = "$sha" ] || \
+                 { git fetch -q origin main && git merge-base --is-ancestor "$sha" "$commit" 2>/dev/null; }; }; then
+              built=yes
+              break
+            fi
+            if [ "$status" = "errored" ] && [ "$commit" = "$sha" ]; then
+              echo "Pages build errored for this commit; not pinging."
+              exit 1
+            fi
+            sleep 20
+          done
+          [ "$built" = yes ] || echo "::warning::Pages build status not confirmed in 15 min; falling back to a URL check."
+
+          # New or changed pages must answer 200 before a ping. A removal-only
+          # run waits until that URL 404s, so a not-yet-deployed delete is not
+          # reported as already gone.
+          live_url=$(jq -r '(.created + .changed)[0] // ""' /tmp/gpchat-indexnow.json)
+          gone_url=$(jq -r '.removed[0] // ""' /tmp/gpchat-indexnow.json)
+          if [ -n "$live_url" ]; then
+            ready=no
+            for i in $(seq 1 20); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' -L "$live_url" || echo 000)
+              echo "GET $live_url -> $code"
+              if [ "$code" = "200" ]; then ready=yes; break; fi
+              sleep 15
+            done
+            if [ "$ready" != yes ]; then
+              echo "$live_url never returned 200; not pinging."
+              exit 1
+            fi
+          elif [ -n "$gone_url" ]; then
+            ready=no
+            for i in $(seq 1 20); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' "$gone_url" || echo 000)
+              echo "GET $gone_url -> $code"
+              if [ "$code" = "404" ]; then ready=yes; break; fi
+              sleep 15
+            done
+            if [ "$ready" != yes ]; then
+              echo "::warning::$gone_url was still not 404; pinging anyway so engines recrawl it."
+            fi
+          fi
+
+          key=$(jq -r '.key' /tmp/gpchat-indexnow.json)
+          loc=$(jq -r '.keyLocation' /tmp/gpchat-indexnow.json)
+          body=$(jq -n --arg host "$host" --arg key "$key" --arg loc "$loc" \
+            --rawfile urls /tmp/gpchat-indexnow-urls.txt \
+            '{host:$host, key:$key, keyLocation:$loc, urlList:($urls|split("\n")|map(select(length>0)))}')
+          code=$(curl -sS -o /tmp/gpchat-indexnow-resp.txt -w '%{http_code}' -X POST "$INDEXNOW_ENDPOINT" \
+            -H 'Content-Type: application/json; charset=utf-8' --data "$body" || echo 000)
+          echo "IndexNow HTTP $code"
+          cat /tmp/gpchat-indexnow-resp.txt 2>/dev/null || true
+          echo
+          case "$code" in
+            200|202) echo "IndexNow accepted the post URL list." ;;
+            *) echo "::warning::IndexNow returned HTTP $code (best-effort; pages commit is unaffected)."; exit 1 ;;
+          esac

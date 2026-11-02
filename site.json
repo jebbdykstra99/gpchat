@@ -819,6 +819,7 @@
   "cacheBust": 2,
   "images": false,
   "accountsOpen": true,
+  "postPages": false,
   "ageAttest": {
     "enabled": true,
     "notifyUnder18Email": false

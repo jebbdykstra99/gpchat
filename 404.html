@@ -9,13 +9,28 @@
     (function () {
       var path = location.pathname || '/';
       if (path.charAt(0) !== '/') path = '/' + path;
+      // Removed post pages must stay a real 404. Other unknown paths still
+      // bounce home so nest routes can be restored by factory.js.
+      if (path === '/p' || path.indexOf('/p/') === 0) return;
       try { sessionStorage.setItem('subx.restorePath', path + (location.search || '') + (location.hash || '')); } catch (e) {}
       location.replace('/' + (location.search || '') + (location.hash || ''));
     })();
   </script>
 </head>
 <body>
-  <p>Loading…</p>
+  <p id="gone-msg">Loading…</p>
+  <p id="gone-home" hidden><a href="/">Back to gpchat</a></p>
+  <script>
+    (function () {
+      var path = location.pathname || '/';
+      if (path !== '/p' && path.indexOf('/p/') !== 0) return;
+      var msg = document.getElementById('gone-msg');
+      if (msg) msg.textContent = 'This post is not available.';
+      var home = document.getElementById('gone-home');
+      if (home) home.hidden = false;
+      document.title = 'Post unavailable · gpchat';
+    })();
+  </script>
 <footer class="legal-footer" role="contentinfo" aria-label="Legal">
   <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a> ·
   <a href="/report.html">Report</a> · <a href="/guidelines.html">Guidelines</a>
