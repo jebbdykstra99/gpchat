@@ -5,7 +5,9 @@ import { fileURLToPath } from 'url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = '/opt/cursor/artifacts';
-const POPUP_MSG = 'Google popup was blocked. Allow popups for this site, or use email.';
+const POPUP_MSG = 'Google popup sign-in could not open. Trying another sign-in method.';
+const RETURN_MSG = 'Google sign-in did not complete. Try again or use email.';
+const UNAVAILABLE = 'Sign-in is unavailable right now. Please reload.';
 const UID_KEY = 'subx.joinAttested.gpchat.google-user';
 
 function installStub(page) {
@@ -75,7 +77,7 @@ function installStub(page) {
         }
         window.__googleCalls = [];
         window.__persistCalls = [];
-        window.__likes = {};
+        window.__likes = /preliked=1/.test(location.search) ? { 'email-user': true } : {};
         window.__likeUpdates = 0;
         window.__openedOnNull = false;
         var postListeners = [];
@@ -401,9 +403,13 @@ test('factory source uses popup first on every browser', async () => {
   expect(src).toContain('function ageAttestUidKey');
   expect(src).toContain('function markAgeAttestedUid');
   expect(src).toContain(POPUP_MSG);
+  expect(src).toContain(RETURN_MSG);
+  expect(src).toContain(UNAVAILABLE);
+  expect(src).not.toContain('popup was blocked');
+  expect(src).toContain('toggleLike(desc.id, true)');
   expect(src.split('authPersistPromise.then').length - 1).toBeGreaterThanOrEqual(2);
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  expect(html).toContain('factory.js?v=62');
+  expect(html).toContain('factory.js?v=63');
 });
 
 test('guest Like opens the join sheet, email sign-in completes the Like, and it does not ask again', async ({ page }, testInfo) => {
@@ -448,6 +454,7 @@ test('guest Reply opens the sheet once, then focuses the reply after email sign-
   await expect(page.locator('#cv-auth-overlay')).toHaveClass(/open/);
   await emailSignIn(page);
   await expect(page.locator('#thoughts-compose-input')).toHaveAttribute('placeholder', 'Reply to this post…');
+  await expect(page.locator('#thoughts-compose-input')).toHaveValue('');
   await expect(page.locator('#age-attest')).toHaveCount(0);
   await page.locator('[data-act="reply"]').first().click();
   await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
@@ -503,7 +510,7 @@ test('popup-blocked falls back to redirect once and does not redirect again on r
   await page.reload();
   await waitBoot(page);
   await expect(page.locator('#cv-auth-overlay')).toHaveClass(/open/);
-  await expect(page.locator('#cv-login-err')).toHaveText(POPUP_MSG);
+  await expect(page.locator('#cv-login-err')).toHaveText(RETURN_MSG);
   const second = await page.evaluate(function () { return window.__googleCalls.slice(); });
   expect(second).toEqual([]);
   if (testInfo.project.name === 'webkit-iphone') {
@@ -513,7 +520,7 @@ test('popup-blocked falls back to redirect once and does not redirect again on r
   await page.reload();
   await waitBoot(page);
   await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
-  await expect(page.locator('#cv-login-err')).not.toHaveText(POPUP_MSG);
+  await expect(page.locator('#cv-login-err')).not.toHaveText(RETURN_MSG);
   const third = await page.evaluate(function () { return window.__googleCalls.slice(); });
   expect(third).toEqual([]);
 });
@@ -647,6 +654,61 @@ test('legacy account confirms age once and a second auth event does not ask agai
   await page.locator('[data-act="like"]').first().click();
   await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
   await expect(page.locator('#age-attest')).toHaveCount(0);
+});
+
+test('replaying a Like does not remove a like that is already there', async ({ page }) => {
+  await installStub(page);
+  await page.goto('/?preliked=1');
+  await openLikeGate(page);
+  await emailSignIn(page);
+  const after = await page.evaluate(function () {
+    return { updates: window.__likeUpdates, likes: window.__likes };
+  });
+  expect(after.updates).toBe(0);
+  expect(after.likes['email-user']).toBe(true);
+  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
+  await page.locator('[data-act="like"]').first().click();
+  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
+  const toggled = await page.evaluate(function () {
+    return { updates: window.__likeUpdates, likes: window.__likes };
+  });
+  expect(toggled.updates).toBe(1);
+  expect(toggled.likes['email-user']).toBeUndefined();
+});
+
+test('Join, Like, and Reply say sign-in is unavailable when Firebase does not start', async ({ page }) => {
+  await page.route(/firebasejs\/.*\.js/, function (route) { return route.abort(); });
+  await page.goto('/');
+  await page.waitForFunction(function () {
+    var err = document.getElementById('thoughts-compose-err');
+    return !!(err && err.textContent && err.textContent.indexOf('Feed is not connected') !== -1);
+  });
+  const signIn = page.locator('#auth-signin');
+  const vp = page.viewportSize();
+  if (vp && vp.width <= 900) await page.locator('#hamburger').click();
+  await signIn.click();
+  await expect(page.locator('#thoughts-compose-err')).toHaveText(UNAVAILABLE);
+  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
+  if (vp && vp.width <= 900) await page.locator('#hamburger').click();
+  await page.evaluate(function () {
+    var feed = document.getElementById('thoughts-feed');
+    var art = document.createElement('article');
+    art.setAttribute('data-post-id', 'post1');
+    art.innerHTML = '<button class="post-action" data-act="like" type="button">Like</button><button class="post-action" data-act="reply" type="button">Reply</button>';
+    feed.appendChild(art);
+  });
+  await page.locator('[data-act="like"]').first().click();
+  await expect(page.locator('#thoughts-compose-err')).toHaveText(UNAVAILABLE);
+  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
+  await page.locator('[data-act="reply"]').first().click();
+  await expect(page.locator('#thoughts-compose-input')).toHaveAttribute('placeholder', 'Say something. This is a work in progress.');
+  await expect(page.locator('#thoughts-compose-input')).toHaveValue('');
+  await expect(page.locator('#thoughts-compose-err')).toHaveText(UNAVAILABLE);
+  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
+  if (vp && vp.width <= 900) await page.locator('#hamburger').click();
+  await signIn.click();
+  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
+  await expect(page.locator('#thoughts-compose-err')).toHaveText(UNAVAILABLE);
 });
 
 test('underage date of birth does not start Google sign-in', async ({ page }, testInfo) => {
