@@ -322,7 +322,7 @@
       '.name-prefix-nudge-link,.name-prefix-nudge-x{background:transparent;border:1px solid var(--border,rgba(255,255,255,0.18));color:inherit;border-radius:8px;cursor:pointer;}' +
       '.name-prefix-nudge-link{margin-left:0.35rem;padding:0.15rem 0.5rem;font:inherit;font-weight:600;}' +
       '.name-prefix-nudge-x{width:1.7rem;height:1.7rem;}' +
-      '.name-prompt{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:1rem;}' +
+      '.name-prompt{position:fixed;inset:0;z-index:9600;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:1rem;}' +
       '.name-prompt-card{background:var(--surface,#111);color:var(--text,#f4f4f4);border-radius:12px;padding:1rem;width:min(22rem,100%);}' +
       '.name-prompt-card input{width:100%;margin:0.5rem 0;padding:0.45rem 0.6rem;border-radius:8px;border:1px solid var(--border,#333);background:transparent;color:inherit;}' +
       '.name-prompt-err{min-height:1.1rem;color:var(--accent,#e10600);font-size:0.8rem;}' +
@@ -873,6 +873,27 @@
   }
   // ===== END PREVIEW-LIFT (guards/privacy/steward) =====
 
+  var authPersistPromise = Promise.resolve();
+
+  function setAuthPersistence(auth) {
+    var P = firebase.auth.Auth.Persistence;
+    var modes = [P.LOCAL, P.SESSION, P.NONE];
+    function attempt(i) {
+      if (!auth || i >= modes.length) return Promise.resolve();
+      var pending;
+      try { pending = auth.setPersistence(modes[i]); }
+      catch (e) {
+        console.warn('auth persistence', modes[i], e);
+        return attempt(i + 1);
+      }
+      return Promise.resolve(pending).catch(function (e2) {
+        console.warn('auth persistence', modes[i], e2);
+        return attempt(i + 1);
+      });
+    }
+    return attempt(0);
+  }
+
   try {
     firebase.initializeApp({
     apiKey: "AIzaSyD4CgKQTylEy03Lh9Uhe9UVloyrKaK3bdY",
@@ -883,9 +904,7 @@
     appId: "1:869847405863:web:26f902efb9a4ee0b7c0502"
     });
     fbAuth = firebase.auth();
-    try {
-      fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-    } catch (ePersist) { console.warn('auth persistence', ePersist); }
+    authPersistPromise = setAuthPersistence(fbAuth);
     fbDb = firebase.firestore();
     fbStorage = firebase.storage();
     try {
@@ -1039,6 +1058,137 @@
   }
   function isLiveUser() {
     return !!(fbAuth && fbAuth.currentUser);
+  }
+
+  var authStateKnown = false;
+  var redirectSettled = false;
+  var signedOutApplied = false;
+  var authOpenWhenReady = false;
+  var deferredAuthMsg = '';
+  var pendingAuthAction = null;
+  var flushingAuth = false;
+  var ageGatePassedUid = '';
+  var AUTH_ACTION_KEY = 'subx.authAction';
+  var GOOGLE_REDIRECT_KEY = 'subx.googleRedirect';
+  var AUTH_ACTION_MS = 10 * 60 * 1000;
+
+  function authReadyForGate() {
+    return !!(authStateKnown && redirectSettled);
+  }
+  function storageSet(store, key, val) {
+    try { store.setItem(key, val); } catch (e) {}
+  }
+  function storageGet(store, key) {
+    try { return store.getItem(key); } catch (e) { return null; }
+  }
+  function storageDel(store, key) {
+    try { store.removeItem(key); } catch (e) {}
+  }
+  function rememberGoogleRedirect() {
+    storageSet(sessionStorage, GOOGLE_REDIRECT_KEY, '1');
+    storageSet(localStorage, GOOGLE_REDIRECT_KEY, '1');
+  }
+  function peekGoogleRedirect() {
+    return storageGet(sessionStorage, GOOGLE_REDIRECT_KEY) === '1' || storageGet(localStorage, GOOGLE_REDIRECT_KEY) === '1';
+  }
+  function clearGoogleRedirect() {
+    storageDel(sessionStorage, GOOGLE_REDIRECT_KEY);
+    storageDel(localStorage, GOOGLE_REDIRECT_KEY);
+  }
+  function showGooglePopupBlocked() {
+    var err = document.getElementById('cv-login-err');
+    if (!err) return;
+    err.textContent = 'Google popup was blocked. Allow popups for this site, or use email.';
+    err.classList.add('show');
+  }
+  function clearAuthAction() {
+    pendingAuthAction = null;
+    storageDel(sessionStorage, AUTH_ACTION_KEY);
+    storageDel(localStorage, AUTH_ACTION_KEY);
+  }
+  function rememberAuthAction(desc) {
+    if (!desc || !desc.t || !desc.id) return;
+    pendingAuthAction = { t: desc.t, id: desc.id, at: Date.now() };
+    var raw = JSON.stringify(pendingAuthAction);
+    storageSet(sessionStorage, AUTH_ACTION_KEY, raw);
+    storageSet(localStorage, AUTH_ACTION_KEY, raw);
+  }
+  function readAuthAction() {
+    if (pendingAuthAction && pendingAuthAction.at && Date.now() - pendingAuthAction.at > AUTH_ACTION_MS) {
+      clearAuthAction();
+      return null;
+    }
+    if (pendingAuthAction) return pendingAuthAction;
+    var raw = storageGet(sessionStorage, AUTH_ACTION_KEY) || storageGet(localStorage, AUTH_ACTION_KEY);
+    if (!raw) return null;
+    try {
+      var desc = JSON.parse(raw);
+      if (!desc || !desc.t || !desc.id || !desc.at || Date.now() - desc.at > AUTH_ACTION_MS) {
+        clearAuthAction();
+        return null;
+      }
+      pendingAuthAction = desc;
+      return desc;
+    } catch (e2) {
+      clearAuthAction();
+      return null;
+    }
+  }
+  function ageGateOpenFor(uid) {
+    if (!uid) return false;
+    if (ageAttestCfg().enabled === false || isAdminUser()) return true;
+    return ageGatePassedUid === uid;
+  }
+  function flushPendingAuthAction() {
+    if (flushingAuth || !isLiveUser()) return;
+    if (!ageGateOpenFor(liveUid())) return;
+    var desc = readAuthAction();
+    if (!desc) return;
+    flushingAuth = true;
+    clearAuthAction();
+    try {
+      if (desc.t === 'like') toggleLike(desc.id);
+      else if (desc.t === 'reply') startReply(desc.id);
+    } catch (e3) { console.warn('auth action', e3); }
+    flushingAuth = false;
+  }
+  function applySignedOut(q) {
+    if (signedOutApplied) {
+      if (q) openAuth(q);
+      return;
+    }
+    signedOutApplied = true;
+    ageGatePassedUid = '';
+    stopPreviewLift();
+    listenMemberNests(null);
+    listenBlocks(null);
+    teardownPeopleSocial();
+    if (currentUser && currentUser.live) {
+      currentUser = null;
+      saveJSON(LS_USER, null);
+      renderSidebarAuth();
+      hideDummyChrome();
+      teardownDms();
+      listenConversations();
+      syncProfile();
+      renderNotifs();
+      renderFeed();
+    } else {
+      renderWatchlist();
+    }
+    if (q) openAuth(q);
+    else if (authOpenWhenReady || deferredAuthMsg) {
+      var msg = deferredAuthMsg;
+      deferredAuthMsg = '';
+      authOpenWhenReady = false;
+      if (msg) composeErr(msg);
+      openAuth('join');
+    }
+  }
+  function markRedirectSettled() {
+    redirectSettled = true;
+    if (!authStateKnown || isLiveUser()) return;
+    applySignedOut('');
   }
   function sessionSeedList() {
     if (site && Array.isArray(site.sessionSeeds) && site.sessionSeeds.length) {
@@ -1235,7 +1385,13 @@
       if (action === 'report' || action === 'block') toast(msg);
     }
     if (!isLiveUser()) {
-      gateErr('Sign in to ' + (action || 'post') + '. Guest can only browse.');
+      var signInMsg = 'Sign in to ' + (action || 'post') + '. Guest can only browse.';
+      if (!authReadyForGate()) {
+        authOpenWhenReady = true;
+        deferredAuthMsg = signInMsg;
+        return false;
+      }
+      gateErr(signInMsg);
       openAuth('join');
       return false;
     }
@@ -5448,6 +5604,17 @@
   }
   function openAuth(tab) {
     ensureJoinAuthLayout();
+    var modeHint = tab || 'join';
+    if (modeHint === 'login') modeHint = 'join';
+    if (modeHint === 'join' && isLiveUser()) {
+      closeAuth();
+      flushPendingAuthAction();
+      return;
+    }
+    if (modeHint === 'join' && !authReadyForGate()) {
+      authOpenWhenReady = true;
+      return;
+    }
     var draft = peekCompose();
     const ov = document.getElementById('cv-auth-overlay');
     if (!ov) return;
@@ -5501,6 +5668,8 @@
     restoreCompose(draft);
   }
   function signOut() {
+    ageGatePassedUid = '';
+    clearAuthAction();
     stopPreviewLift();
     listenMemberNests(null);
     teardownPeopleSocial();
@@ -5745,22 +5914,53 @@
   // is true (default false; decision R2-email).
   function ageAttestCfg() { return (site && site.ageAttest) || {}; }
   // Set only after the Join form (18+ checkbox and an adult DOB) passes, immediately
-  // before this browser's Google popup or redirect. Survives the Safari redirect reload.
-  // While it is set, skip the legacy "is now 18+" dialog and finish the signup write.
+  // before this browser's Google popup or redirect. The site key is written to
+  // sessionStorage and localStorage so a redirect that drops one store still
+  // counts. A signed-in member also gets a per-uid copy in localStorage, with
+  // sessionStorage as the fallback, so the age dialog cannot open again.
   var JOIN_ATTEST_MS = 30 * 60 * 1000;
   var googleSignupWrite = null;
+  var ageAttestPrompt = null;
   function joinAttestKey() { return 'subx.joinAttested.' + SITE_ID; }
+  function ageAttestUidKey(uid) { return 'subx.joinAttested.' + SITE_ID + '.' + uid; }
   function markJoinAttested() {
-    try { sessionStorage.setItem(joinAttestKey(), String(Date.now())); } catch (e) {}
+    var now = String(Date.now());
+    storageSet(sessionStorage, joinAttestKey(), now);
+    storageSet(localStorage, joinAttestKey(), now);
   }
   function clearJoinAttested() {
-    try { sessionStorage.removeItem(joinAttestKey()); } catch (e) {}
+    storageDel(sessionStorage, joinAttestKey());
+    storageDel(localStorage, joinAttestKey());
+  }
+  function joinAttestedFresh(raw) {
+    var t = parseInt(raw, 10);
+    return isFinite(t) && Date.now() - t < JOIN_ATTEST_MS;
   }
   function joinAttestedThisSignIn() {
-    try {
-      var t = parseInt(sessionStorage.getItem(joinAttestKey()), 10);
-      return isFinite(t) && Date.now() - t < JOIN_ATTEST_MS;
-    } catch (e) { return false; }
+    return joinAttestedFresh(storageGet(sessionStorage, joinAttestKey())) || joinAttestedFresh(storageGet(localStorage, joinAttestKey()));
+  }
+  function markAgeAttestedUid(uid) {
+    if (!uid) return;
+    var now = String(Date.now());
+    storageSet(localStorage, ageAttestUidKey(uid), now);
+    storageSet(sessionStorage, ageAttestUidKey(uid), now);
+  }
+  function clearAgeAttestedUid(uid) {
+    if (!uid) return;
+    storageDel(localStorage, ageAttestUidKey(uid));
+    storageDel(sessionStorage, ageAttestUidKey(uid));
+  }
+  function ageAttestedForUid(uid) {
+    if (!uid) return false;
+    var key = ageAttestUidKey(uid);
+    var raw = storageGet(localStorage, key);
+    if (raw == null || raw === '') raw = storageGet(sessionStorage, key);
+    var t = parseInt(raw, 10);
+    return isFinite(t) && t > 0;
+  }
+  function passAgeGate(user) {
+    if (user && user.uid) ageGatePassedUid = user.uid;
+    return true;
   }
   function surfaceSignupWriteError(e) {
     try { if (e && typeof e === 'object') e.__signupSurfaced = true; } catch (err) {}
@@ -5823,30 +6023,57 @@
       return false;
     });
   }
+  function ageAttestPatch() {
+    return {
+      siteId: SITE_ID,
+      ageAttested18: true,
+      ageConfirmed: true,
+      ageAttestedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      termsVersion: termsVersion(),
+      termsAcceptedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+  }
   function runAgeAttestGate(user) {
-    if (!fbDb || !user || ageAttestCfg().enabled === false || isAdminUser()) return Promise.resolve(true);
+    if (!fbDb || !user || ageAttestCfg().enabled === false || isAdminUser()) return Promise.resolve(passAgeGate(user));
+    // Record the uid before the profile read. A signup write can clear the
+    // short-lived site key while this get() is still in flight.
+    if (joinAttestedThisSignIn()) markAgeAttestedUid(user.uid);
     var ref = fbDb.collection('users').doc(user.uid);
     return ref.get().then(function (snap) {
       var d = (snap && snap.exists && snap.data()) || {};
       if (d.suspended === true) {
         clearJoinAttested();
+        clearAgeAttestedUid(user.uid);
+        ageGatePassedUid = '';
         showSuspended(d.suspendedReason);
         return false;
       }
-      if (d.ageAttested18 === true) {
+      if (d.ageAttested18 === true || ageAttestedForUid(user.uid)) {
+        markAgeAttestedUid(user.uid);
         clearJoinAttested();
-        return true;
+        if (d.ageAttested18 === true) return passAgeGate(user);
+        return ref.set(ageAttestPatch(), { merge: true }).then(function () {
+          return passAgeGate(user);
+        }, function () {
+          return passAgeGate(user);
+        });
       }
       // Join already collected an adult DOB in this browser. Do not ask again,
       // even when this read lands before the signup write.
-      if (joinAttestedThisSignIn()) return finishJoinAttestedSignup(user);
+      if (joinAttestedThisSignIn()) {
+        markAgeAttestedUid(user.uid);
+        return finishJoinAttestedSignup(user).then(function (ok) {
+          if (ok) return passAgeGate(user);
+          return false;
+        });
+      }
       return promptAgeAttest().then(function (age) {
         if (age >= 18) {
-          return ref.set({ siteId: SITE_ID, ageAttested18: true, ageConfirmed: true,
-            ageAttestedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            termsVersion: termsVersion(), termsAcceptedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }).then(function () { return true; });
+          markAgeAttestedUid(user.uid);
+          return ref.set(ageAttestPatch(), { merge: true }).then(function () { return passAgeGate(user); });
         }
         try { localStorage.setItem('subx.ageBlock.' + SITE_ID, String(Date.now())); } catch (e) {}
+        clearAgeAttestedUid(user.uid);
         var patch = { siteId: SITE_ID, suspended: true, suspendedReason: 'under18', ageAttested18: false,
           profileHidden: true, deletionQueuedAt: firebase.firestore.FieldValue.serverTimestamp() };
         if (ageAttestCfg().notifyUnder18Email === true) patch.notifyUnder18Email = true;   // OFF by default
@@ -5854,12 +6081,19 @@
       });
     }).catch(function (e) {
       console.warn('age attest', e);
-      if (joinAttestedThisSignIn()) return finishJoinAttestedSignup(user);
-      return true;
+      if (ageAttestedForUid(user.uid) || joinAttestedThisSignIn()) {
+        markAgeAttestedUid(user.uid);
+        return finishJoinAttestedSignup(user).then(function (ok) {
+          return ok ? passAgeGate(user) : false;
+        });
+      }
+      return passAgeGate(user);
     });
   }
   function promptAgeAttest() {
-    return new Promise(function (resolve) {
+    if (ageAttestPrompt) return ageAttestPrompt;
+    ageAttestPrompt = new Promise(function (resolve) {
+      try { closeAuth(); } catch (eClose) {}
       var el = document.createElement('div');
       el.className = 'name-prompt age-attest';
       el.id = 'age-attest';
@@ -5879,9 +6113,11 @@
         var age = ageFromDob(dob.value);
         dob.value = '';
         if (el.parentNode) el.parentNode.removeChild(el);
+        ageAttestPrompt = null;
         resolve(age);
       });
     });
+    return ageAttestPrompt;
   }
   function showSuspended(reason) {
     var room = (site && site.name) || SITE_ID;
@@ -6052,6 +6288,7 @@
   }
 
   function toggleLike(postId) {
+    if (!isLiveUser()) rememberAuthAction({ t: 'like', id: postId });
     var uid = liveUid();
     if (!requireVerified('like')) return;
     if (!uid) {
@@ -6059,6 +6296,7 @@
       openAuth('join');
       return;
     }
+    composeErr('');
     if (!fbDb || !postId) return;
     var post = findPost(postId);
     if (isSessionSeedPost(post)) {
@@ -6208,6 +6446,40 @@
       };
       setTimeout(function () { document.addEventListener('click', close); }, 20);
     });
+  }
+
+  function startReply(postId) {
+    if (!postId) return;
+    if (!isLiveUser()) {
+      rememberAuthAction({ t: 'reply', id: postId });
+      composeErr('Sign in to reply. Guest can only browse.');
+      openAuth('join');
+      return;
+    }
+    var post = null;
+    var nodes = document.querySelectorAll('[data-post-id]');
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      if (nodes[i].dataset.postId === postId) { post = nodes[i]; break; }
+    }
+    composeErr('');
+    var seedPost = findPost(postId);
+    if (isSessionSeedPost(seedPost)) {
+      replyTo = null;
+      const seedInput = document.getElementById('thoughts-compose-input');
+      if (seedInput) {
+        if (!seedInput.getAttribute('data-ph')) seedInput.setAttribute('data-ph', seedInput.placeholder);
+        seedInput.placeholder = 'Answer the room…';
+        seedInput.focus();
+      }
+      return;
+    }
+    replyTo = (post && post.dataset.parentId) || postId;
+    const input = document.getElementById('thoughts-compose-input');
+    if (!input) return;
+    if (!input.getAttribute('data-ph')) input.setAttribute('data-ph', input.placeholder);
+    input.placeholder = 'Reply to this post…';
+    input.focus();
   }
 
   function wireEvents() {
@@ -6393,25 +6665,9 @@
         return;
       }
       if (e.target.closest('[data-act="reply"]')) {
-        if (!isLiveUser()) { composeErr('Sign in to reply. Guest can only browse.'); openAuth('join'); return; }
         const post = e.target.closest('[data-post-id]');
         if (!post) return;
-        var seedPost = findPost(post.dataset.postId);
-        if (isSessionSeedPost(seedPost)) {
-          replyTo = null;
-          const seedInput = document.getElementById('thoughts-compose-input');
-          if (seedInput) {
-            if (!seedInput.getAttribute('data-ph')) seedInput.setAttribute('data-ph', seedInput.placeholder);
-            seedInput.placeholder = 'Answer the room…';
-            seedInput.focus();
-          }
-          return;
-        }
-        replyTo = post.dataset.parentId || post.dataset.postId;
-        const input = document.getElementById('thoughts-compose-input');
-        if (!input.getAttribute('data-ph')) input.setAttribute('data-ph', input.placeholder);
-        input.placeholder = 'Reply to this post…';
-        input.focus();
+        startReply(post.dataset.postId);
         return;
       }
       if (e.target.closest('[data-act="share"]')) {
@@ -6569,6 +6825,7 @@
     });
     document.getElementById('cv-login-btn').addEventListener('click', function () {
       const err = document.getElementById('cv-login-err');
+      authPersistPromise.then(function () {
       const email = (document.getElementById('cv-login-email').value || '').trim();
       const pw = document.getElementById('cv-login-pw').value || '';
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
@@ -6578,9 +6835,11 @@
         err.textContent = (e && e.message) ? e.message : 'Sign-in failed.';
         err.classList.add('show');
       });
+      });
     });
     document.getElementById('cv-reg-btn').addEventListener('click', function () {
       const err = document.getElementById('cv-reg-err');
+      authPersistPromise.then(function () {
       const name = (document.getElementById('cv-reg-name').value || '').trim();
       const email = (document.getElementById('cv-reg-email').value || '').trim();
       const pw = document.getElementById('cv-reg-pw').value || '';
@@ -6614,6 +6873,7 @@
         err.textContent = (e && e.message) ? e.message : 'Could not create account.';
         err.classList.add('show');
       });
+      });
     });
     document.getElementById('cv-google-login').addEventListener('click', function () {
       var err = document.getElementById('cv-login-err');
@@ -6637,13 +6897,13 @@
       err.classList.remove('show');
       markAuthLand();
       if (joinMode && age.checked && !gDobErr) markJoinAttested();
+      clearGoogleRedirect();
       var provider = new firebase.auth.GoogleAuthProvider();
-      var ua = navigator.userAgent || '';
-      var isiOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      var isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS|Android/i.test(ua);
       function finishGoogle(cred) {
+        clearGoogleRedirect();
         var u = (cred && cred.user) || (fbAuth && fbAuth.currentUser);
         if (!u) { clearJoinAttested(); return; }
+        markAgeAttestedUid(u.uid);
         return commitGoogleSignup(u);
       }
       function failGoogle(e) {
@@ -6659,23 +6919,24 @@
         err.classList.add('show');
       }
       function redirectGoogle() {
-        return fbAuth.signInWithRedirect(provider).catch(function (e) {
+        rememberGoogleRedirect();
+        showGooglePopupBlocked();
+        return fbAuth.signInWithRedirect(provider).catch(function (e2) {
+          clearGoogleRedirect();
           clearJoinAttested();
-          failGoogle(e);
+          failGoogle(e2);
         });
       }
-      if (isiOS || isSafari) {
-        redirectGoogle();
-      } else {
-        fbAuth.signInWithPopup(provider).then(finishGoogle).catch(function (e) {
-          if (e && (e.__signupSurfaced || e.__suspended)) return;
-          if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request')) {
-            return redirectGoogle();
-          }
-          clearJoinAttested();
-          failGoogle(e);
-        });
-      }
+      // Call popup in this tap. iOS Safari blocks it if this handler waits first.
+      fbAuth.signInWithPopup(provider).then(finishGoogle).catch(function (e) {
+        if (e && (e.__signupSurfaced || e.__suspended)) return;
+        var code = e && e.code;
+        if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+          return redirectGoogle();
+        }
+        clearJoinAttested();
+        failGoogle(e);
+      });
     });
     document.getElementById('cv-guest-login').addEventListener('click', function () { stubSignIn('Guest', 'guestgp'); });
 
@@ -7574,37 +7835,44 @@
     if (fbAuth) {
       fbAuth.getRedirectResult().then(function (cred) {
         var u = cred && cred.user;
-        if (u) return commitGoogleSignup(u);
+        if (u) {
+          clearGoogleRedirect();
+          markAgeAttestedUid(u.uid);
+          return commitGoogleSignup(u);
+        }
+        if (peekGoogleRedirect() && !(fbAuth && fbAuth.currentUser)) {
+          clearGoogleRedirect();
+          showGooglePopupBlocked();
+          authOpenWhenReady = true;
+        }
       }).catch(function (e) {
+        console.warn('redirect result', e);
+        clearGoogleRedirect();
         if (e && (e.__signupSurfaced || e.__suspended)) return;
+        if (fbAuth && fbAuth.currentUser) return;
         clearJoinAttested();
         var msg = (e && e.message) ? e.message : 'Google sign-in failed.';
         var el = document.getElementById('cv-login-err');
         if (el) { el.textContent = msg; el.classList.add('show'); }
         try { composeErr(msg); } catch (err) {}
-        try { openAuth('join'); } catch (err2) {}
-      });
+        authOpenWhenReady = true;
+      }).then(function () { markRedirectSettled(); }, function () { markRedirectSettled(); });
       fbAuth.onAuthStateChanged(function (user) {
-        if (user) runAgeAttestGate(user).then(function (ok) { if (ok) applyFbUser(user); });
-        else {
-          stopPreviewLift();
-          listenMemberNests(null);
-          listenBlocks(null);
-          teardownPeopleSocial();
-          if (currentUser && currentUser.live) {
-            currentUser = null;
-            saveJSON(LS_USER, null);
-            renderSidebarAuth();
-            hideDummyChrome();
-            teardownDms();
-            listenConversations();
-            syncProfile();
-            renderNotifs();
-            renderFeed();
-          } else {
-            renderWatchlist();
-          }
+        authStateKnown = true;
+        if (user) {
+          signedOutApplied = false;
+          authOpenWhenReady = false;
+          deferredAuthMsg = '';
+          runAgeAttestGate(user).then(function (ok) {
+            if (!ok) return;
+            if (!fbAuth || !fbAuth.currentUser || fbAuth.currentUser.uid !== user.uid) return;
+            applyFbUser(user);
+            flushPendingAuthAction();
+          });
+          return;
         }
+        if (!redirectSettled) return;
+        applySignedOut('');
       });
     }
 
