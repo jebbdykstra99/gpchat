@@ -195,7 +195,7 @@
     return n;
   }
   function ageGateMessage() {
-    return 'Confirm you are ' + siteMinAge() + ' or older and agree to the Terms of Service and Privacy Policy.';
+    return 'Confirm you are ' + siteMinAge() + ' or older, agree to the Terms of Service, and confirm you have read the Privacy Policy.';
   }
   function paintAgeLabels() {
     var n = String(siteMinAge());
@@ -6246,7 +6246,7 @@
       el.innerHTML = '<div class="name-prompt-card" role="dialog" aria-modal="true" aria-label="Confirm your age">' +
         '<p><strong>' + escapeHtml((site && site.name) || 'This room') + ' is now 18+.</strong> Please confirm your age to keep using your account.</p>' +
         '<label for="age-attest-dob">Date of birth</label> <input type="date" id="age-attest-dob" autocomplete="bday" required>' +
-        '<label class="conv-modal-check" for="age-attest-ok"><input type="checkbox" id="age-attest-ok"> <span>I am 18 or older and I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>' +
+        '<label class="conv-modal-check" for="age-attest-ok"><input type="checkbox" id="age-attest-ok"> <span>I am 18 or older.</span></label>' +
         '<div class="name-prompt-err" id="age-attest-err"></div>' +
         '<div class="name-prompt-actions"><button type="button" id="age-attest-go" disabled>Continue</button></div></div>';
       ensurePreviewLiftCss();

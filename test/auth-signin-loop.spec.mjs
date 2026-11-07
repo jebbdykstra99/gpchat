@@ -432,7 +432,10 @@ test('factory source uses popup first on every browser', async () => {
   expect(src).toContain('toggleLike(desc.id, true)');
   expect(src.split('authPersistPromise.then').length - 1).toBeGreaterThanOrEqual(2);
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  expect(html).toContain('factory.js?v=64');
+  expect(html).toContain('factory.js?v=65');
+  expect(src).toContain("' or older, agree to the Terms of Service, and confirm you have read the Privacy Policy.'");
+  expect(src).toContain('<span>I am 18 or older.</span>');
+  expect(src).not.toContain('I am 18 or older and I agree to the');
   expect(html).toContain('I am 18 or older, agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a>, and have read the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.');
 });
 
