@@ -5670,6 +5670,9 @@
     }
   }
   function closeAuth() {
+    // Dismissing the sheet drops the pending Join marker. A Google redirect
+    // that has already left this page keeps it until that attempt settles.
+    if (!peekGoogleRedirect()) clearJoinFlow();
     var draft = peekCompose();
     var ov = document.getElementById('cv-auth-overlay');
     if (ov) ov.classList.remove('open');
@@ -5855,12 +5858,21 @@
       doc.termsVersion = termsVersion();
       doc.termsAcceptedAt = firebase.firestore.FieldValue.serverTimestamp();
     }
-    if (dobMinAge() && !(existing && existing.ageAttested18 === true)) {
+    if (dobMinAge() && !ageWriteBlocked(existing) && !(existing && existing.ageAttested18 === true)) {
       doc.ageConfirmed = true;
       doc.ageAttested18 = true;
       doc.ageAttestedAt = firebase.firestore.FieldValue.serverTimestamp();
     }
     return doc;
+  }
+  // An under-18 suspension, or a deletion already queued for that account,
+  // must not be overwritten by a later age:true write.
+  function ageWriteBlocked(existing) {
+    if (!existing) return false;
+    if (existing.suspended === true) return true;
+    if (existing.suspendedReason === 'under18') return true;
+    if (existing.deletionQueuedAt) return true;
+    return false;
   }
   function ageFromDob(v, now) {
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
@@ -5954,6 +5966,7 @@
   var AGE_CHECK_MSG = 'Could not verify your account. Please reload.';
   var googleSignupWrite = null;
   var ageAttestPrompt = null;
+  var ageAttestResolve = null;
   var activeGoogleFlowId = '';
   var claimedJoin = null;
   function joinAttestKey() { return 'subx.joinAttested.' + SITE_ID; }
@@ -6087,6 +6100,7 @@
     if (!user) return Promise.resolve();
     if (googleSignupWrite) return googleSignupWrite;
     if (!fbDb) {
+      clearJoinFlow();
       var missing = new Error('Feed is not connected.');
       surfaceSignupWriteError(missing);
       return Promise.reject(missing);
@@ -6114,10 +6128,8 @@
       if (googleSignupWrite === settled) googleSignupWrite = null;
     }).catch(function (e) {
       if (googleSignupWrite === settled) googleSignupWrite = null;
-      if (e && e.__suspended) {
-        clearJoinFlow();
-        throw e;
-      }
+      clearJoinFlow();
+      if (e && e.__suspended) throw e;
       surfaceSignupWriteError(e);
       throw e;
     });
@@ -6130,9 +6142,9 @@
       return false;
     });
   }
-  function ageOnlyPatch() {
+  function ageOnlyPatch(existing) {
     var patch = { siteId: SITE_ID };
-    if (dobMinAge()) {
+    if (dobMinAge() && !ageWriteBlocked(existing)) {
       patch.ageConfirmed = true;
       patch.ageAttested18 = true;
       patch.ageAttestedAt = firebase.firestore.FieldValue.serverTimestamp();
@@ -6190,12 +6202,12 @@
       var ref = fbDb.collection('users').doc(user.uid);
       return ref.get().then(function (snap) {
         var d = (snap && snap.exists && snap.data()) || {};
-        if (d.suspended === true) {
+        if (ageWriteBlocked(d)) {
           clearJoinFlow();
           claimedJoin = null;
           clearAgeAttestedUid(user.uid);
           ageGatePassedUid = '';
-          showSuspended(d.suspendedReason);
+          showSuspended(d.suspendedReason || '');
           return false;
         }
         var fresh = takeFreshJoin(user);
@@ -6212,8 +6224,12 @@
         }
         ageGatePassedUid = '';
         return promptAgeAttest().then(function (age) {
+          if (age == null) {
+            clearJoinFlow();
+            return false;
+          }
           if (age >= 18) {
-            var agePatch = ageOnlyPatch();
+            var agePatch = ageOnlyPatch(d);
             if (!patchHasAttestation(agePatch)) return blockAgeGate();
             return writeUserPatch(user, agePatch).then(function (ok) {
               return ok ? passAgeGate(user) : blockAgeGate();
@@ -6222,8 +6238,9 @@
           try { localStorage.setItem('subx.ageBlock.' + SITE_ID, String(Date.now())); } catch (e) {}
           clearAgeAttestedUid(user.uid);
           claimedJoin = null;
+          clearJoinFlow();
           var patch = { siteId: SITE_ID, suspended: true, suspendedReason: 'under18', ageAttested18: false,
-            profileHidden: true, deletionQueuedAt: firebase.firestore.FieldValue.serverTimestamp() };
+            ageConfirmed: false, profileHidden: true, deletionQueuedAt: firebase.firestore.FieldValue.serverTimestamp() };
           if (ageAttestCfg().notifyUnder18Email === true) patch.notifyUnder18Email = true;   // OFF by default
           return ref.set(patch, { merge: true }).then(function () { showSuspended('under18'); return false; }, function () {
             showSuspended('under18');
@@ -6236,9 +6253,21 @@
       });
     });
   }
+  function dismissAgeAttest() {
+    var el = document.getElementById('age-attest');
+    if (!el) return false;
+    if (el.parentNode) el.parentNode.removeChild(el);
+    var resolve = ageAttestResolve;
+    ageAttestPrompt = null;
+    ageAttestResolve = null;
+    clearJoinFlow();
+    if (resolve) resolve(null);
+    return true;
+  }
   function promptAgeAttest() {
     if (ageAttestPrompt) return ageAttestPrompt;
     ageAttestPrompt = new Promise(function (resolve) {
+      ageAttestResolve = resolve;
       try { closeAuth(); } catch (eClose) {}
       var el = document.createElement('div');
       el.className = 'name-prompt age-attest';
@@ -6251,6 +6280,9 @@
         '<div class="name-prompt-actions"><button type="button" id="age-attest-go" disabled>Continue</button></div></div>';
       ensurePreviewLiftCss();
       document.body.appendChild(el);
+      el.addEventListener('click', function (e) {
+        if (e.target === el) dismissAgeAttest();
+      });
       var dob = document.getElementById('age-attest-dob'), ok = document.getElementById('age-attest-ok');
       var go = document.getElementById('age-attest-go');
       function sync() { go.disabled = !(ageFromDob(dob.value) >= 0 && ok.checked); }
@@ -6260,6 +6292,7 @@
         dob.value = '';
         if (el.parentNode) el.parentNode.removeChild(el);
         ageAttestPrompt = null;
+        ageAttestResolve = null;
         resolve(age);
       });
     });
@@ -6896,6 +6929,7 @@
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
+      if (document.getElementById('age-attest')) { e.preventDefault(); dismissAgeAttest(); return; }
       var nestForm = document.getElementById('nav-nest-form');
       if (nestForm && !nestForm.hidden) { e.preventDefault(); hideNestAddForm(); return; }
       if (closeStoriesViewer()) { e.preventDefault(); return; }
@@ -7031,6 +7065,7 @@
           composeErr('Account created. Verify your email before posting.');
         });
       }).catch(function (e) {
+        clearJoinFlow();
         err.textContent = (e && e.message) ? e.message : 'Could not create account.';
         err.classList.add('show');
       });
@@ -8017,9 +8052,9 @@
       }).catch(function (e) {
         console.warn('redirect result', e);
         clearGoogleRedirect();
+        clearJoinFlow();
         if (e && (e.__signupSurfaced || e.__suspended)) return;
         if (fbAuth && fbAuth.currentUser) return;
-        clearJoinAttested();
         var msg = (e && e.message) ? e.message : 'Google sign-in failed.';
         var el = document.getElementById('cv-login-err');
         if (el) { el.textContent = msg; el.classList.add('show'); }
