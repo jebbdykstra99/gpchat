@@ -1406,6 +1406,11 @@
       openAuth('join');
       return false;
     }
+    if (ageAttestCfg().enabled !== false && !isAdminUser() && ageGatePassedUid !== liveUid()) {
+      if (action === 'chat') chatErr(AGE_CHECK_MSG);
+      else composeErr(AGE_CHECK_MSG);
+      return false;
+    }
     if (siteKilled) {
       gateErr('This room is paused.');
       return false;
@@ -5327,6 +5332,10 @@
   function onChatNew() {
     if (!dmsOn()) return;
     if (!isLiveUser()) { openAuth('join'); return; }
+    if (ageAttestCfg().enabled !== false && !isAdminUser() && ageGatePassedUid !== liveUid()) {
+      composeErr(AGE_CHECK_MSG);
+      return;
+    }
     if (liveUid() === ADMIN_UID) openAdminPicker();
   }
 
@@ -5683,6 +5692,9 @@
     restoreCompose(draft);
   }
   function signOut() {
+    var signedOutUid = liveUid();
+    clearAgeAttestedUid(signedOutUid);
+    dropUnrelatedJoin();
     ageGatePassedUid = '';
     clearAuthAction();
     stopPreviewLift();
@@ -5835,10 +5847,15 @@
   }
   // Record which Terms version the member accepted at signup / R2 attest (site.json termsVersion, default 1.1).
   function termsVersion() { return String((site && site.termsVersion) || '1.1'); }
-  function withAgeConfirmed(doc) {
-    doc.termsVersion = termsVersion();
-    doc.termsAcceptedAt = firebase.firestore.FieldValue.serverTimestamp();
-    if (dobMinAge()) {
+  // Terms fields are added only for a fresh Join-checkbox acceptance, and an
+  // existing termsAcceptedAt is left untouched. Age fields are added only when
+  // this account does not already have ageAttested18.
+  function withAgeConfirmed(doc, existing) {
+    if (!(existing && existing.termsAcceptedAt)) {
+      doc.termsVersion = termsVersion();
+      doc.termsAcceptedAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
+    if (dobMinAge() && !(existing && existing.ageAttested18 === true)) {
       doc.ageConfirmed = true;
       doc.ageAttested18 = true;
       doc.ageAttestedAt = firebase.firestore.FieldValue.serverTimestamp();
@@ -5928,31 +5945,103 @@
   // queued for 30 days. The DOB is never stored. Email notice only if site.json ageAttest.notifyUnder18Email
   // is true (default false; decision R2-email).
   function ageAttestCfg() { return (site && site.ageAttest) || {}; }
-  // Set only after the Join form (18+ checkbox and an adult DOB) passes, immediately
-  // before this browser's Google popup or redirect. The site key is written to
-  // sessionStorage and localStorage so a redirect that drops one store still
-  // counts. A signed-in member also gets a per-uid copy in localStorage, with
-  // sessionStorage as the fallback, so the age dialog cannot open again.
-  var JOIN_ATTEST_MS = 30 * 60 * 1000;
+  // Pending Join evidence lives only in sessionStorage, bound to one checkbox
+  // acceptance. It is not a date of birth and it is not an account. A per-uid
+  // cache remembers that this browser already saw ageAttested18 on that profile.
+  // The cache is not proof of age and never authorizes a server write.
+  var JOIN_FLOW_MS = 30 * 60 * 1000;
+  var AGE_CACHE_MS = 30 * 24 * 60 * 60 * 1000;
+  var AGE_CHECK_MSG = 'Could not verify your account. Please reload.';
   var googleSignupWrite = null;
   var ageAttestPrompt = null;
+  var activeGoogleFlowId = '';
+  var claimedJoin = null;
   function joinAttestKey() { return 'subx.joinAttested.' + SITE_ID; }
   function ageAttestUidKey(uid) { return 'subx.joinAttested.' + SITE_ID + '.' + uid; }
-  function markJoinAttested() {
-    var now = String(Date.now());
-    storageSet(sessionStorage, joinAttestKey(), now);
-    storageSet(localStorage, joinAttestKey(), now);
+  function newJoinFlowId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2);
   }
-  function clearJoinAttested() {
+  function readJoinFlow() {
+    var raw = storageGet(sessionStorage, joinAttestKey());
+    if (!raw) return null;
+    if (/^\d+$/.test(raw)) {
+      clearJoinFlow();
+      return null;
+    }
+    var flow = null;
+    try { flow = JSON.parse(raw); } catch (e) { flow = null; }
+    if (!flow || !flow.id || !flow.at || flow.terms !== true || (flow.kind !== 'google' && flow.kind !== 'email')) {
+      clearJoinFlow();
+      return null;
+    }
+    if (flow.dob || flow.birthdate || flow.dateOfBirth) {
+      clearJoinFlow();
+      return null;
+    }
+    if (Date.now() - flow.at > JOIN_FLOW_MS) {
+      clearJoinFlow();
+      return null;
+    }
+    return flow;
+  }
+  function writeJoinFlow(flow) {
+    storageSet(sessionStorage, joinAttestKey(), JSON.stringify(flow));
+    storageDel(localStorage, joinAttestKey());
+  }
+  function clearJoinFlow() {
+    activeGoogleFlowId = '';
     storageDel(sessionStorage, joinAttestKey());
     storageDel(localStorage, joinAttestKey());
   }
-  function joinAttestedFresh(raw) {
-    var t = parseInt(raw, 10);
-    return isFinite(t) && Date.now() - t < JOIN_ATTEST_MS;
+  function clearJoinAttested() { clearJoinFlow(); }
+  function markJoinAttested() {
+    var id = newJoinFlowId();
+    activeGoogleFlowId = id;
+    writeJoinFlow({ id: id, at: Date.now(), kind: 'google', terms: true });
   }
-  function joinAttestedThisSignIn() {
-    return joinAttestedFresh(storageGet(sessionStorage, joinAttestKey())) || joinAttestedFresh(storageGet(localStorage, joinAttestKey()));
+  function markEmailJoinAttested(email) {
+    var id = newJoinFlowId();
+    activeGoogleFlowId = '';
+    writeJoinFlow({
+      id: id,
+      at: Date.now(),
+      kind: 'email',
+      email: String(email || '').trim().toLowerCase(),
+      terms: true
+    });
+  }
+  function dropUnrelatedJoin() {
+    claimedJoin = null;
+    clearJoinFlow();
+  }
+  function claimGoogleRedirect(user) {
+    var flow = readJoinFlow();
+    if (!flow || flow.kind !== 'google' || !user || !user.uid) return false;
+    if (claimedJoin && claimedJoin.uid !== user.uid) return false;
+    clearJoinFlow();
+    claimedJoin = { uid: user.uid, terms: true, used: false };
+    return true;
+  }
+  function bindJoinFlow(user) {
+    if (!user || !user.uid) return false;
+    if (claimedJoin && claimedJoin.uid === user.uid) return true;
+    if (claimedJoin && claimedJoin.uid !== user.uid) return false;
+    var flow = readJoinFlow();
+    if (!flow) return false;
+    if (flow.kind === 'google') {
+      if (!activeGoogleFlowId || flow.id !== activeGoogleFlowId) return false;
+    } else if (flow.kind === 'email') {
+      var email = String(user.email || '').trim().toLowerCase();
+      if (!flow.email || flow.email !== email) return false;
+    } else return false;
+    clearJoinFlow();
+    claimedJoin = { uid: user.uid, terms: true, used: false };
+    return true;
+  }
+  function takeFreshJoin(user) {
+    if (!claimedJoin || !user || claimedJoin.uid !== user.uid || claimedJoin.used) return false;
+    claimedJoin.used = true;
+    return true;
   }
   function markAgeAttestedUid(uid) {
     if (!uid) return;
@@ -5971,7 +6060,11 @@
     var raw = storageGet(localStorage, key);
     if (raw == null || raw === '') raw = storageGet(sessionStorage, key);
     var t = parseInt(raw, 10);
-    return isFinite(t) && t > 0;
+    if (!isFinite(t) || t <= 0 || Date.now() - t > AGE_CACHE_MS) {
+      clearAgeAttestedUid(uid);
+      return false;
+    }
+    return true;
   }
   function passAgeGate(user) {
     if (user && user.uid) ageGatePassedUid = user.uid;
@@ -6010,7 +6103,7 @@
         }
         var extra = { provider: 'google' };
         if (!(snap && snap.exists)) extra.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        return ensurePublicProfile(user, '', withAgeConfirmed(extra));
+        return ensurePublicProfile(user, '', extra);
       });
     }
     var settled;
@@ -6018,12 +6111,11 @@
       if (e && e.__suspended) throw e;
       return attempt();
     }).then(function () {
-      clearJoinAttested();
       if (googleSignupWrite === settled) googleSignupWrite = null;
     }).catch(function (e) {
       if (googleSignupWrite === settled) googleSignupWrite = null;
       if (e && e.__suspended) {
-        clearJoinAttested();
+        clearJoinFlow();
         throw e;
       }
       surfaceSignupWriteError(e);
@@ -6038,71 +6130,110 @@
       return false;
     });
   }
-  function ageAttestPatch() {
-    return {
-      siteId: SITE_ID,
-      ageAttested18: true,
-      ageConfirmed: true,
-      ageAttestedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      termsVersion: termsVersion(),
-      termsAcceptedAt: firebase.firestore.FieldValue.serverTimestamp()
-    };
+  function ageOnlyPatch() {
+    var patch = { siteId: SITE_ID };
+    if (dobMinAge()) {
+      patch.ageConfirmed = true;
+      patch.ageAttested18 = true;
+      patch.ageAttestedAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
+    return patch;
+  }
+  function joinAcceptancePatch(existing) {
+    var patch = { siteId: SITE_ID };
+    withAgeConfirmed(patch, existing);
+    return patch;
+  }
+  function patchHasAttestation(patch) {
+    return !!(patch && (patch.ageAttested18 === true || patch.termsAcceptedAt));
+  }
+  var ageWritePromises = {};
+  function writeUserPatch(user, patch) {
+    if (!user || !fbDb) return Promise.resolve(false);
+    if (ageWritePromises[user.uid]) return ageWritePromises[user.uid];
+    if (!patchHasAttestation(patch)) return Promise.resolve(true);
+    var pending = fbDb.collection('users').doc(user.uid).set(patch, { merge: true }).then(function () {
+      if (patch.ageAttested18 === true) markAgeAttestedUid(user.uid);
+      return true;
+    }, function () {
+      delete ageWritePromises[user.uid];
+      ageGatePassedUid = '';
+      return false;
+    });
+    ageWritePromises[user.uid] = pending;
+    return pending;
+  }
+  function blockAgeGate() {
+    ageGatePassedUid = '';
+    try { closeAuth(); } catch (eClose) {}
+    composeErr(AGE_CHECK_MSG);
+    return false;
+  }
+  function waitForJoinRedirect(user) {
+    var flow = readJoinFlow();
+    if (!flow || flow.kind !== 'google' || activeGoogleFlowId || redirectSettled) return Promise.resolve();
+    return new Promise(function (resolve) {
+      var timer = setInterval(function () {
+        if (redirectSettled || !readJoinFlow()) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 20);
+    });
   }
   function runAgeAttestGate(user) {
     if (!fbDb || !user || ageAttestCfg().enabled === false || isAdminUser()) return Promise.resolve(passAgeGate(user));
-    // Record the uid before the profile read. A signup write can clear the
-    // short-lived site key while this get() is still in flight.
-    if (joinAttestedThisSignIn()) markAgeAttestedUid(user.uid);
-    var ref = fbDb.collection('users').doc(user.uid);
-    return ref.get().then(function (snap) {
-      var d = (snap && snap.exists && snap.data()) || {};
-      if (d.suspended === true) {
-        clearJoinAttested();
-        clearAgeAttestedUid(user.uid);
-        ageGatePassedUid = '';
-        showSuspended(d.suspendedReason);
-        return false;
-      }
-      if (d.ageAttested18 === true || ageAttestedForUid(user.uid)) {
-        markAgeAttestedUid(user.uid);
-        clearJoinAttested();
-        if (d.ageAttested18 === true) return passAgeGate(user);
-        return ref.set(ageAttestPatch(), { merge: true }).then(function () {
-          return passAgeGate(user);
-        }, function () {
-          return passAgeGate(user);
-        });
-      }
-      // Join already collected an adult DOB in this browser. Do not ask again,
-      // even when this read lands before the signup write.
-      if (joinAttestedThisSignIn()) {
-        markAgeAttestedUid(user.uid);
-        return finishJoinAttestedSignup(user).then(function (ok) {
-          if (ok) return passAgeGate(user);
+    ageAttestedForUid(user.uid);
+    bindJoinFlow(user);
+    return waitForJoinRedirect(user).then(function () {
+      bindJoinFlow(user);
+      var ref = fbDb.collection('users').doc(user.uid);
+      return ref.get().then(function (snap) {
+        var d = (snap && snap.exists && snap.data()) || {};
+        if (d.suspended === true) {
+          clearJoinFlow();
+          claimedJoin = null;
+          clearAgeAttestedUid(user.uid);
+          ageGatePassedUid = '';
+          showSuspended(d.suspendedReason);
           return false;
-        });
-      }
-      return promptAgeAttest().then(function (age) {
-        if (age >= 18) {
-          markAgeAttestedUid(user.uid);
-          return ref.set(ageAttestPatch(), { merge: true }).then(function () { return passAgeGate(user); });
         }
-        try { localStorage.setItem('subx.ageBlock.' + SITE_ID, String(Date.now())); } catch (e) {}
-        clearAgeAttestedUid(user.uid);
-        var patch = { siteId: SITE_ID, suspended: true, suspendedReason: 'under18', ageAttested18: false,
-          profileHidden: true, deletionQueuedAt: firebase.firestore.FieldValue.serverTimestamp() };
-        if (ageAttestCfg().notifyUnder18Email === true) patch.notifyUnder18Email = true;   // OFF by default
-        return ref.set(patch, { merge: true }).then(function () { showSuspended('under18'); return false; });
-      });
-    }).catch(function (e) {
-      console.warn('age attest', e);
-      if (ageAttestedForUid(user.uid) || joinAttestedThisSignIn()) {
-        markAgeAttestedUid(user.uid);
-        return finishJoinAttestedSignup(user).then(function (ok) {
-          return ok ? passAgeGate(user) : false;
+        var fresh = takeFreshJoin(user);
+        if (d.ageAttested18 === true) {
+          markAgeAttestedUid(user.uid);
+          return passAgeGate(user);
+        }
+        if (fresh) {
+          var acceptance = joinAcceptancePatch(d);
+          if (!patchHasAttestation(acceptance)) return passAgeGate(user);
+          return writeUserPatch(user, acceptance).then(function (ok) {
+            return ok ? passAgeGate(user) : blockAgeGate();
+          });
+        }
+        ageGatePassedUid = '';
+        return promptAgeAttest().then(function (age) {
+          if (age >= 18) {
+            var agePatch = ageOnlyPatch();
+            if (!patchHasAttestation(agePatch)) return blockAgeGate();
+            return writeUserPatch(user, agePatch).then(function (ok) {
+              return ok ? passAgeGate(user) : blockAgeGate();
+            });
+          }
+          try { localStorage.setItem('subx.ageBlock.' + SITE_ID, String(Date.now())); } catch (e) {}
+          clearAgeAttestedUid(user.uid);
+          claimedJoin = null;
+          var patch = { siteId: SITE_ID, suspended: true, suspendedReason: 'under18', ageAttested18: false,
+            profileHidden: true, deletionQueuedAt: firebase.firestore.FieldValue.serverTimestamp() };
+          if (ageAttestCfg().notifyUnder18Email === true) patch.notifyUnder18Email = true;   // OFF by default
+          return ref.set(patch, { merge: true }).then(function () { showSuspended('under18'); return false; }, function () {
+            showSuspended('under18');
+            return false;
+          });
         });
-      }
-      return passAgeGate(user);
+      }).catch(function (e) {
+        console.warn('age attest', e);
+        return blockAgeGate();
+      });
     });
   }
   function promptAgeAttest() {
@@ -6480,6 +6611,10 @@
       openAuth('join');
       return;
     }
+    if (ageAttestCfg().enabled !== false && !isAdminUser() && ageGatePassedUid !== liveUid()) {
+      composeErr(AGE_CHECK_MSG);
+      return;
+    }
     var post = null;
     var nodes = document.querySelectorAll('[data-post-id]');
     var i;
@@ -6853,6 +6988,7 @@
       const email = (document.getElementById('cv-login-email').value || '').trim();
       const pw = document.getElementById('cv-login-pw').value || '';
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
+      dropUnrelatedJoin();
       err.textContent = '';
       markAuthLand();
       fbAuth.signInWithEmailAndPassword(email, pw).catch(function (e) {
@@ -6886,11 +7022,12 @@
       if (!email || pw.length < 6) { err.textContent = 'Email and a password of at least 6 characters.'; err.classList.add('show'); return; }
       err.textContent = '';
       markAuthLand();
+      markEmailJoinAttested(email);
       fbAuth.createUserWithEmailAndPassword(email, pw).then(function (cred) {
         cred.user.sendEmailVerification().catch(function () {});
-        return ensurePublicProfile(cred.user, name, withAgeConfirmed({
+        return ensurePublicProfile(cred.user, name, {
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        })).then(function () {
+        }).then(function () {
           composeErr('Account created. Verify your email before posting.');
         });
       }).catch(function (e) {
@@ -6926,8 +7063,7 @@
       function finishGoogle(cred) {
         clearGoogleRedirect();
         var u = (cred && cred.user) || (fbAuth && fbAuth.currentUser);
-        if (!u) { clearJoinAttested(); return; }
-        markAgeAttestedUid(u.uid);
+        if (!u) { clearJoinFlow(); return; }
         return commitGoogleSignup(u);
       }
       function failGoogle(e) {
@@ -6943,11 +7079,12 @@
         err.classList.add('show');
       }
       function redirectGoogle() {
+        activeGoogleFlowId = '';
         rememberGoogleRedirect();
         showGooglePopupBlocked('Google popup sign-in could not open. Trying another sign-in method.');
         return fbAuth.signInWithRedirect(provider).catch(function (e2) {
           clearGoogleRedirect();
-          clearJoinAttested();
+          clearJoinFlow();
           failGoogle(e2);
         });
       }
@@ -6958,7 +7095,7 @@
         if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
           return redirectGoogle();
         }
-        clearJoinAttested();
+        clearJoinFlow();
         failGoogle(e);
       });
     });
@@ -7868,9 +8005,10 @@
         var u = cred && cred.user;
         if (u) {
           clearGoogleRedirect();
-          markAgeAttestedUid(u.uid);
+          claimGoogleRedirect(u);
           return commitGoogleSignup(u);
         }
+        if (readJoinFlow() && readJoinFlow().kind === 'google') clearJoinFlow();
         if (peekGoogleRedirect() && !(fbAuth && fbAuth.currentUser)) {
           clearGoogleRedirect();
           showGooglePopupBlocked();

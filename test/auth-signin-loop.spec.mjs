@@ -68,6 +68,15 @@ function installStub(page) {
           localStorage.setItem('subx.googleRedirect', '1');
           sessionStorage.removeItem('subx.googleRedirect');
         }
+        if (/expireCache=1/.test(q)) {
+          localStorage.setItem('subx.joinAttested.gpchat.email-user', String(Date.now() - 31 * 24 * 60 * 60 * 1000));
+        }
+        if (/expireJoin=1/.test(q)) {
+          sessionStorage.setItem('subx.joinAttested.gpchat', JSON.stringify({
+            id: 'old-flow', at: Date.now() - 31 * 60 * 1000, kind: 'email', email: 'b@example.com', terms: true
+          }));
+          localStorage.setItem('subx.joinAttested.gpchat', String(Date.now()));
+        }
       } catch (e) {}
 
       window.__installAuthStub = function () {
@@ -116,8 +125,11 @@ function installStub(page) {
         function profileFor(id) {
           var search = location.search || '';
           if (/profile=stale/.test(search)) return { exists: true, data: { siteId: 'gpchat' } };
+          if (/profile=keepterms/.test(search)) {
+            return { exists: true, data: { siteId: 'gpchat', termsAcceptedAt: { keep: 'original' }, termsVersion: '1.0' } };
+          }
           if (savedUsers[id]) return { exists: true, data: savedUsers[id] };
-          if (/profile=attested/.test(search) || (id === 'email-user' && !/profile=missing/.test(search))) {
+          if (/profile=attested/.test(search) || (id === 'email-user' && !/profile=missing/.test(search) && !/profile=error/.test(search) && !/profile=nowrite/.test(search))) {
             return { exists: true, data: { siteId: 'gpchat', ageAttested18: true, ageConfirmed: true } };
           }
           return { exists: false, data: {} };
@@ -136,14 +148,22 @@ function installStub(page) {
             },
             get: function () {
               if (col === 'users') {
+                if (/profile=error/.test(location.search)) return Promise.reject(new Error('profile read failed'));
                 var p = profileFor(id);
                 return Promise.resolve({ exists: p.exists, data: function () { return p.data; } });
               }
               return Promise.resolve({ exists: false, data: function () { return {}; } });
             },
             set: function (data) {
-              if (col === 'users' && !/profile=stale/.test(location.search)) {
-                savedUsers[id] = Object.assign({}, savedUsers[id] || {}, data || {});
+              if (col === 'users') {
+                window.__userWrites = window.__userWrites || [];
+                window.__userWrites.push({ id: id, data: data || {} });
+                if (/profile=nowrite/.test(location.search) && data && data.ageAttested18 === true) {
+                  return Promise.reject(new Error('write failed'));
+                }
+                if (!/profile=stale/.test(location.search) && !/profile=keepterms/.test(location.search)) {
+                  savedUsers[id] = Object.assign({}, savedUsers[id] || {}, data || {});
+                }
               }
               return Promise.resolve();
             },
@@ -245,6 +265,9 @@ function installStub(page) {
             window.__popupDuringClick = (window.__googleClickDepth > 0) ? 'sync' : 'late';
             if (/popupBlocked=1/.test(location.search)) {
               return Promise.reject(Object.assign(new Error('popup blocked'), { code: 'auth/popup-blocked' }));
+            }
+            if (/popupCancel=1/.test(location.search)) {
+              return Promise.reject(Object.assign(new Error('closed'), { code: 'auth/popup-closed-by-user' }));
             }
             return signInUser({
               uid: 'google-user',
@@ -409,7 +432,8 @@ test('factory source uses popup first on every browser', async () => {
   expect(src).toContain('toggleLike(desc.id, true)');
   expect(src.split('authPersistPromise.then').length - 1).toBeGreaterThanOrEqual(2);
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
-  expect(html).toContain('factory.js?v=63');
+  expect(html).toContain('factory.js?v=64');
+  expect(html).toContain('I am 18 or older, agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a>, and have read the <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.');
 });
 
 test('guest Like opens the join sheet, email sign-in completes the Like, and it does not ask again', async ({ page }, testInfo) => {
@@ -557,17 +581,18 @@ test('Google sign-in does not reopen the age dialog when the profile read stays 
       sessionSite: sessionStorage.getItem('subx.joinAttested.gpchat')
     };
   }, UID_KEY);
-  expect(info.dialogs).toBe(0);
+  expect(info.dialogs).toBe(1);
   expect(info.calls).toEqual(['popup']);
   expect(info.updates).toBe(1);
   expect(info.localFlag).toBeTruthy();
   expect(info.sessionSite).toBeFalsy();
+  const writes = await page.evaluate(function () { return window.__userWrites || []; });
+  expect(ageWrites(writes, 'google-user')).toHaveLength(1);
+  expect(writes.some(function (w) { return w.data && w.data.termsAcceptedAt && w.id === 'google-user'; })).toBe(true);
   if (testInfo.project.name === 'webkit-iphone') {
     await page.screenshot({ path: path.join(artifacts, 'auth-age-gate-webkit-iphone.png') });
   }
-  await page.locator('[data-act="like"]').first().click();
-  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
-  await expect(page.locator('#age-attest')).toHaveCount(0);
+  await expect(page.locator('#age-attest')).toBeVisible();
 });
 
 test('a signed-in user ignores a premature null and does not reopen the join sheet', async ({ page }) => {
@@ -595,45 +620,29 @@ test('a signed-in user ignores a premature null and does not reopen the join she
   expect(updates).toBe(1);
 });
 
-test('a per-uid attest flag skips the age dialog for a signed-in user', async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== 'chromium', 'storage fallback is browser-independent');
+test('a local age cache does not recreate server age or Terms fields', async ({ page }) => {
   await installStub(page);
   await page.goto('/?resume=1&profile=stale&ageFlag=local&prematureNull=1');
   await waitBoot(page);
-  await page.waitForTimeout(150);
-  let info = await page.evaluate(function () {
-    return { dialogs: window.__ageDialogs || 0, openedOnNull: window.__openedOnNull };
-  });
-  expect(info.openedOnNull).toBe(false);
-  expect(info.dialogs).toBe(0);
-  await expect(page.locator('#age-attest')).toHaveCount(0);
-  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
-  await page.locator('[data-act="like"]').first().click();
-  await expect(page.locator('[data-act="like"]').first()).toHaveClass(/liked/);
-
-  await page.goto('/?resume=1&profile=stale&ageFlag=session&prematureNull=1');
-  await waitBoot(page);
-  await page.waitForTimeout(150);
-  info = await page.evaluate(function (key) {
+  await page.waitForTimeout(200);
+  await expect(page.locator('#age-attest')).toBeVisible();
+  const info = await page.evaluate(function (key) {
     return {
-      dialogs: window.__ageDialogs || 0,
       openedOnNull: window.__openedOnNull,
-      sessionFlag: sessionStorage.getItem(key)
+      writes: window.__userWrites || [],
+      cache: localStorage.getItem(key)
     };
   }, UID_KEY);
   expect(info.openedOnNull).toBe(false);
-  expect(info.dialogs).toBe(0);
-  expect(info.sessionFlag).toBeTruthy();
-  await expect(page.locator('#age-attest')).toHaveCount(0);
-  await page.locator('[data-act="like"]').first().click();
-  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
-  await expect(page.locator('[data-act="like"]').first()).toHaveClass(/liked/);
+  expect(ageWrites(info.writes, 'google-user')).toEqual([]);
+  expect((info.writes || []).some(function (w) { return w.data && (w.data.termsAcceptedAt || w.data.termsVersion); })).toBe(false);
+  expect(info.cache).toBeTruthy();
 });
 
 test('legacy account confirms age once and a second auth event does not ask again', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name === 'firefox', 'same age dialog; covered on Chromium and WebKit');
   await installStub(page);
-  await page.goto('/?profile=stale&doubleAuth=1');
+  await page.goto('/?profile=missing&doubleAuth=1');
   await openLikeGate(page);
   await page.locator('#cv-use-email-btn').click();
   await page.locator('#cv-login-email').fill('listener@example.com');
@@ -649,6 +658,9 @@ test('legacy account confirms age once and a second auth event does not ask agai
   await page.waitForTimeout(250);
   const dialogs = await page.evaluate(function () { return window.__ageDialogs || 0; });
   expect(dialogs).toBe(1);
+  const ageOnly = await page.evaluate(function () { return window.__userWrites || []; });
+  expect(ageWrites(ageOnly, 'email-user')).toHaveLength(1);
+  expect(ageOnly.some(function (w) { return w.data && (w.data.termsAcceptedAt || w.data.termsVersion); })).toBe(false);
   const updates = await page.evaluate(function () { return window.__likeUpdates; });
   expect(updates).toBe(1);
   await page.locator('[data-act="like"]').first().click();
@@ -709,6 +721,213 @@ test('Join, Like, and Reply say sign-in is unavailable when Firebase does not st
   await signIn.click();
   await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
   await expect(page.locator('#thoughts-compose-err')).toHaveText(UNAVAILABLE);
+});
+
+function ageWrites(writes, uid) {
+  return (writes || []).filter(function (w) {
+    return w.id === uid && w.data && w.data.ageAttested18 === true;
+  });
+}
+
+test('unfinished Join attestation is not stamped onto the next account', async ({ page }) => {
+  await installStub(page);
+  await page.goto('/?popupBlocked=1&profile=stale');
+  await openLikeGate(page);
+  await fillAdultJoin(page);
+  await page.locator('#cv-google-login').click();
+  await expect(page.locator('#cv-login-err')).toHaveText(POPUP_MSG);
+  await page.locator('#cv-use-email-btn').click();
+  await page.locator('#cv-login-email').fill('b@example.com');
+  await page.locator('#cv-login-pw').fill('secret1');
+  await page.locator('#cv-login-btn').click();
+  await expect(page.locator('#age-attest')).toBeVisible();
+  const writes = await page.evaluate(function () { return window.__userWrites || []; });
+  expect(ageWrites(writes, 'email-user')).toEqual([]);
+  const stored = await page.evaluate(function () {
+    return JSON.stringify({
+      local: localStorage.getItem('subx.joinAttested.gpchat'),
+      session: sessionStorage.getItem('subx.joinAttested.gpchat')
+    });
+  });
+  expect(stored).not.toMatch(/dob|birth/i);
+});
+
+test('an expired Join flag is not promoted onto an account', async ({ page }) => {
+  await installStub(page);
+  await page.goto('/?expireJoin=1&profile=stale');
+  await openLikeGate(page);
+  await page.locator('#cv-use-email-btn').click();
+  await page.locator('#cv-login-email').fill('b@example.com');
+  await page.locator('#cv-login-pw').fill('secret1');
+  await page.locator('#cv-login-btn').click();
+  await expect(page.locator('#age-attest')).toBeVisible();
+  const info = await page.evaluate(function () {
+    return {
+      writes: window.__userWrites || [],
+      session: sessionStorage.getItem('subx.joinAttested.gpchat'),
+      local: localStorage.getItem('subx.joinAttested.gpchat')
+    };
+  });
+  expect(ageWrites(info.writes, 'email-user')).toEqual([]);
+  expect(info.session).toBeFalsy();
+  expect(info.local).toBeFalsy();
+});
+
+test('Join with Google writes age and Terms once for that account', async ({ page }) => {
+  await installStub(page);
+  await page.goto('/?doubleAuth=1');
+  await openLikeGate(page);
+  await expect(page.locator('label[for="cv-google-age"]')).toContainText('I am 18 or older, agree to the Terms of Service, and have read the Privacy Policy.');
+  await fillAdultJoin(page);
+  await page.locator('#cv-google-login').click();
+  await expect(page.locator('#age-attest')).toHaveCount(0);
+  await page.waitForTimeout(250);
+  const writes = await page.evaluate(function () { return window.__userWrites || []; });
+  const stamped = ageWrites(writes, 'google-user');
+  expect(stamped).toHaveLength(1);
+  expect(stamped[0].data.termsVersion).toBeTruthy();
+  expect(stamped[0].data.termsAcceptedAt).toBeTruthy();
+  expect(JSON.stringify(stamped[0].data)).not.toMatch(/dob|birth/i);
+  expect(await page.evaluate(function () { return window.__ageDialogs || 0; })).toBe(0);
+});
+
+test('Join with email writes age and Terms once for that account', async ({ page }) => {
+  await installStub(page);
+  await page.goto('/');
+  await openLikeGate(page);
+  await page.locator('#cv-use-email-btn').click();
+  await page.locator('#cv-goto-register').click();
+  await expect(page.locator('label[for="cv-reg-age"]')).toContainText('I am 18 or older, agree to the Terms of Service, and have read the Privacy Policy.');
+  await page.locator('#cv-reg-name').fill('Paddock Fan');
+  await page.locator('#cv-reg-email').fill('a@example.com');
+  await page.locator('#cv-reg-pw').fill('secret1');
+  await setDob(page, '#cv-reg-dob', '1990-01-15');
+  await page.locator('#cv-reg-age').check();
+  await page.locator('#cv-reg-btn').click();
+  await expect(page.locator('#age-attest')).toHaveCount(0);
+  await page.waitForTimeout(200);
+  const writes = await page.evaluate(function () { return window.__userWrites || []; });
+  const stamped = ageWrites(writes, 'new-user');
+  expect(stamped).toHaveLength(1);
+  expect(stamped[0].data.termsAcceptedAt).toBeTruthy();
+  expect(JSON.stringify(stamped[0].data)).not.toMatch(/dob|birth/i);
+});
+
+test('a fresh Join acceptance does not overwrite an existing Terms timestamp', async ({ page }) => {
+  await installStub(page);
+  await page.goto('/?profile=keepterms');
+  await openLikeGate(page);
+  await fillAdultJoin(page);
+  await page.locator('#cv-google-login').click();
+  await expect(page.locator('#age-attest')).toHaveCount(0);
+  const writes = await page.evaluate(function () { return window.__userWrites || []; });
+  const stamped = ageWrites(writes, 'google-user');
+  expect(stamped).toHaveLength(1);
+  expect(stamped[0].data.termsAcceptedAt).toBeFalsy();
+  expect(stamped[0].data.termsVersion).toBeFalsy();
+});
+
+test('cancelling Google clears the pending Join flag', async ({ page }) => {
+  await installStub(page);
+  await page.goto('/?popupCancel=1');
+  await openLikeGate(page);
+  await fillAdultJoin(page);
+  await page.locator('#cv-google-login').click();
+  await expect(page.locator('#cv-login-err')).toHaveText('Google sign-in cancelled.');
+  const raw = await page.evaluate(function () {
+    return sessionStorage.getItem('subx.joinAttested.gpchat') || localStorage.getItem('subx.joinAttested.gpchat');
+  });
+  expect(raw).toBeFalsy();
+});
+
+test('an expired per-uid cache is removed and does not skip the age dialog', async ({ page }) => {
+  await installStub(page);
+  await page.goto('/?expireCache=1&profile=stale');
+  await openLikeGate(page);
+  await page.locator('#cv-use-email-btn').click();
+  await page.locator('#cv-login-email').fill('listener@example.com');
+  await page.locator('#cv-login-pw').fill('secret1');
+  await page.locator('#cv-login-btn').click();
+  await expect(page.locator('#age-attest')).toBeVisible();
+  const left = await page.evaluate(function () { return localStorage.getItem('subx.joinAttested.gpchat.email-user'); });
+  expect(left).toBeFalsy();
+  const writes = await page.evaluate(function () { return window.__userWrites || []; });
+  expect(ageWrites(writes, 'email-user')).toEqual([]);
+});
+
+test('sign-out clears the per-uid age cache and the pending Join flag', async ({ page }) => {
+  await installStub(page);
+  await page.goto('/');
+  await openLikeGate(page);
+  await page.locator('#cv-use-email-btn').click();
+  await page.locator('#cv-login-email').fill('listener@example.com');
+  await page.locator('#cv-login-pw').fill('secret1');
+  await page.locator('#cv-login-btn').click();
+  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
+  const before = await page.evaluate(function () { return localStorage.getItem('subx.joinAttested.gpchat.email-user'); });
+  expect(before).toBeTruthy();
+  await page.evaluate(function () {
+    sessionStorage.setItem('subx.joinAttested.gpchat', JSON.stringify({
+      id: 'pending', at: Date.now(), kind: 'google', terms: true
+    }));
+  });
+  const vp = page.viewportSize();
+  if (vp && vp.width <= 900) await page.locator('#hamburger').click();
+  await page.locator('#auth-signout').click();
+  const after = await page.evaluate(function () {
+    return {
+      cache: localStorage.getItem('subx.joinAttested.gpchat.email-user'),
+      flow: sessionStorage.getItem('subx.joinAttested.gpchat')
+    };
+  });
+  expect(after.cache).toBeFalsy();
+  expect(after.flow).toBeFalsy();
+});
+
+const AGE_CHECK_MSG = 'Could not verify your account. Please reload.';
+
+test('a failed profile read blocks member actions and does not write age', async ({ page }) => {
+  await installStub(page);
+  await page.goto('/?profile=error');
+  await openLikeGate(page);
+  await page.locator('#cv-use-email-btn').click();
+  await page.locator('#cv-login-email').fill('listener@example.com');
+  await page.locator('#cv-login-pw').fill('secret1');
+  await page.locator('#cv-login-btn').click();
+  await expect(page.locator('#thoughts-compose-err')).toHaveText(AGE_CHECK_MSG);
+  await expect(page.locator('#age-attest')).toHaveCount(0);
+  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
+  await page.locator('[data-act="like"]').first().click();
+  await expect(page.locator('#thoughts-compose-err')).toHaveText(AGE_CHECK_MSG);
+  expect(await page.evaluate(function () { return window.__likeUpdates || 0; })).toBe(0);
+  await page.locator('[data-act="reply"]').first().click();
+  await expect(page.locator('#thoughts-compose-input')).toHaveAttribute('placeholder', 'Say something. This is a work in progress.');
+  await page.locator('#thoughts-compose-input').fill('A note from the pit');
+  await page.locator('#thoughts-post-btn').click();
+  await expect(page.locator('#thoughts-compose-input')).toHaveValue('A note from the pit');
+  await page.evaluate(function () {
+    location.hash = '#chat';
+    var join = document.getElementById('chat-placeholder-new');
+    if (join) join.click();
+  });
+  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
+  await expect(page.locator('#thoughts-compose-err')).toHaveText(AGE_CHECK_MSG);
+  const writes = await page.evaluate(function () { return window.__userWrites || []; });
+  expect(ageWrites(writes, 'email-user')).toEqual([]);
+});
+
+test('a failed attestation write keeps member actions blocked', async ({ page }) => {
+  await installStub(page);
+  await page.goto('/?profile=nowrite');
+  await openLikeGate(page);
+  await fillAdultJoin(page);
+  await page.locator('#cv-google-login').click();
+  await expect(page.locator('#thoughts-compose-err')).toHaveText(AGE_CHECK_MSG);
+  await expect(page.locator('#age-attest')).toHaveCount(0);
+  await page.locator('[data-act="like"]').first().click();
+  await expect(page.locator('#thoughts-compose-err')).toHaveText(AGE_CHECK_MSG);
+  expect(await page.evaluate(function () { return window.__likeUpdates || 0; })).toBe(0);
+  await expect(page.locator('#cv-auth-overlay')).not.toHaveClass(/open/);
 });
 
 test('underage date of birth does not start Google sign-in', async ({ page }, testInfo) => {
