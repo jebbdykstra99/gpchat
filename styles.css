@@ -1689,3 +1689,25 @@ body.legal-page {
   border: 1px solid currentColor; border-radius: 999px;
   padding: 0.05rem 0.45rem; line-height: 1.5;
 }
+
+
+/* === X-style profile + SubX cat (2026-11-09 pilot) === */
+.sidebar-brand-logos{display:flex;align-items:center;justify-content:center;gap:0.55rem;margin:0 auto 0.45rem;}
+.sidebar-brand-logos .brand-mark{margin:0;}
+.subx-cat-link{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:999px;text-decoration:none;color:inherit;}
+.subx-cat-link:focus-visible{outline:2px solid var(--accent,#e10600);outline-offset:3px;}
+.subx-cat-link img,.subx-cat-link .subx-cat-icon{width:28px;height:28px;display:block;}
+.profile-banner{position:relative;width:100%;aspect-ratio:3/1;max-height:200px;height:auto;background:var(--surface,#1a1a1e);overflow:hidden;}
+.profile-banner img{width:100%;height:100%;object-fit:cover;display:block;}
+.profile-header-row{display:flex;justify-content:space-between;align-items:flex-end;padding:0 1.4rem;margin-top:-67px;position:relative;z-index:1;}
+.profile-avatar{width:134px;height:134px;border-radius:50%;border:4px solid var(--bg,#0a0a0c);background:#2f3336;color:#e7e9ea;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:2rem;overflow:hidden;flex-shrink:0;}
+.profile-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+.profile-header-actions{display:flex;gap:0.5rem;align-items:center;margin-bottom:0.35rem;}
+.profile-meta-row{display:flex;flex-wrap:wrap;gap:0.75rem 1.1rem;color:var(--text-muted,#9a9aa3);font-size:0.88rem;margin-bottom:0.55rem;}
+.profile-meta-row a{color:var(--accent,#e10600);text-decoration:none;}
+.profile-tabs{display:flex;border-bottom:1px solid var(--border,rgba(255,255,255,0.12));margin-top:0.85rem;}
+.profile-tab{flex:1;background:none;border:0;border-bottom:2px solid transparent;padding:0.85rem 0.5rem;font:inherit;font-weight:600;color:var(--text-muted,#9a9aa3);cursor:pointer;}
+.profile-tab.active{color:var(--text,#f4f4f4);border-bottom-color:var(--accent,#e10600);}
+.profile-tab-pane[hidden]{display:none!important;}
+.profile-counts .count-btn[hidden]{display:none!important;}
+@media (max-width:900px){.profile-avatar{width:80px;height:80px;font-size:1.35rem;border-width:3px;}.profile-header-row{margin-top:-40px;}}

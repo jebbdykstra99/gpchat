@@ -21,7 +21,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=18">
+  <link rel="stylesheet" href="styles.css?v=19">
   <link rel="preload" href="site.json?v=62" as="fetch" crossorigin="anonymous">
   <style>
     .race-strip{padding:.7rem 1.3rem .65rem;border-bottom:1px solid var(--border);background:var(--surface);font-size:.82rem;line-height:1.45;color:var(--text-muted)}
@@ -50,6 +50,13 @@
     <button class="sidebar-search-btn" id="sidebar-search-btn" title="Search" aria-label="Search">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     </button>
+        <div class="sidebar-brand-logos">
+<a href="https://subx.it/" class="subx-cat-link" aria-label="SubX home">
+      <picture>
+        <source srcset="/assets/brand/cat-32-dark.png" media="(prefers-color-scheme: dark)">
+        <img class="subx-cat-icon" src="/assets/brand/cat-32.png" width="28" height="28" alt="">
+      </picture>
+    </a>
     <a href="#home" class="brand-mark" data-social="home" aria-label="gpchat home">
       <svg class="brand-icon" width="44" height="44" viewBox="0 0 32 32" aria-hidden="true">
         <rect width="32" height="32" rx="7" fill="#0a0a0c"/>
@@ -64,6 +71,7 @@
         <text x="16" y="25.5" text-anchor="middle" font-family="Arial Black, Impact, sans-serif" font-size="13" font-weight="700" fill="#e10600" letter-spacing="0.5">GP</text>
       </svg>
     </a>
+    </div>
     <div class="brand-title">gpchat</div>
     <div class="brand-sub">Nothing but Grand Prix.</div>
   </div>
@@ -247,14 +255,34 @@
       <div class="profile-display-name" id="profile-display-name">Guest</div>
       <div class="profile-handle" id="profile-handle">@guestgp</div>
       <p class="profile-bio" id="profile-bio">Just watching. Nothing but Grand Prix.</p>
-      <div class="profile-meta" id="profile-meta">Formula 1 fan chat: unofficial</div>
+      <div class="profile-meta" id="profile-meta" hidden>Formula 1 fan chat: unofficial</div>
+      <div class="profile-meta-row" id="profile-meta-row">
+        <span id="profile-location" hidden></span>
+        <a id="profile-website" hidden rel="nofollow ugc noopener" target="_blank"></a>
+        <span id="profile-joined" hidden></span>
+      </div>
       <div class="profile-counts">
-        <button type="button" class="count-btn" disabled><strong>-</strong> Following <span class="tab-soon">Soon</span></button>
-        <button type="button" class="count-btn" disabled><strong>-</strong> Followers <span class="tab-soon">Soon</span></button>
+        <button type="button" class="count-btn" id="profile-following-btn" disabled><strong id="profile-following-count">0</strong> Following</button>
+        <button type="button" class="count-btn" id="profile-followers-btn" hidden disabled><strong id="profile-followers-count">0</strong> Followers</button>
       </div>
     </div>
-    <div class="profile-posts" id="profile-pane-posts">
+    <div class="profile-tabs" id="profile-tabs" role="tablist">
+      <button type="button" class="profile-tab active" role="tab" data-profile-tab="posts" aria-selected="true">Posts</button>
+      <button type="button" class="profile-tab" role="tab" data-profile-tab="replies" aria-selected="false">Replies</button>
+      <button type="button" class="profile-tab" role="tab" data-profile-tab="media" aria-selected="false">Media</button>
+      <button type="button" class="profile-tab" role="tab" data-profile-tab="likes" aria-selected="false">Likes</button>
+    </div>
+    <div class="profile-posts profile-tab-pane" id="profile-pane-posts">
       <div class="empty-note" id="profile-posts-empty">No posts yet. Hit Post when the safety car comes out.</div>
+    </div>
+    <div class="profile-posts profile-tab-pane" id="profile-pane-replies" hidden>
+      <div class="empty-note">No replies yet.</div>
+    </div>
+    <div class="profile-posts profile-tab-pane" id="profile-pane-media" hidden>
+      <div class="empty-note">No media yet.</div>
+    </div>
+    <div class="profile-posts profile-tab-pane" id="profile-pane-likes" hidden>
+      <div class="empty-note">Likes are not listed here yet.</div>
     </div>
   </div>
 </div>
