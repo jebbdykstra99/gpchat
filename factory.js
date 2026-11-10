@@ -195,7 +195,7 @@
     return n;
   }
   function ageGateMessage() {
-    return 'Confirm you are ' + siteMinAge() + ' or older and agree to the Terms of Service and Privacy Policy.';
+    return 'Confirm you are ' + siteMinAge() + ' or older, agree to the Terms of Service, and confirm you have read the Privacy Policy.';
   }
   function paintAgeLabels() {
     var n = String(siteMinAge());
@@ -322,7 +322,7 @@
       '.name-prefix-nudge-link,.name-prefix-nudge-x{background:transparent;border:1px solid var(--border,rgba(255,255,255,0.18));color:inherit;border-radius:8px;cursor:pointer;}' +
       '.name-prefix-nudge-link{margin-left:0.35rem;padding:0.15rem 0.5rem;font:inherit;font-weight:600;}' +
       '.name-prefix-nudge-x{width:1.7rem;height:1.7rem;}' +
-      '.name-prompt{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:1rem;}' +
+      '.name-prompt{position:fixed;inset:0;z-index:9600;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;padding:1rem;}' +
       '.name-prompt-card{background:var(--surface,#111);color:var(--text,#f4f4f4);border-radius:12px;padding:1rem;width:min(22rem,100%);}' +
       '.name-prompt-card input{width:100%;margin:0.5rem 0;padding:0.45rem 0.6rem;border-radius:8px;border:1px solid var(--border,#333);background:transparent;color:inherit;}' +
       '.name-prompt-err{min-height:1.1rem;color:var(--accent,#e10600);font-size:0.8rem;}' +
@@ -873,6 +873,28 @@
   }
   // ===== END PREVIEW-LIFT (guards/privacy/steward) =====
 
+  var authPersistPromise = Promise.resolve();
+  var authBootFailed = false;
+
+  function setAuthPersistence(auth) {
+    var P = firebase.auth.Auth.Persistence;
+    var modes = [P.LOCAL, P.SESSION, P.NONE];
+    function attempt(i) {
+      if (!auth || i >= modes.length) return Promise.resolve();
+      var pending;
+      try { pending = auth.setPersistence(modes[i]); }
+      catch (e) {
+        console.warn('auth persistence', modes[i], e);
+        return attempt(i + 1);
+      }
+      return Promise.resolve(pending).catch(function (e2) {
+        console.warn('auth persistence', modes[i], e2);
+        return attempt(i + 1);
+      });
+    }
+    return attempt(0);
+  }
+
   try {
     firebase.initializeApp({
     apiKey: "AIzaSyD4CgKQTylEy03Lh9Uhe9UVloyrKaK3bdY",
@@ -883,15 +905,16 @@
     appId: "1:869847405863:web:26f902efb9a4ee0b7c0502"
     });
     fbAuth = firebase.auth();
-    try {
-      fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-    } catch (ePersist) { console.warn('auth persistence', ePersist); }
+    authPersistPromise = setAuthPersistence(fbAuth);
     fbDb = firebase.firestore();
     fbStorage = firebase.storage();
     try {
       firebase.appCheck().activate('6LffWZAtAAAAAGAXCR6JcwiXEY5FnowtegOLmElk', true);
     } catch (e2) { console.warn('app-check', e2); }
-  } catch (e) { console.warn('subx-skins init', e); }
+  } catch (e) {
+    console.warn('subx-skins init', e);
+    authBootFailed = true;
+  }
 
   const hamburger = document.getElementById('hamburger');
   const sidebar = document.getElementById('sidebar');
@@ -1039,6 +1062,140 @@
   }
   function isLiveUser() {
     return !!(fbAuth && fbAuth.currentUser);
+  }
+
+  var authStateKnown = false;
+  var redirectSettled = false;
+  var signedOutApplied = false;
+  var authOpenWhenReady = false;
+  var deferredAuthMsg = '';
+  var pendingAuthAction = null;
+  var flushingAuth = false;
+  var ageGatePassedUid = '';
+  var AUTH_ACTION_KEY = 'subx.authAction';
+  var GOOGLE_REDIRECT_KEY = 'subx.googleRedirect';
+  var AUTH_ACTION_MS = 10 * 60 * 1000;
+
+  function authReadyForGate() {
+    return !!(authStateKnown && redirectSettled);
+  }
+  function storageSet(store, key, val) {
+    try { store.setItem(key, val); } catch (e) {}
+  }
+  function storageGet(store, key) {
+    try { return store.getItem(key); } catch (e) { return null; }
+  }
+  function storageDel(store, key) {
+    try { store.removeItem(key); } catch (e) {}
+  }
+  function rememberGoogleRedirect() {
+    storageSet(sessionStorage, GOOGLE_REDIRECT_KEY, '1');
+    storageSet(localStorage, GOOGLE_REDIRECT_KEY, '1');
+  }
+  function peekGoogleRedirect() {
+    return storageGet(sessionStorage, GOOGLE_REDIRECT_KEY) === '1' || storageGet(localStorage, GOOGLE_REDIRECT_KEY) === '1';
+  }
+  function clearGoogleRedirect() {
+    storageDel(sessionStorage, GOOGLE_REDIRECT_KEY);
+    storageDel(localStorage, GOOGLE_REDIRECT_KEY);
+  }
+  function showAuthUnavailable() {
+    composeErr('Sign-in is unavailable right now. Please reload.');
+  }
+  function showGooglePopupBlocked(msg) {
+    var err = document.getElementById('cv-login-err');
+    if (!err) return;
+    err.textContent = msg || 'Google sign-in did not complete. Try again or use email.';
+    err.classList.add('show');
+  }
+  function clearAuthAction() {
+    pendingAuthAction = null;
+    storageDel(sessionStorage, AUTH_ACTION_KEY);
+    storageDel(localStorage, AUTH_ACTION_KEY);
+  }
+  function rememberAuthAction(desc) {
+    if (!desc || !desc.t || !desc.id) return;
+    pendingAuthAction = { t: desc.t, id: desc.id, at: Date.now() };
+    var raw = JSON.stringify(pendingAuthAction);
+    storageSet(sessionStorage, AUTH_ACTION_KEY, raw);
+    storageSet(localStorage, AUTH_ACTION_KEY, raw);
+  }
+  function readAuthAction() {
+    if (pendingAuthAction && pendingAuthAction.at && Date.now() - pendingAuthAction.at > AUTH_ACTION_MS) {
+      clearAuthAction();
+      return null;
+    }
+    if (pendingAuthAction) return pendingAuthAction;
+    var raw = storageGet(sessionStorage, AUTH_ACTION_KEY) || storageGet(localStorage, AUTH_ACTION_KEY);
+    if (!raw) return null;
+    try {
+      var desc = JSON.parse(raw);
+      if (!desc || !desc.t || !desc.id || !desc.at || Date.now() - desc.at > AUTH_ACTION_MS) {
+        clearAuthAction();
+        return null;
+      }
+      pendingAuthAction = desc;
+      return desc;
+    } catch (e2) {
+      clearAuthAction();
+      return null;
+    }
+  }
+  function ageGateOpenFor(uid) {
+    if (!uid) return false;
+    if (ageAttestCfg().enabled === false || isAdminUser()) return true;
+    return ageGatePassedUid === uid;
+  }
+  function flushPendingAuthAction() {
+    if (flushingAuth || !isLiveUser()) return;
+    if (!ageGateOpenFor(liveUid())) return;
+    var desc = readAuthAction();
+    if (!desc) return;
+    flushingAuth = true;
+    clearAuthAction();
+    try {
+      if (desc.t === 'like') toggleLike(desc.id, true);
+      else if (desc.t === 'reply') startReply(desc.id);
+    } catch (e3) { console.warn('auth action', e3); }
+    flushingAuth = false;
+  }
+  function applySignedOut(q) {
+    if (signedOutApplied) {
+      if (q) openAuth(q);
+      return;
+    }
+    signedOutApplied = true;
+    ageGatePassedUid = '';
+    stopPreviewLift();
+    listenMemberNests(null);
+    listenBlocks(null);
+    teardownPeopleSocial();
+    if (currentUser && currentUser.live) {
+      currentUser = null;
+      saveJSON(LS_USER, null);
+      renderSidebarAuth();
+      hideDummyChrome();
+      teardownDms();
+      listenConversations();
+      syncProfile();
+      renderNotifs();
+      renderFeed();
+    } else {
+      renderWatchlist();
+    }
+    if (q) openAuth(q);
+    else if (authOpenWhenReady || deferredAuthMsg) {
+      var msg = deferredAuthMsg;
+      deferredAuthMsg = '';
+      authOpenWhenReady = false;
+      if (msg) composeErr(msg);
+      openAuth('join');
+    }
+  }
+  function markRedirectSettled() {
+    redirectSettled = true;
+    if (!authStateKnown || isLiveUser()) return;
+    applySignedOut('');
   }
   function sessionSeedList() {
     if (site && Array.isArray(site.sessionSeeds) && site.sessionSeeds.length) {
@@ -1235,8 +1392,23 @@
       if (action === 'report' || action === 'block') toast(msg);
     }
     if (!isLiveUser()) {
-      gateErr('Sign in to ' + (action || 'post') + '. Guest can only browse.');
+      if (authBootFailed) {
+        showAuthUnavailable();
+        return false;
+      }
+      var signInMsg = 'Sign in to ' + (action || 'post') + '. Guest can only browse.';
+      if (!authReadyForGate()) {
+        authOpenWhenReady = true;
+        deferredAuthMsg = signInMsg;
+        return false;
+      }
+      gateErr(signInMsg);
       openAuth('join');
+      return false;
+    }
+    if (ageAttestCfg().enabled !== false && !isAdminUser() && ageGatePassedUid !== liveUid()) {
+      if (action === 'chat') chatErr(AGE_CHECK_MSG);
+      else composeErr(AGE_CHECK_MSG);
       return false;
     }
     if (siteKilled) {
@@ -5191,6 +5363,10 @@
   function onChatNew() {
     if (!dmsOn()) return;
     if (!isLiveUser()) { openAuth('join'); return; }
+    if (ageAttestCfg().enabled !== false && !isAdminUser() && ageGatePassedUid !== liveUid()) {
+      composeErr(AGE_CHECK_MSG);
+      return;
+    }
     if (liveUid() === ADMIN_UID) openAdminPicker();
   }
 
@@ -5485,7 +5661,7 @@
     var panePosts = document.getElementById('profile-pane-posts');
     if (panePosts) {
       if (!posts.length) {
-        panePosts.innerHTML = '<div class="empty-note" id="profile-posts-empty">' + escapeHtml(skin('profileEmpty', (site && site.emptyState) || 'No posts yet.')) + '</div>';
+        panePosts.innerHTML = '<div class="empty-note" id="profile-posts-empty">' + escapeHtml((site && site.emptyState) || 'No posts yet.') + '</div>';
       } else {
         panePosts.innerHTML = posts.map(function (p) { return renderPost(p, false); }).join('');
       }
@@ -5852,7 +6028,7 @@
     paintProfile(
       currentUser.name,
       currentUser.handle,
-      currentUser.bio || skin('bioDefault', ''),
+      currentUser.bio || '',
       currentUser.uid,
       extra
     );
@@ -6035,7 +6211,22 @@
     }
   }
   function openAuth(tab) {
+    if (authBootFailed) {
+      showAuthUnavailable();
+      return;
+    }
     ensureJoinAuthLayout();
+    var modeHint = tab || 'join';
+    if (modeHint === 'login') modeHint = 'join';
+    if (modeHint === 'join' && isLiveUser()) {
+      closeAuth();
+      flushPendingAuthAction();
+      return;
+    }
+    if (modeHint === 'join' && !authReadyForGate()) {
+      authOpenWhenReady = true;
+      return;
+    }
     var draft = peekCompose();
     const ov = document.getElementById('cv-auth-overlay');
     if (!ov) return;
@@ -6067,6 +6258,9 @@
     }
   }
   function closeAuth() {
+    // Dismissing the sheet drops the pending Join marker. A Google redirect
+    // that has already left this page keeps it until that attempt settles.
+    if (!peekGoogleRedirect()) clearJoinFlow();
     var draft = peekCompose();
     var ov = document.getElementById('cv-auth-overlay');
     if (ov) ov.classList.remove('open');
@@ -6089,6 +6283,11 @@
     restoreCompose(draft);
   }
   function signOut() {
+    var signedOutUid = liveUid();
+    clearAgeAttestedUid(signedOutUid);
+    dropUnrelatedJoin();
+    ageGatePassedUid = '';
+    clearAuthAction();
     stopPreviewLift();
     listenMemberNests(null);
     teardownPeopleSocial();
@@ -6239,15 +6438,29 @@
   }
   // Record which Terms version the member accepted at signup / R2 attest (site.json termsVersion, default 1.1).
   function termsVersion() { return String((site && site.termsVersion) || '1.1'); }
-  function withAgeConfirmed(doc) {
-    doc.termsVersion = termsVersion();
-    doc.termsAcceptedAt = firebase.firestore.FieldValue.serverTimestamp();
-    if (dobMinAge()) {
+  // Terms fields are added only for a fresh Join-checkbox acceptance, and an
+  // existing termsAcceptedAt is left untouched. Age fields are added only when
+  // this account does not already have ageAttested18.
+  function withAgeConfirmed(doc, existing) {
+    if (!(existing && existing.termsAcceptedAt)) {
+      doc.termsVersion = termsVersion();
+      doc.termsAcceptedAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
+    if (dobMinAge() && !ageWriteBlocked(existing) && !(existing && existing.ageAttested18 === true)) {
       doc.ageConfirmed = true;
       doc.ageAttested18 = true;
       doc.ageAttestedAt = firebase.firestore.FieldValue.serverTimestamp();
     }
     return doc;
+  }
+  // An under-18 suspension, or a deletion already queued for that account,
+  // must not be overwritten by a later age:true write.
+  function ageWriteBlocked(existing) {
+    if (!existing) return false;
+    if (existing.suspended === true) return true;
+    if (existing.suspendedReason === 'under18') return true;
+    if (existing.deletionQueuedAt) return true;
+    return false;
   }
   function ageFromDob(v, now) {
     var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
@@ -6332,23 +6545,131 @@
   // queued for 30 days. The DOB is never stored. Email notice only if site.json ageAttest.notifyUnder18Email
   // is true (default false; decision R2-email).
   function ageAttestCfg() { return (site && site.ageAttest) || {}; }
-  // Set only after the Join form (18+ checkbox and an adult DOB) passes, immediately
-  // before this browser's Google popup or redirect. Survives the Safari redirect reload.
-  // While it is set, skip the legacy "is now 18+" dialog and finish the signup write.
-  var JOIN_ATTEST_MS = 30 * 60 * 1000;
+  // Pending Join evidence lives only in sessionStorage, bound to one checkbox
+  // acceptance. It is not a date of birth and it is not an account. A per-uid
+  // cache remembers that this browser already saw ageAttested18 on that profile.
+  // The cache is not proof of age and never authorizes a server write.
+  var JOIN_FLOW_MS = 30 * 60 * 1000;
+  var AGE_CACHE_MS = 30 * 24 * 60 * 60 * 1000;
+  var AGE_CHECK_MSG = 'Could not verify your account. Please reload.';
   var googleSignupWrite = null;
+  var ageAttestPrompt = null;
+  var ageAttestResolve = null;
+  var activeGoogleFlowId = '';
+  var claimedJoin = null;
   function joinAttestKey() { return 'subx.joinAttested.' + SITE_ID; }
+  function ageAttestUidKey(uid) { return 'subx.joinAttested.' + SITE_ID + '.' + uid; }
+  function newJoinFlowId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+  function readJoinFlow() {
+    var raw = storageGet(sessionStorage, joinAttestKey());
+    if (!raw) return null;
+    if (/^\d+$/.test(raw)) {
+      clearJoinFlow();
+      return null;
+    }
+    var flow = null;
+    try { flow = JSON.parse(raw); } catch (e) { flow = null; }
+    if (!flow || !flow.id || !flow.at || flow.terms !== true || (flow.kind !== 'google' && flow.kind !== 'email')) {
+      clearJoinFlow();
+      return null;
+    }
+    if (flow.dob || flow.birthdate || flow.dateOfBirth) {
+      clearJoinFlow();
+      return null;
+    }
+    if (Date.now() - flow.at > JOIN_FLOW_MS) {
+      clearJoinFlow();
+      return null;
+    }
+    return flow;
+  }
+  function writeJoinFlow(flow) {
+    storageSet(sessionStorage, joinAttestKey(), JSON.stringify(flow));
+    storageDel(localStorage, joinAttestKey());
+  }
+  function clearJoinFlow() {
+    activeGoogleFlowId = '';
+    storageDel(sessionStorage, joinAttestKey());
+    storageDel(localStorage, joinAttestKey());
+  }
+  function clearJoinAttested() { clearJoinFlow(); }
   function markJoinAttested() {
-    try { sessionStorage.setItem(joinAttestKey(), String(Date.now())); } catch (e) {}
+    var id = newJoinFlowId();
+    activeGoogleFlowId = id;
+    writeJoinFlow({ id: id, at: Date.now(), kind: 'google', terms: true });
   }
-  function clearJoinAttested() {
-    try { sessionStorage.removeItem(joinAttestKey()); } catch (e) {}
+  function markEmailJoinAttested(email) {
+    var id = newJoinFlowId();
+    activeGoogleFlowId = '';
+    writeJoinFlow({
+      id: id,
+      at: Date.now(),
+      kind: 'email',
+      email: String(email || '').trim().toLowerCase(),
+      terms: true
+    });
   }
-  function joinAttestedThisSignIn() {
-    try {
-      var t = parseInt(sessionStorage.getItem(joinAttestKey()), 10);
-      return isFinite(t) && Date.now() - t < JOIN_ATTEST_MS;
-    } catch (e) { return false; }
+  function dropUnrelatedJoin() {
+    claimedJoin = null;
+    clearJoinFlow();
+  }
+  function claimGoogleRedirect(user) {
+    var flow = readJoinFlow();
+    if (!flow || flow.kind !== 'google' || !user || !user.uid) return false;
+    if (claimedJoin && claimedJoin.uid !== user.uid) return false;
+    clearJoinFlow();
+    claimedJoin = { uid: user.uid, terms: true, used: false };
+    return true;
+  }
+  function bindJoinFlow(user) {
+    if (!user || !user.uid) return false;
+    if (claimedJoin && claimedJoin.uid === user.uid) return true;
+    if (claimedJoin && claimedJoin.uid !== user.uid) return false;
+    var flow = readJoinFlow();
+    if (!flow) return false;
+    if (flow.kind === 'google') {
+      if (!activeGoogleFlowId || flow.id !== activeGoogleFlowId) return false;
+    } else if (flow.kind === 'email') {
+      var email = String(user.email || '').trim().toLowerCase();
+      if (!flow.email || flow.email !== email) return false;
+    } else return false;
+    clearJoinFlow();
+    claimedJoin = { uid: user.uid, terms: true, used: false };
+    return true;
+  }
+  function takeFreshJoin(user) {
+    if (!claimedJoin || !user || claimedJoin.uid !== user.uid || claimedJoin.used) return false;
+    claimedJoin.used = true;
+    return true;
+  }
+  function markAgeAttestedUid(uid) {
+    if (!uid) return;
+    var now = String(Date.now());
+    storageSet(localStorage, ageAttestUidKey(uid), now);
+    storageSet(sessionStorage, ageAttestUidKey(uid), now);
+  }
+  function clearAgeAttestedUid(uid) {
+    if (!uid) return;
+    storageDel(localStorage, ageAttestUidKey(uid));
+    storageDel(sessionStorage, ageAttestUidKey(uid));
+  }
+  function ageAttestedForUid(uid) {
+    if (!uid) return false;
+    var key = ageAttestUidKey(uid);
+    var raw = storageGet(localStorage, key);
+    if (raw == null || raw === '') raw = storageGet(sessionStorage, key);
+    var t = parseInt(raw, 10);
+    if (!isFinite(t) || t <= 0 || Date.now() - t > AGE_CACHE_MS) {
+      clearAgeAttestedUid(uid);
+      return false;
+    }
+    return true;
+  }
+  function passAgeGate(user) {
+    if (user && user.uid) ageGatePassedUid = user.uid;
+    return true;
   }
   function surfaceSignupWriteError(e) {
     try { if (e && typeof e === 'object') e.__signupSurfaced = true; } catch (err) {}
@@ -6367,6 +6688,7 @@
     if (!user) return Promise.resolve();
     if (googleSignupWrite) return googleSignupWrite;
     if (!fbDb) {
+      clearJoinFlow();
       var missing = new Error('Feed is not connected.');
       surfaceSignupWriteError(missing);
       return Promise.reject(missing);
@@ -6383,7 +6705,7 @@
         }
         var extra = { provider: 'google' };
         if (!(snap && snap.exists)) extra.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-        return ensurePublicProfile(user, '', withAgeConfirmed(extra));
+        return ensurePublicProfile(user, '', extra);
       });
     }
     var settled;
@@ -6391,14 +6713,11 @@
       if (e && e.__suspended) throw e;
       return attempt();
     }).then(function () {
-      clearJoinAttested();
       if (googleSignupWrite === settled) googleSignupWrite = null;
     }).catch(function (e) {
       if (googleSignupWrite === settled) googleSignupWrite = null;
-      if (e && e.__suspended) {
-        clearJoinAttested();
-        throw e;
-      }
+      clearJoinFlow();
+      if (e && e.__suspended) throw e;
       surfaceSignupWriteError(e);
       throw e;
     });
@@ -6411,54 +6730,147 @@
       return false;
     });
   }
-  function runAgeAttestGate(user) {
-    if (!fbDb || !user || ageAttestCfg().enabled === false || isAdminUser()) return Promise.resolve(true);
-    var ref = fbDb.collection('users').doc(user.uid);
-    return ref.get().then(function (snap) {
-      var d = (snap && snap.exists && snap.data()) || {};
-      if (d.suspended === true) {
-        clearJoinAttested();
-        showSuspended(d.suspendedReason);
-        return false;
-      }
-      if (d.ageAttested18 === true) {
-        clearJoinAttested();
-        return true;
-      }
-      // Join already collected an adult DOB in this browser. Do not ask again,
-      // even when this read lands before the signup write.
-      if (joinAttestedThisSignIn()) return finishJoinAttestedSignup(user);
-      return promptAgeAttest().then(function (age) {
-        if (age >= 18) {
-          return ref.set({ siteId: SITE_ID, ageAttested18: true, ageConfirmed: true,
-            ageAttestedAt: firebase.firestore.FieldValue.serverTimestamp(),
-            termsVersion: termsVersion(), termsAcceptedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true }).then(function () { return true; });
-        }
-        try { localStorage.setItem('subx.ageBlock.' + SITE_ID, String(Date.now())); } catch (e) {}
-        var patch = { siteId: SITE_ID, suspended: true, suspendedReason: 'under18', ageAttested18: false,
-          profileHidden: true, deletionQueuedAt: firebase.firestore.FieldValue.serverTimestamp() };
-        if (ageAttestCfg().notifyUnder18Email === true) patch.notifyUnder18Email = true;   // OFF by default
-        return ref.set(patch, { merge: true }).then(function () { showSuspended('under18'); return false; });
-      });
-    }).catch(function (e) {
-      console.warn('age attest', e);
-      if (joinAttestedThisSignIn()) return finishJoinAttestedSignup(user);
+  function ageOnlyPatch(existing) {
+    var patch = { siteId: SITE_ID };
+    if (dobMinAge() && !ageWriteBlocked(existing)) {
+      patch.ageConfirmed = true;
+      patch.ageAttested18 = true;
+      patch.ageAttestedAt = firebase.firestore.FieldValue.serverTimestamp();
+    }
+    return patch;
+  }
+  function joinAcceptancePatch(existing) {
+    var patch = { siteId: SITE_ID };
+    withAgeConfirmed(patch, existing);
+    return patch;
+  }
+  function patchHasAttestation(patch) {
+    return !!(patch && (patch.ageAttested18 === true || patch.termsAcceptedAt));
+  }
+  var ageWritePromises = {};
+  function writeUserPatch(user, patch) {
+    if (!user || !fbDb) return Promise.resolve(false);
+    if (ageWritePromises[user.uid]) return ageWritePromises[user.uid];
+    if (!patchHasAttestation(patch)) return Promise.resolve(true);
+    var pending = fbDb.collection('users').doc(user.uid).set(patch, { merge: true }).then(function () {
+      if (patch.ageAttested18 === true) markAgeAttestedUid(user.uid);
       return true;
+    }, function () {
+      delete ageWritePromises[user.uid];
+      ageGatePassedUid = '';
+      return false;
+    });
+    ageWritePromises[user.uid] = pending;
+    return pending;
+  }
+  function blockAgeGate() {
+    ageGatePassedUid = '';
+    try { closeAuth(); } catch (eClose) {}
+    composeErr(AGE_CHECK_MSG);
+    return false;
+  }
+  function waitForJoinRedirect(user) {
+    var flow = readJoinFlow();
+    if (!flow || flow.kind !== 'google' || activeGoogleFlowId || redirectSettled) return Promise.resolve();
+    return new Promise(function (resolve) {
+      var timer = setInterval(function () {
+        if (redirectSettled || !readJoinFlow()) {
+          clearInterval(timer);
+          resolve();
+        }
+      }, 20);
     });
   }
+  function runAgeAttestGate(user) {
+    if (!fbDb || !user || ageAttestCfg().enabled === false || isAdminUser()) return Promise.resolve(passAgeGate(user));
+    ageAttestedForUid(user.uid);
+    bindJoinFlow(user);
+    return waitForJoinRedirect(user).then(function () {
+      bindJoinFlow(user);
+      var ref = fbDb.collection('users').doc(user.uid);
+      return ref.get().then(function (snap) {
+        var d = (snap && snap.exists && snap.data()) || {};
+        if (ageWriteBlocked(d)) {
+          clearJoinFlow();
+          claimedJoin = null;
+          clearAgeAttestedUid(user.uid);
+          ageGatePassedUid = '';
+          showSuspended(d.suspendedReason || '');
+          return false;
+        }
+        var fresh = takeFreshJoin(user);
+        if (d.ageAttested18 === true) {
+          markAgeAttestedUid(user.uid);
+          return passAgeGate(user);
+        }
+        if (fresh) {
+          var acceptance = joinAcceptancePatch(d);
+          if (!patchHasAttestation(acceptance)) return passAgeGate(user);
+          return writeUserPatch(user, acceptance).then(function (ok) {
+            return ok ? passAgeGate(user) : blockAgeGate();
+          });
+        }
+        ageGatePassedUid = '';
+        return promptAgeAttest().then(function (age) {
+          if (age == null) {
+            clearJoinFlow();
+            return false;
+          }
+          if (age >= 18) {
+            var agePatch = ageOnlyPatch(d);
+            if (!patchHasAttestation(agePatch)) return blockAgeGate();
+            return writeUserPatch(user, agePatch).then(function (ok) {
+              return ok ? passAgeGate(user) : blockAgeGate();
+            });
+          }
+          try { localStorage.setItem('subx.ageBlock.' + SITE_ID, String(Date.now())); } catch (e) {}
+          clearAgeAttestedUid(user.uid);
+          claimedJoin = null;
+          clearJoinFlow();
+          var patch = { siteId: SITE_ID, suspended: true, suspendedReason: 'under18', ageAttested18: false,
+            ageConfirmed: false, profileHidden: true, deletionQueuedAt: firebase.firestore.FieldValue.serverTimestamp() };
+          if (ageAttestCfg().notifyUnder18Email === true) patch.notifyUnder18Email = true;   // OFF by default
+          return ref.set(patch, { merge: true }).then(function () { showSuspended('under18'); return false; }, function () {
+            showSuspended('under18');
+            return false;
+          });
+        });
+      }).catch(function (e) {
+        console.warn('age attest', e);
+        return blockAgeGate();
+      });
+    });
+  }
+  function dismissAgeAttest() {
+    var el = document.getElementById('age-attest');
+    if (!el) return false;
+    if (el.parentNode) el.parentNode.removeChild(el);
+    var resolve = ageAttestResolve;
+    ageAttestPrompt = null;
+    ageAttestResolve = null;
+    clearJoinFlow();
+    if (resolve) resolve(null);
+    return true;
+  }
   function promptAgeAttest() {
-    return new Promise(function (resolve) {
+    if (ageAttestPrompt) return ageAttestPrompt;
+    ageAttestPrompt = new Promise(function (resolve) {
+      ageAttestResolve = resolve;
+      try { closeAuth(); } catch (eClose) {}
       var el = document.createElement('div');
       el.className = 'name-prompt age-attest';
       el.id = 'age-attest';
       el.innerHTML = '<div class="name-prompt-card" role="dialog" aria-modal="true" aria-label="Confirm your age">' +
         '<p><strong>' + escapeHtml((site && site.name) || 'This room') + ' is now 18+.</strong> Please confirm your age to keep using your account.</p>' +
         '<label for="age-attest-dob">Date of birth</label> <input type="date" id="age-attest-dob" autocomplete="bday" required>' +
-        '<label class="conv-modal-check" for="age-attest-ok"><input type="checkbox" id="age-attest-ok"> <span>I am 18 or older and I agree to the <a href="terms.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</span></label>' +
+        '<label class="conv-modal-check" for="age-attest-ok"><input type="checkbox" id="age-attest-ok"> <span>I am 18 or older.</span></label>' +
         '<div class="name-prompt-err" id="age-attest-err"></div>' +
         '<div class="name-prompt-actions"><button type="button" id="age-attest-go" disabled>Continue</button></div></div>';
       ensurePreviewLiftCss();
       document.body.appendChild(el);
+      el.addEventListener('click', function (e) {
+        if (e.target === el) dismissAgeAttest();
+      });
       var dob = document.getElementById('age-attest-dob'), ok = document.getElementById('age-attest-ok');
       var go = document.getElementById('age-attest-go');
       function sync() { go.disabled = !(ageFromDob(dob.value) >= 0 && ok.checked); }
@@ -6467,9 +6879,12 @@
         var age = ageFromDob(dob.value);
         dob.value = '';
         if (el.parentNode) el.parentNode.removeChild(el);
+        ageAttestPrompt = null;
+        ageAttestResolve = null;
         resolve(age);
       });
     });
+    return ageAttestPrompt;
   }
   function showSuspended(reason) {
     var room = (site && site.name) || SITE_ID;
@@ -6639,7 +7054,12 @@
     });
   }
 
-  function toggleLike(postId) {
+  function toggleLike(postId, onlyLike) {
+    if (authBootFailed && !isLiveUser()) {
+      showAuthUnavailable();
+      return;
+    }
+    if (!isLiveUser()) rememberAuthAction({ t: 'like', id: postId });
     var uid = liveUid();
     if (!requireVerified('like')) return;
     if (!uid) {
@@ -6647,6 +7067,7 @@
       openAuth('join');
       return;
     }
+    composeErr('');
     if (!fbDb || !postId) return;
     var post = findPost(postId);
     if (isSessionSeedPost(post)) {
@@ -6654,6 +7075,7 @@
       return;
     }
     var likedBy = (post && post.likedBy) || {};
+    if (onlyLike && likedBy[uid]) return;
     var patch = {};
     if (likedBy[uid]) {
       patch['likes.' + uid] = firebase.firestore.FieldValue.delete();
@@ -6796,6 +7218,48 @@
       };
       setTimeout(function () { document.addEventListener('click', close); }, 20);
     });
+  }
+
+  function startReply(postId) {
+    if (!postId) return;
+    if (!isLiveUser()) {
+      if (authBootFailed) {
+        showAuthUnavailable();
+        return;
+      }
+      rememberAuthAction({ t: 'reply', id: postId });
+      composeErr('Sign in to reply. Guest can only browse.');
+      openAuth('join');
+      return;
+    }
+    if (ageAttestCfg().enabled !== false && !isAdminUser() && ageGatePassedUid !== liveUid()) {
+      composeErr(AGE_CHECK_MSG);
+      return;
+    }
+    var post = null;
+    var nodes = document.querySelectorAll('[data-post-id]');
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      if (nodes[i].dataset.postId === postId) { post = nodes[i]; break; }
+    }
+    composeErr('');
+    var seedPost = findPost(postId);
+    if (isSessionSeedPost(seedPost)) {
+      replyTo = null;
+      const seedInput = document.getElementById('thoughts-compose-input');
+      if (seedInput) {
+        if (!seedInput.getAttribute('data-ph')) seedInput.setAttribute('data-ph', seedInput.placeholder);
+        seedInput.placeholder = 'Answer the room…';
+        seedInput.focus();
+      }
+      return;
+    }
+    replyTo = (post && post.dataset.parentId) || postId;
+    const input = document.getElementById('thoughts-compose-input');
+    if (!input) return;
+    if (!input.getAttribute('data-ph')) input.setAttribute('data-ph', input.placeholder);
+    input.placeholder = 'Reply to this post…';
+    input.focus();
   }
 
   function wireEvents() {
@@ -6981,25 +7445,9 @@
         return;
       }
       if (e.target.closest('[data-act="reply"]')) {
-        if (!isLiveUser()) { composeErr('Sign in to reply. Guest can only browse.'); openAuth('join'); return; }
         const post = e.target.closest('[data-post-id]');
         if (!post) return;
-        var seedPost = findPost(post.dataset.postId);
-        if (isSessionSeedPost(seedPost)) {
-          replyTo = null;
-          const seedInput = document.getElementById('thoughts-compose-input');
-          if (seedInput) {
-            if (!seedInput.getAttribute('data-ph')) seedInput.setAttribute('data-ph', seedInput.placeholder);
-            seedInput.placeholder = 'Answer the room…';
-            seedInput.focus();
-          }
-          return;
-        }
-        replyTo = post.dataset.parentId || post.dataset.postId;
-        const input = document.getElementById('thoughts-compose-input');
-        if (!input.getAttribute('data-ph')) input.setAttribute('data-ph', input.placeholder);
-        input.placeholder = 'Reply to this post…';
-        input.focus();
+        startReply(post.dataset.postId);
         return;
       }
       if (e.target.closest('[data-act="share"]')) {
@@ -7069,6 +7517,7 @@
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape') return;
+      if (document.getElementById('age-attest')) { e.preventDefault(); dismissAgeAttest(); return; }
       var nestForm = document.getElementById('nav-nest-form');
       if (nestForm && !nestForm.hidden) { e.preventDefault(); hideNestAddForm(); return; }
       if (closeStoriesViewer()) { e.preventDefault(); return; }
@@ -7161,18 +7610,22 @@
     });
     document.getElementById('cv-login-btn').addEventListener('click', function () {
       const err = document.getElementById('cv-login-err');
+      authPersistPromise.then(function () {
       const email = (document.getElementById('cv-login-email').value || '').trim();
       const pw = document.getElementById('cv-login-pw').value || '';
       if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
+      dropUnrelatedJoin();
       err.textContent = '';
       markAuthLand();
       fbAuth.signInWithEmailAndPassword(email, pw).catch(function (e) {
         err.textContent = (e && e.message) ? e.message : 'Sign-in failed.';
         err.classList.add('show');
       });
+      });
     });
     document.getElementById('cv-reg-btn').addEventListener('click', function () {
       const err = document.getElementById('cv-reg-err');
+      authPersistPromise.then(function () {
       const name = (document.getElementById('cv-reg-name').value || '').trim();
       const email = (document.getElementById('cv-reg-email').value || '').trim();
       const pw = document.getElementById('cv-reg-pw').value || '';
@@ -7195,16 +7648,19 @@
       if (!email || pw.length < 6) { err.textContent = 'Email and a password of at least 6 characters.'; err.classList.add('show'); return; }
       err.textContent = '';
       markAuthLand();
+      markEmailJoinAttested(email);
       fbAuth.createUserWithEmailAndPassword(email, pw).then(function (cred) {
         cred.user.sendEmailVerification().catch(function () {});
-        return ensurePublicProfile(cred.user, name, withAgeConfirmed({
+        return ensurePublicProfile(cred.user, name, {
           createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        })).then(function () {
+        }).then(function () {
           composeErr('Account created. Verify your email before posting.');
         });
       }).catch(function (e) {
+        clearJoinFlow();
         err.textContent = (e && e.message) ? e.message : 'Could not create account.';
         err.classList.add('show');
+      });
       });
     });
     document.getElementById('cv-google-login').addEventListener('click', function () {
@@ -7229,13 +7685,12 @@
       err.classList.remove('show');
       markAuthLand();
       if (joinMode && age.checked && !gDobErr) markJoinAttested();
+      clearGoogleRedirect();
       var provider = new firebase.auth.GoogleAuthProvider();
-      var ua = navigator.userAgent || '';
-      var isiOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      var isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS|Android/i.test(ua);
       function finishGoogle(cred) {
+        clearGoogleRedirect();
         var u = (cred && cred.user) || (fbAuth && fbAuth.currentUser);
-        if (!u) { clearJoinAttested(); return; }
+        if (!u) { clearJoinFlow(); return; }
         return commitGoogleSignup(u);
       }
       function failGoogle(e) {
@@ -7251,23 +7706,25 @@
         err.classList.add('show');
       }
       function redirectGoogle() {
-        return fbAuth.signInWithRedirect(provider).catch(function (e) {
-          clearJoinAttested();
-          failGoogle(e);
+        activeGoogleFlowId = '';
+        rememberGoogleRedirect();
+        showGooglePopupBlocked('Google popup sign-in could not open. Trying another sign-in method.');
+        return fbAuth.signInWithRedirect(provider).catch(function (e2) {
+          clearGoogleRedirect();
+          clearJoinFlow();
+          failGoogle(e2);
         });
       }
-      if (isiOS || isSafari) {
-        redirectGoogle();
-      } else {
-        fbAuth.signInWithPopup(provider).then(finishGoogle).catch(function (e) {
-          if (e && (e.__signupSurfaced || e.__suspended)) return;
-          if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request')) {
-            return redirectGoogle();
-          }
-          clearJoinAttested();
-          failGoogle(e);
-        });
-      }
+      // Call popup in this tap. iOS Safari blocks it if this handler waits first.
+      fbAuth.signInWithPopup(provider).then(finishGoogle).catch(function (e) {
+        if (e && (e.__signupSurfaced || e.__suspended)) return;
+        var code = e && e.code;
+        if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+          return redirectGoogle();
+        }
+        clearJoinFlow();
+        failGoogle(e);
+      });
     });
     document.getElementById('cv-guest-login').addEventListener('click', function () { stubSignIn('Guest', 'guestgp'); });
 
@@ -8163,40 +8620,55 @@
     hideDummyChrome();
     syncChatChrome();
 
-    if (fbAuth) {
+    var wantedAuth = false;
+    if (!fbAuth) {
+      authBootFailed = true;
+      wantedAuth = !!(authOpenWhenReady || deferredAuthMsg || readAuthAction());
+      authOpenWhenReady = false;
+      deferredAuthMsg = '';
+      clearAuthAction();
+    } else {
       fbAuth.getRedirectResult().then(function (cred) {
         var u = cred && cred.user;
-        if (u) return commitGoogleSignup(u);
+        if (u) {
+          clearGoogleRedirect();
+          claimGoogleRedirect(u);
+          return commitGoogleSignup(u);
+        }
+        if (readJoinFlow() && readJoinFlow().kind === 'google') clearJoinFlow();
+        if (peekGoogleRedirect() && !(fbAuth && fbAuth.currentUser)) {
+          clearGoogleRedirect();
+          showGooglePopupBlocked();
+          authOpenWhenReady = true;
+        }
       }).catch(function (e) {
+        console.warn('redirect result', e);
+        clearGoogleRedirect();
+        clearJoinFlow();
         if (e && (e.__signupSurfaced || e.__suspended)) return;
-        clearJoinAttested();
+        if (fbAuth && fbAuth.currentUser) return;
         var msg = (e && e.message) ? e.message : 'Google sign-in failed.';
         var el = document.getElementById('cv-login-err');
         if (el) { el.textContent = msg; el.classList.add('show'); }
         try { composeErr(msg); } catch (err) {}
-        try { openAuth('join'); } catch (err2) {}
-      });
+        authOpenWhenReady = true;
+      }).then(function () { markRedirectSettled(); }, function () { markRedirectSettled(); });
       fbAuth.onAuthStateChanged(function (user) {
-        if (user) runAgeAttestGate(user).then(function (ok) { if (ok) applyFbUser(user); });
-        else {
-          stopPreviewLift();
-          listenMemberNests(null);
-          listenBlocks(null);
-          teardownPeopleSocial();
-          if (currentUser && currentUser.live) {
-            currentUser = null;
-            saveJSON(LS_USER, null);
-            renderSidebarAuth();
-            hideDummyChrome();
-            teardownDms();
-            listenConversations();
-            syncProfile();
-            renderNotifs();
-            renderFeed();
-          } else {
-            renderWatchlist();
-          }
+        authStateKnown = true;
+        if (user) {
+          signedOutApplied = false;
+          authOpenWhenReady = false;
+          deferredAuthMsg = '';
+          runAgeAttestGate(user).then(function (ok) {
+            if (!ok) return;
+            if (!fbAuth || !fbAuth.currentUser || fbAuth.currentUser.uid !== user.uid) return;
+            applyFbUser(user);
+            flushPendingAuthAction();
+          });
+          return;
         }
+        if (!redirectSettled) return;
+        applySignedOut('');
       });
     }
 
@@ -8213,6 +8685,7 @@
     listenLivePosts();
     renderFeed();
     initStories();
+    if (wantedAuth) showAuthUnavailable();
 
     restoreBouncedPath();
     window.addEventListener('hashchange', applyRoute);
