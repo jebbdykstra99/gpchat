@@ -5485,7 +5485,7 @@
     var panePosts = document.getElementById('profile-pane-posts');
     if (panePosts) {
       if (!posts.length) {
-        panePosts.innerHTML = '<div class="empty-note" id="profile-posts-empty">' + escapeHtml(skin('profileEmpty', (site && site.emptyState) || 'No posts yet.')) + '</div>';
+        panePosts.innerHTML = '<div class="empty-note" id="profile-posts-empty">' + escapeHtml((site && site.emptyState) || 'No posts yet.') + '</div>';
       } else {
         panePosts.innerHTML = posts.map(function (p) { return renderPost(p, false); }).join('');
       }
@@ -5852,7 +5852,7 @@
     paintProfile(
       currentUser.name,
       currentUser.handle,
-      currentUser.bio || skin('bioDefault', ''),
+      currentUser.bio || '',
       currentUser.uid,
       extra
     );
@@ -7230,9 +7230,6 @@
       markAuthLand();
       if (joinMode && age.checked && !gDobErr) markJoinAttested();
       var provider = new firebase.auth.GoogleAuthProvider();
-      var ua = navigator.userAgent || '';
-      var isiOS = /iP(hone|od|ad)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      var isSafari = /Safari/i.test(ua) && !/Chrome|CriOS|FxiOS|Android/i.test(ua);
       function finishGoogle(cred) {
         var u = (cred && cred.user) || (fbAuth && fbAuth.currentUser);
         if (!u) { clearJoinAttested(); return; }
@@ -7256,18 +7253,17 @@
           failGoogle(e);
         });
       }
-      if (isiOS || isSafari) {
-        redirectGoogle();
-      } else {
-        fbAuth.signInWithPopup(provider).then(finishGoogle).catch(function (e) {
-          if (e && (e.__signupSurfaced || e.__suspended)) return;
-          if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/cancelled-popup-request')) {
-            return redirectGoogle();
-          }
-          clearJoinAttested();
-          failGoogle(e);
-        });
-      }
+      // Call popup in this tap on every browser. iOS Safari blocks it if this handler waits first.
+      // Redirect is only a fallback: on iOS the cross-site authDomain loses the redirect result.
+      fbAuth.signInWithPopup(provider).then(finishGoogle).catch(function (e) {
+        if (e && (e.__signupSurfaced || e.__suspended)) return;
+        var code = e && e.code;
+        if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+          return redirectGoogle();
+        }
+        clearJoinAttested();
+        failGoogle(e);
+      });
     });
     document.getElementById('cv-guest-login').addEventListener('click', function () { stubSignIn('Guest', 'guestgp'); });
 
