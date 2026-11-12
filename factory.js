@@ -6,6 +6,80 @@
   const LS_LIKES = '415chat.likes';
   const LS_TOPIC_FOLLOWS = 'subx.topicFollows';
   const SITE_JSON_URL = (document.currentScript && document.currentScript.getAttribute('data-site')) || 'site.json';
+  var FACTORY_SRC = (document.currentScript && document.currentScript.src) || '';
+
+  var ACC_CLOSED = 'Accounts are not open yet. You can read the room as a guest.';
+  var authOpenWhenReady = false;
+  var authPersistPromise = Promise.resolve();
+  function runWithAuth(errEl, fn) {
+    if (!fbAuth) {
+      if (errEl) {
+        errEl.textContent = 'Auth is not ready.';
+        errEl.classList.add('show');
+      }
+      return;
+    }
+    fn();
+  }
+  function setAuthPersistence(auth) {
+    var P = firebase.auth.Auth.Persistence;
+    var modes = [P.LOCAL, P.SESSION, P.NONE];
+    function attempt(i) {
+      if (!auth || i >= modes.length) return Promise.resolve();
+      var pending;
+      try { pending = auth.setPersistence(modes[i]); }
+      catch (e) {
+        console.warn('auth persistence', modes[i], e);
+        return attempt(i + 1);
+      }
+      return Promise.resolve(pending).catch(function (e2) {
+        console.warn('auth persistence', modes[i], e2);
+        return attempt(i + 1);
+      });
+    }
+    return attempt(0);
+  }
+
+  var signinApi = null;
+  var signinP = null;
+  function loadSigninModule() {
+    if (signinApi) return Promise.resolve(signinApi);
+    if (signinP) return signinP;
+    signinP = new Promise(function (resolve, reject) {
+      window.__subxSigninHost = {
+        install: function (api) { signinApi = api; resolve(api); },
+        get fbAuth() { return fbAuth; },
+        get fbDb() { return fbDb; },
+        get ADMIN_UID() { return ADMIN_UID; },
+        ACC_CLOSED: (typeof ACC_CLOSED !== 'undefined' ? ACC_CLOSED : 'Accounts are not open yet. You can read the room as a guest.'),
+        accountsOpen: accountsOpen,
+        ageGateMessage: ageGateMessage,
+        markAuthLand: markAuthLand,
+        ensurePublicProfile: ensurePublicProfile,
+        runWithAuth: runWithAuth,
+        get authPersistPromise() { return (typeof authPersistPromise !== 'undefined' ? authPersistPromise : Promise.resolve()); },
+        nameOk: nameOk,
+        composeErr: composeErr,
+        isLiveUser: isLiveUser,
+        closeAuth: closeAuth,
+        setAuthOpenWhenReady: function (v) { authOpenWhenReady = !!v; }
+      };
+      var s = document.createElement('script');
+      s.src = FACTORY_SRC ? FACTORY_SRC.replace(/factory\.js(\?[^#]*)?(#.*)?$/i, 'factory-signin.js$1$2') : 'factory-signin.js';
+      s.async = true;
+      s.onerror = function () { signinP = null; reject(new Error('Could not load factory-signin.js')); };
+      s.onload = function () { if (!signinApi) { signinP = null; reject(new Error('factory-signin.js did not install')); } };
+      (document.head || document.documentElement).appendChild(s);
+    });
+    return signinP;
+  }
+  function withSignin(name, args) {
+    if (signinApi && signinApi[name]) return signinApi[name].apply(signinApi, args || []);
+    var p = loadSigninModule().then(function (api) { return api[name].apply(api, args || []); });
+    p.catch(function (e) { console.warn('factory-signin', e); });
+    return p;
+  }
+
 
   let SITE_ID = '415chat';
   let site = null;
@@ -378,7 +452,7 @@
     if (err) err.textContent = '';
     var input = document.getElementById('name-prompt-input');
     if (input) {
-      input.value = '';
+      input.value = (currentUser && currentUser.name) || '';
       try { input.focus(); } catch (e2) {}
     }
     el.hidden = false;
@@ -883,9 +957,7 @@
     appId: "1:869847405863:web:26f902efb9a4ee0b7c0502"
     });
     fbAuth = firebase.auth();
-    try {
-      fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-    } catch (ePersist) { console.warn('auth persistence', ePersist); }
+    authPersistPromise = setAuthPersistence(fbAuth);
     fbDb = firebase.firestore();
     fbStorage = firebase.storage();
     try {
@@ -5934,108 +6006,22 @@
       try { input.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e2) {}
     }, 60);
   }
-  function ensureJoinAuthCss() {
-    if (document.getElementById('join-auth-css')) return;
-    var st = document.createElement('style');
-    st.id = 'join-auth-css';
-    st.textContent =
-      '.conv-modal-tabs.is-join-hidden{display:none;}' +
-      '.conv-email-toggle{width:100%;padding:0.55rem;margin:0.15rem 0 0.35rem;' +
-        'background:transparent;border:1px solid var(--border,rgba(0,0,0,0.14));' +
-        'border-radius:50px;cursor:pointer;font-size:0.82rem;font-weight:600;' +
-        'color:var(--text-muted,#666);}' +
-      '.conv-email-toggle:hover{color:var(--text,#111);}' +
-      '.cv-email-signin{margin-top:0.2rem;}' +
-      '.conv-google-btn{margin-bottom:0.2rem;}';
-    document.head.appendChild(st);
-  }
-  function ageCheckLabel() {
-    var box = document.getElementById('cv-google-age');
-    if (!box) return null;
-    return box.closest('label') || box;
-  }
-  function fieldWrap(input) {
-    if (!input) return null;
-    return input.closest('.conv-modal-field') || input;
-  }
   function toggleEmailAuth(forceOpen) {
-    var box = document.getElementById('cv-email-signin');
-    var btn = document.getElementById('cv-use-email-btn');
-    if (!box) return;
-    var open = forceOpen === true ? true : forceOpen === false ? false : box.hidden;
-    box.hidden = !open;
-    if (btn) btn.textContent = open ? 'Hide email' : 'Use email';
+    if (signinApi) return signinApi.toggleEmailAuth(forceOpen);
+    return withSignin('toggleEmailAuth', [forceOpen]);
   }
   function ensureJoinAuthLayout() {
-    var panel = document.getElementById('cv-panel-login');
-    if (!panel) return;
-    ensureJoinAuthCss();
-    if (panel.getAttribute('data-join-layout') === '1') return;
-    panel.setAttribute('data-join-layout', '1');
-
-    var err = document.getElementById('cv-login-err');
-    var ageLab = ageCheckLabel();
-    var google = document.getElementById('cv-google-login');
-    var divider = panel.querySelector('.conv-modal-divider');
-    var guest = document.getElementById('cv-guest-login');
-    var emailIn = document.getElementById('cv-login-email');
-    var pwIn = document.getElementById('cv-login-pw');
-    var loginBtn = document.getElementById('cv-login-btn');
-
-    var emailBox = document.getElementById('cv-email-signin');
-    if (!emailBox) {
-      emailBox = document.createElement('div');
-      emailBox.id = 'cv-email-signin';
-      emailBox.className = 'cv-email-signin';
-    }
-    emailBox.hidden = true;
-
-    var emailField = fieldWrap(emailIn);
-    var pwField = fieldWrap(pwIn);
-    if (emailField && emailField.parentNode !== emailBox) emailBox.appendChild(emailField);
-    if (pwField && pwField.parentNode !== emailBox) emailBox.appendChild(pwField);
-    if (loginBtn && loginBtn.parentNode !== emailBox) emailBox.appendChild(loginBtn);
-
-    var gotoReg = document.getElementById('cv-goto-register');
-    if (!gotoReg) {
-      gotoReg = document.createElement('button');
-      gotoReg.id = 'cv-goto-register';
-      gotoReg.type = 'button';
-      gotoReg.className = 'conv-guest-btn';
-      gotoReg.textContent = 'Create an account';
-    }
-    if (gotoReg.parentNode !== emailBox) emailBox.appendChild(gotoReg);
-
-    var useEmail = document.getElementById('cv-use-email-btn');
-    if (!useEmail) {
-      useEmail = document.createElement('button');
-      useEmail.id = 'cv-use-email-btn';
-      useEmail.type = 'button';
-      useEmail.className = 'conv-email-toggle';
-      useEmail.textContent = 'Use email';
-    }
-
-    if (divider) divider.textContent = 'or use email';
-
-    [err, ageLab, google, divider, useEmail, emailBox, guest].forEach(function (n) {
-      if (n) panel.appendChild(n);
-    });
-
-    var reg = document.getElementById('cv-panel-register');
-    if (reg && !document.getElementById('cv-goto-join')) {
-      var back = document.createElement('button');
-      back.id = 'cv-goto-join';
-      back.type = 'button';
-      back.className = 'conv-guest-btn';
-      back.textContent = 'Continue with Google instead';
-      var regErr = document.getElementById('cv-reg-err');
-      if (regErr && regErr.nextSibling) reg.insertBefore(back, regErr.nextSibling);
-      else if (reg.firstChild) reg.insertBefore(back, reg.firstChild);
-      else reg.appendChild(back);
-    }
+    if (signinApi) return signinApi.ensureJoinAuthLayout();
+    return withSignin('ensureJoinAuthLayout');
   }
   function openAuth(tab) {
     ensureJoinAuthLayout();
+    var modeHint = tab || 'join';
+    if (modeHint === 'login') modeHint = 'join';
+    if ((modeHint === 'join' || modeHint === 'register') && isLiveUser()) {
+      closeAuth();
+      return;
+    }
     var draft = peekCompose();
     const ov = document.getElementById('cv-auth-overlay');
     if (!ov) return;
@@ -6057,6 +6043,7 @@
       if (reg) reg.style.display = 'none';
       toggleEmailAuth(false);
     }
+    withSignin('ensureInAppNote');
     restoreCompose(draft);
     var google = document.getElementById('cv-google-login');
     var closeBtn = document.getElementById('cv-modal-close');
@@ -7160,110 +7147,16 @@
       t.addEventListener('click', function () { openAuth(t.dataset.tab); });
     });
     document.getElementById('cv-login-btn').addEventListener('click', function () {
-      const err = document.getElementById('cv-login-err');
-      const email = (document.getElementById('cv-login-email').value || '').trim();
-      const pw = document.getElementById('cv-login-pw').value || '';
-      if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
-      err.textContent = '';
-      markAuthLand();
-      fbAuth.signInWithEmailAndPassword(email, pw).catch(function (e) {
-        err.textContent = (e && e.message) ? e.message : 'Sign-in failed.';
-        err.classList.add('show');
-      });
+      if (signinApi) { signinApi.onEmailLogin(); return; }
+      withSignin('onEmailLogin');
     });
     document.getElementById('cv-reg-btn').addEventListener('click', function () {
-      const err = document.getElementById('cv-reg-err');
-      const name = (document.getElementById('cv-reg-name').value || '').trim();
-      const email = (document.getElementById('cv-reg-email').value || '').trim();
-      const pw = document.getElementById('cv-reg-pw').value || '';
-      const age = document.getElementById('cv-reg-age');
-      if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
-      if (!accountsOpen()) { err.textContent = 'Accounts are not open yet.'; err.classList.add('show'); return; }
-      if (!age || !age.checked) {
-        err.textContent = ageGateMessage();
-        err.classList.add('show');
-        return;
-      }
-      if (name && !nameOk(name)) {
-        err.textContent = 'That display name is reserved.';
-        err.classList.add('show');
-        return;
-      }
-      var regDobErr = dobError('cv-reg');
-      if (regDobErr) { err.textContent = regDobErr; err.classList.add('show'); return; }
-      clearDob('cv-reg');
-      if (!email || pw.length < 6) { err.textContent = 'Email and a password of at least 6 characters.'; err.classList.add('show'); return; }
-      err.textContent = '';
-      markAuthLand();
-      fbAuth.createUserWithEmailAndPassword(email, pw).then(function (cred) {
-        cred.user.sendEmailVerification().catch(function () {});
-        return ensurePublicProfile(cred.user, name, withAgeConfirmed({
-          createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        })).then(function () {
-          composeErr('Account created. Verify your email before posting.');
-        });
-      }).catch(function (e) {
-        err.textContent = (e && e.message) ? e.message : 'Could not create account.';
-        err.classList.add('show');
-      });
+      if (signinApi) { signinApi.onRegister(); return; }
+      withSignin('onRegister');
     });
     document.getElementById('cv-google-login').addEventListener('click', function () {
-      var err = document.getElementById('cv-login-err');
-      var btn = document.getElementById('cv-google-login');
-      // This handler is the Join Google button (data-accounts="join"). Email
-      // "Sign In" is cv-login-btn and never calls markJoinAttested. Gate the
-      // marker on Join mode plus the 18+ checkbox and an adult DOB.
-      var joinMode = !!(accountsOpen() && btn && btn.getAttribute('data-accounts') === 'join');
-      if (!fbAuth) { err.textContent = 'Auth is not ready.'; err.classList.add('show'); return; }
-      if (!joinMode) { err.textContent = 'Accounts are not open yet.'; err.classList.add('show'); return; }
-      var age = document.getElementById('cv-google-age');
-      if (!age || !age.checked) {
-        err.textContent = ageGateMessage();
-        err.classList.add('show');
-        return;
-      }
-      var gDobErr = dobError('cv-google');
-      if (gDobErr) { err.textContent = gDobErr; err.classList.add('show'); return; }
-      clearDob('cv-google');
-      err.textContent = '';
-      err.classList.remove('show');
-      markAuthLand();
-      if (joinMode && age.checked && !gDobErr) markJoinAttested();
-      var provider = new firebase.auth.GoogleAuthProvider();
-      function finishGoogle(cred) {
-        var u = (cred && cred.user) || (fbAuth && fbAuth.currentUser);
-        if (!u) { clearJoinAttested(); return; }
-        return commitGoogleSignup(u);
-      }
-      function failGoogle(e) {
-        var msg;
-        if (e && e.code === 'auth/operation-not-allowed') {
-          msg = 'Google is not enabled on subx-skins yet.';
-        } else if (e && e.code === 'auth/popup-closed-by-user') {
-          msg = 'Google sign-in cancelled.';
-        } else {
-          msg = (e && e.message) ? e.message : 'Google sign-in failed.';
-        }
-        err.textContent = msg;
-        err.classList.add('show');
-      }
-      function redirectGoogle() {
-        return fbAuth.signInWithRedirect(provider).catch(function (e) {
-          clearJoinAttested();
-          failGoogle(e);
-        });
-      }
-      // Call popup in this tap on every browser. iOS Safari blocks it if this handler waits first.
-      // Redirect is only a fallback: on iOS the cross-site authDomain loses the redirect result.
-      fbAuth.signInWithPopup(provider).then(finishGoogle).catch(function (e) {
-        if (e && (e.__signupSurfaced || e.__suspended)) return;
-        var code = e && e.code;
-        if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
-          return redirectGoogle();
-        }
-        clearJoinAttested();
-        failGoogle(e);
-      });
+      if (signinApi) { signinApi.onGoogleClick(); return; }
+      withSignin('onGoogleClick');
     });
     document.getElementById('cv-guest-login').addEventListener('click', function () { stubSignIn('Guest', 'guestgp'); });
 
@@ -8160,18 +8053,9 @@
     syncChatChrome();
 
     if (fbAuth) {
-      fbAuth.getRedirectResult().then(function (cred) {
-        var u = cred && cred.user;
-        if (u) return commitGoogleSignup(u);
-      }).catch(function (e) {
-        if (e && (e.__signupSurfaced || e.__suspended)) return;
-        clearJoinAttested();
-        var msg = (e && e.message) ? e.message : 'Google sign-in failed.';
-        var el = document.getElementById('cv-login-err');
-        if (el) { el.textContent = msg; el.classList.add('show'); }
-        try { composeErr(msg); } catch (err) {}
-        try { openAuth('join'); } catch (err2) {}
-      });
+      loadSigninModule().then(function (api) {
+        return api.handleRedirectResult();
+      }).catch(function (e) { console.warn('redirect result', e); });
       fbAuth.onAuthStateChanged(function (user) {
         if (user) runAgeAttestGate(user).then(function (ok) { if (ok) applyFbUser(user); });
         else {
@@ -8228,6 +8112,7 @@
     try { var k='subx.vid'; var v=localStorage.getItem(k); if (!v) { v=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem(k,v); } if (!sessionStorage.getItem('subx.hit.'+SITE_ID)) { sessionStorage.setItem('subx.hit.'+SITE_ID,'1'); navigator.sendBeacon('https://us-central1-subx-skins.cloudfunctions.net/pixel?s='+encodeURIComponent(SITE_ID)+'&v='+encodeURIComponent(v)); } } catch (e) {}
   }
 
+  loadSigninModule().catch(function (e) { console.warn('factory-signin', e); });
   fetch(SITE_JSON_URL)
     .then(function (res) {
       if (!res.ok) throw new Error('Could not load ' + SITE_JSON_URL);

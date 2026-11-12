@@ -1,0 +1,16 @@
+{
+  "factory": "jebbdykstra99/subx-factory",
+  "version": "v1.2.9",
+  "room": "gpchat",
+  "siteId": "gpchat",
+  "files": {
+    "factory.js": "578ceb7f9eeb9b50c2f4b41a5c997c2578aa953c8e8a63a51119ff8530fbc780",
+    "factory-signin.js": "78c1595488a0d68f4bd2b8a9614aecf8425e576d549f4fd8737dc5cf03d21286",
+    "styles.css": "892450059e3a3ef2a04e1509d727991e3e8a249967c0794b06983b55846e5e98"
+  },
+  "keepFiles": [],
+  "exceptions": "see subx-factory EXCEPTIONS.md",
+  "fork": "room factory.js is a fork of v1.2.9 shared-shell sign-in; factory-signin.js is byte-exact from de14e544557c35239473ad2f12d794558ca20b61",
+  "stampedAt": "2026-11-12T06:26:17Z",
+  "masterRef": "subx-factory PR #58 @ de14e544557c35239473ad2f12d794558ca20b61 (FACTORY_RELEASE.json v1.2.9)"
+}
