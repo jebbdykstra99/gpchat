@@ -5383,7 +5383,7 @@
       ensureSubxCatMark.w = 1;
       addEventListener('resize', ensureSubxCatMark);
       addEventListener('load', ensureSubxCatMark);
-      if (!document.getElementById('cat-sp')) { var s = document.createElement('style'); s.id = 'cat-sp'; s.textContent = '@media (max-width:900px){:root{--subx-cat-space:7.05rem}.thoughts-tabs,.view-back,.notif-header,.story-streamer,.race-strip,.home-h1,.city-gate{padding-left:var(--subx-cat-space)!important}.subx-cat-link{background:#fff;color:#111}.subx-cat-link img{filter:brightness(0)}}'; document.head.appendChild(s); }
+      if (!document.getElementById('cat-sp')) { var s = document.createElement('style'); s.id = 'cat-sp'; s.textContent = '@media (max-width:900px){:root{--cat:7.05rem}.thoughts-tabs,.view-back,.notif-header,.story-streamer,.race-strip,.home-h1,.city-gate{padding-left:var(--cat)!important}.subx-cat-link{background:#fff;color:#111!important;img{filter:brightness(0)}}}'; document.head.appendChild(s); }
     }
   }
 
