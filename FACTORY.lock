@@ -4,13 +4,13 @@
   "room": "gpchat",
   "siteId": "gpchat",
   "files": {
-    "factory.js": "f3e129c8d1cc1f06317b74458797bbe11654a5a1f03313954a8e5df5a1412c69",
+    "factory.js": "31fbd8da4debbadf99fa22d0c5cf95b7d478227d9b6f355cd579cfc6bdfee639",
     "factory-signin.js": "0427ac92a3f672801964fdcf32002d301e2f85d6965f9de733b57bc4080bdb72",
     "styles.css": "892450059e3a3ef2a04e1509d727991e3e8a249967c0794b06983b55846e5e98"
   },
   "keepFiles": [],
   "exceptions": "see subx-factory EXCEPTIONS.md",
   "fork": "room factory.js is a fork of v1.2.10 shared-shell sign-in, with the blocked-popup preload and SubX cat home link ported in; room-specific code is kept; factory-signin.js is byte-exact from bc90c00d84c5bf20d3bfb17afb42ba809e565d9a",
-  "stampedAt": "2026-11-12T15:52:27Z",
-  "masterRef": "subx-factory PR #63 @ bc90c00d84c5bf20d3bfb17afb42ba809e565d9a (FACTORY_RELEASE.json v1.2.10)"
+  "stampedAt": "2026-11-12T18:14:52Z",
+  "masterRef": "subx-factory cursor/phone-cat-space-2026-11-12 @ d755c610b65e4c069a5609461f754151547dd6fa (FACTORY_RELEASE.json v1.2.10 pin factory.js sha256 25103bcb15e489d8e743df17248cd405e2889668d9eb15942f82036590844f94, 254994 B; room factory.js is a hand-ported fork, sha256 31fbd8da4debbadf99fa22d0c5cf95b7d478227d9b6f355cd579cfc6bdfee639, 320002 B). Phone cat light backing (#fff/#111, --subx-cat-space 7.05rem)."
 }
