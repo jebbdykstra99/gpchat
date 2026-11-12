@@ -1432,6 +1432,7 @@
   }
 
   function applySiteChrome() {
+    ensureSubxCatMark();
     if (!site) return;
     var title = site.name || "415chat";
     var tag = site.tagline || '';
@@ -5340,28 +5341,50 @@
   }
 
   function ensureSubxCatMark() {
+    var a = document.querySelector('.subx-cat-link');
     var brand = document.querySelector('.sidebar-brand');
-    if (!brand || brand.querySelector('.subx-cat-link')) return;
-    var mark = brand.querySelector('.brand-mark');
-    if (!mark) return;
-    var wrap = document.createElement('div');
-    wrap.className = 'sidebar-brand-logos';
-    var a = document.createElement('a');
-    a.href = 'https://subx.it/';
-    a.className = 'subx-cat-link';
-    a.setAttribute('aria-label', 'SubX home');
-    var light = '/assets/brand/cat-32.png';
-    var dark = '/assets/brand/cat-32-dark.png';
-    // Fall back to the live hub assets when the room has not vendored the cat yet.
-    a.innerHTML =
-      '<picture>' +
-      '<source srcset="' + dark + '" media="(prefers-color-scheme: dark)" onerror="">' +
-      '<img class="subx-cat-icon" src="' + light + '" width="28" height="28" alt="" ' +
-      'onerror="this.onerror=null;this.src=\'https://subx.it/assets/brand/cat-32.png\';">' +
-      '</picture>';
-    mark.parentNode.insertBefore(wrap, mark);
-    wrap.appendChild(a);
-    wrap.appendChild(mark);
+    if (!a) {
+      if (!brand) return;
+      var mark = brand.querySelector('.brand-mark');
+      if (!mark) return;
+      var wrap = document.createElement('div');
+      wrap.className = 'sidebar-brand-logos';
+      a = document.createElement('a');
+      a.href = 'https://subx.it/';
+      a.className = 'subx-cat-link';
+      a.setAttribute('aria-label', 'SubX home');
+      var light = '/assets/brand/cat-32.png';
+      var dark = '/assets/brand/cat-32-dark.png';
+      // Fall back to the live hub assets when the room has not vendored the cat yet.
+      a.innerHTML =
+        '<picture>' +
+        '<source srcset="' + dark + '" media="(prefers-color-scheme: dark)" onerror="">' +
+        '<img class="subx-cat-icon" src="' + light + '" width="28" height="28" alt="" ' +
+        'onerror="this.onerror=null;this.src=\'https://subx.it/assets/brand/cat-32.png\';">' +
+        '</picture>';
+      mark.parentNode.insertBefore(wrap, mark);
+      wrap.appendChild(a);
+      wrap.appendChild(mark);
+    }
+    if (!ensureSubxCatMark.h) ensureSubxCatMark.h = a.parentNode;
+    var h = document.getElementById('hamburger');
+    if (h && innerWidth <= MOBILE_NAV_MQ) {
+      var r = h.getBoundingClientRect();
+      document.body.appendChild(a);
+      a.style.position = 'fixed';
+      a.style.top = r.top + 'px';
+      a.style.left = r.right + 4 + 'px';
+      a.style.background = 'var(--nav-bg,#111)';
+      a.style.zIndex = 600;
+    } else if (a && ensureSubxCatMark.h) {
+      ensureSubxCatMark.h.appendChild(a);
+      a.style.position = a.style.top = a.style.left = a.style.background = '';
+    }
+    if (!ensureSubxCatMark.w) {
+      ensureSubxCatMark.w = 1;
+      addEventListener('resize', ensureSubxCatMark);
+      addEventListener('load', ensureSubxCatMark);
+    }
   }
 
   function safeHttpUrl(raw) {
@@ -6786,6 +6809,8 @@
   }
 
   function wireEvents() {
+    ensureSubxCatMark();
+    ['pointerdown','touchstart'].forEach(function(v){document.addEventListener(v,function(e){try{if(e.target.closest('#auth-signin,#profile-signin-prompt-btn,#cv-google-login'))loadSigninModule()}catch(x){}},{passive:true});});
     document.addEventListener('click', function (e) {
       if (e.target.closest('#nav-nest-add')) {
         e.preventDefault();
