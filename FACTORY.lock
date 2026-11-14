@@ -6,7 +6,8 @@
   "files": {
     "factory.js": "87a6e29acfc1b393e4e9408082d7803c3bcd08c63ecfe5d6946bac58258f1e69",
     "factory-signin.js": "51ce100803d5cc7270fbfa488841cb75594b8c0bf092ee41c28460c1d4105958",
-    "styles.css": "892450059e3a3ef2a04e1509d727991e3e8a249967c0794b06983b55846e5e98"
+    "styles.css": "892450059e3a3ef2a04e1509d727991e3e8a249967c0794b06983b55846e5e98",
+    "factory-hero.js": "650b080ea432fb748e6b31025c3fae3aa1bb9bd9180ffc8875a04fbec8af1d17"
   },
   "keepFiles": [],
   "exceptions": "see subx-factory EXCEPTIONS.md",
